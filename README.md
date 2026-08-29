@@ -15,6 +15,11 @@ publisher.py Nuelink REST (DRAFT default / IMMEDIATE per class policy) + daily t
 main.py      Poll loop + healthcheck server
 ```
 
+**Affiliation note:** this project is NOT Swan-affiliated content. Swan's brand rulebook
+and compliance posture do not bind the wire; do not port Swan rules in. The gates below
+exist because they ARE the wire's product (accuracy, neutrality, receipts), not as
+compliance inheritance.
+
 Safety invariants (do not weaken):
 - The model never supplies a URL. Receipts come from the feed item's own link.
 - Mentions only from `handles.json` (every handle manually verified against the live profile).

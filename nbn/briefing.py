@@ -135,11 +135,11 @@ def maybe_run(con) -> bool:
         if not posts:
             continue
         from . import publisher
-        # Assemble: post texts in order, then one receipts post at the end.
+        # Each post carries its own receipt link so the card renders on the relevant
+        # tweet (Brady 2026-08-29). The model never writes URLs; we append verified ones.
         receipts = [p["receipt"] for p in posts if p.get("receipt")]
-        texts = [p["text"] for p in posts]
-        if receipts:
-            texts.append("Sources:\n" + "\n".join(receipts[:8]))
+        texts = [f"{p['text']}\n\n{p['receipt']}" if p.get("receipt") else p["text"]
+                 for p in posts]
         mode, ref = publisher.publish_thread(texts, klass="briefing")
         store.log_post(con, key, None, "briefing", "\n\n".join(texts), receipts[0] if receipts else "",
                        mode, ref)

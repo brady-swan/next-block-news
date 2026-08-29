@@ -43,7 +43,9 @@ def publish(post: str, receipt_url: str, klass: str) -> tuple:
 
     if _backend() == "typefully":
         from . import publisher_typefully
-        ok, ref = publisher_typefully.publish(post, receipt_url, immediate=(mode == "IMMEDIATE"))
+        # Link ON the post so the card renders and readers click through (Brady 2026-08-29).
+        ok, ref = publisher_typefully.publish_thread(
+            [f"{post}\n\n{receipt_url}"], immediate=(mode == "IMMEDIATE"))
         return (mode, ref) if ok else ("TAPE", None)
     body = {
         "publishMode": mode,
