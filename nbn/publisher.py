@@ -1,0 +1,66 @@
+"""Output: Nuelink REST staging/publishing + the daily tape file (always written).
+
+Policy:
+- No Nuelink config      -> tape only ("TAPE" mode).
+- Nuelink configured     -> stage as DRAFT.
+- AUTOPOST_ENABLED and class in AUTOPOST_CLASSES -> publish IMMEDIATE with the
+  receipt URL as the delayed first comment. Secondary class NEVER auto-publishes.
+The Nuelink API has no update/delete: a published mistake is corrected with a
+follow-up post, never removed. That is charter, not just API limitation.
+"""
+import datetime
+import logging
+
+import httpx
+
+from . import config
+
+log = logging.getLogger("nbn.publisher")
+
+
+def _mode_for(klass: str) -> str:
+    if not (config.NUELINK_API_KEY and config.NUELINK_BRAND_ID and config.NUELINK_COLLECTION_ID):
+        return "TAPE"
+    if config.AUTOPOST_ENABLED and klass in config.AUTOPOST_CLASSES:
+        return "IMMEDIATE"
+    return "DRAFT"
+
+
+def publish(post: str, receipt_url: str, klass: str) -> tuple:
+    """Returns (mode, nuelink_post_id_or_None)."""
+    mode = _mode_for(klass)
+    tape(post, receipt_url, klass, mode)
+    if mode == "TAPE":
+        return mode, None
+    body = {
+        "publishMode": mode,
+        "caption": post,
+        "comment": {"delay": 1, "comment": f"Source: {receipt_url}"},
+    }
+    url = (f"{config.NUELINK_BASE}/brands/{config.NUELINK_BRAND_ID}"
+           f"/collections/{config.NUELINK_COLLECTION_ID}/posts")
+    try:
+        resp = httpx.post(
+            url, json=body, timeout=30,
+            headers={"Authorization": f"Bearer {config.NUELINK_API_KEY}"},
+        )
+        resp.raise_for_status()
+        post_id = str(resp.json().get("data", {}).get("id", ""))
+        log.info("nuelink %s created id=%s", mode, post_id)
+        return mode, post_id
+    except Exception as exc:  # noqa: BLE001 - a posting failure must not kill the loop
+        log.error("nuelink publish failed (%s): %s", mode, exc)
+        return "TAPE", None
+
+
+def tape(post: str, receipt_url: str, klass: str, mode: str):
+    """Append every produced post to the daily tape file (the audit trail)."""
+    config.TAPE_DIR.mkdir(parents=True, exist_ok=True)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    path = config.TAPE_DIR / f"tape-{now:%Y-%m-%d}.md"
+    entry = (f"\n---\n**{now:%H:%M:%S} UTC · {klass} · {mode}**\n\n"
+             f"{post}\n\n> receipt: {receipt_url}\n")
+    if not path.exists():
+        path.write_text(f"# Next Block News tape — {now:%Y-%m-%d}\n")
+    with path.open("a") as f:
+        f.write(entry)
