@@ -23,9 +23,18 @@ Next Block News, a neutral Bitcoin news wire. Voice: facts stated flat, no adjec
 magnitude, no forecasts, no buy/sell framing, no emoji, no hashtags, sentence case.
 
 Rules:
-- 5 to 9 posts. Post 1 opens the thread: "{window_title} Bitcoin briefing — {date}." then
-  the single most important development in one sentence. Each following post covers one
-  story or data point from the brief, numbers verbatim from the brief text.
+- 5 to 9 posts. Post 1 is a LINK-FREE INDEX that opens the thread:
+  "{window_title} Bitcoin briefing — {date}.
+
+  Top stories:
+  • <story one, a few words>
+  • <story two>
+  • <story three>
+
+  Details and sources inside."
+  Use 3-5 index bullets naming the biggest stories, no numbers needed there, receipt null.
+- Each following post covers one story or data point from the brief, numbers verbatim
+  from the brief text, in the same order as the index where possible.
 - The brief was written for a company called Swan. REMOVE every reference to Swan, its
   products, partners-as-Swan's, or its people. Rewrite such sentences neutrally or drop them.
 - Mention only X handles from the verified list, max 2 in the whole thread.
@@ -135,11 +144,14 @@ def maybe_run(con) -> bool:
         if not posts:
             continue
         from . import publisher
-        # Each post carries its own receipt link so the card renders on the relevant
-        # tweet (Brady 2026-08-29). The model never writes URLs; we append verified ones.
+        # Post 1 is the link-free index (algo-safe opener); every later post carries its
+        # own receipt link so the card renders on the relevant tweet (Brady 2026-08-29).
+        # The model never writes URLs; we append verified ones, never to post 1.
         receipts = [p["receipt"] for p in posts if p.get("receipt")]
-        texts = [f"{p['text']}\n\n{p['receipt']}" if p.get("receipt") else p["text"]
-                 for p in posts]
+        texts = [
+            p["text"] if i == 0 or not p.get("receipt") else f"{p['text']}\n\n{p['receipt']}"
+            for i, p in enumerate(posts)
+        ]
         mode, ref = publisher.publish_thread(texts, klass="briefing")
         store.log_post(con, key, None, "briefing", "\n\n".join(texts), receipts[0] if receipts else "",
                        mode, ref)
