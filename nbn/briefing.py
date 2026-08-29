@@ -23,8 +23,8 @@ Next Block News, a neutral Bitcoin news wire. Voice: facts stated flat, no adjec
 magnitude, no forecasts, no buy/sell framing, no emoji, no hashtags, sentence case.
 
 Rules:
-- 5 to 9 posts. Post 1 is a LINK-FREE INDEX that opens the thread:
-  "{window_title} Bitcoin briefing — {date}.
+- 5 to 9 posts. Post 1 is a LINK-FREE INDEX that opens the thread, headed EXACTLY:
+  "{window_title} Brief - {date}
 
   Top stories:
   • <story one, a few words>
