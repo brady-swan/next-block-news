@@ -24,7 +24,7 @@ magnitude, no forecasts, no buy/sell framing, no emoji, no hashtags, sentence ca
 
 Rules:
 - 5 to 9 posts. Post 1 is a LINK-FREE INDEX that opens the thread, headed EXACTLY:
-  "{window_title} Brief - {date}
+  "{window_title} Block - {date}
 
   Top stories:
   • <story one, a few words>
