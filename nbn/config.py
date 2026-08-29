@@ -33,5 +33,8 @@ TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
 # Optional X read access (its own key, never the Marketing Node's)
 X_BEARER_TOKEN = os.environ.get("NBN_X_BEARER_TOKEN", "")
 
-# Classes allowed to auto-publish when AUTOPOST_ENABLED (secondary never auto-publishes)
-AUTOPOST_CLASSES = {"primary", "data"}
+# Classes allowed to auto-publish when AUTOPOST_ENABLED (secondary never auto-publishes;
+# env-tunable so the rollout can start with official sources only)
+AUTOPOST_CLASSES = {
+    c.strip() for c in os.environ.get("NBN_AUTOPOST_CLASSES", "primary,data").split(",") if c.strip()
+} - {"secondary"}
