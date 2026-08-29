@@ -46,6 +46,9 @@ Rules:
 - HARD SCOPE: Bitcoin only. Never name or price any non-Bitcoin token (no ETH, XRP, etc.),
   no "altcoins", no crypto-industry stories — drop those sentences from the brief entirely.
   "Crypto" may appear only inside the quoted title of an official document.
+- If "wire_items" is provided: those are stories this wire itself covered since the last
+  briefing. Fold in the ones the brief does NOT already cover (one post each, receipt =
+  that item's url); skip duplicates of brief stories.
 - Final post: 1-2 sentence flat summary of what to watch next, only if the brief supports it.
 
 Return ONLY JSON: {"posts": [{"text": "...", "receipt": "url-or-null"}, ...]}"""
@@ -80,9 +83,10 @@ def _brief_urls(text: str) -> set:
     return set(re.findall(r"https?://[^\s)\"']+", text))
 
 
-def build_thread(brief_payload: dict, window_title: str):
+def build_thread(brief_payload: dict, window_title: str, wire_items: list = None):
     """Returns [{'text':..., 'receipt':...}] or None."""
     from . import brain  # late import to avoid cycle
+    wire_items = wire_items or []
     brief = brief_payload["daily_brief"]
     # The read API wraps strings as {"text":..., "truncated":...}; flatten.
     def flat(v):
@@ -95,6 +99,9 @@ def build_thread(brief_payload: dict, window_title: str):
         return v
     brief = flat(brief)
     source_text = _brief_text(brief)
+    if wire_items:
+        source_text += "\n\nWire items:\n" + "\n".join(
+            f"- {w['title']} ({w['source']}) {w['url']}" for w in wire_items)
     allowed_urls = _brief_urls(source_text)
     today = datetime.datetime.now(datetime.timezone.utc)
     payload = {
@@ -102,6 +109,8 @@ def build_thread(brief_payload: dict, window_title: str):
         "date": f"{today:%B %-d, %Y}",
         "verified_handles": lint.verified_handles(),
         "brief": source_text[:12000],
+        "wire_items": [{"title": w["title"], "source": w["source"], "url": w["url"]}
+                       for w in wire_items[:10]],
     }
     resp = brain._create(config.ANTHROPIC_MODEL, BRIEFING_PROMPT, json.dumps(payload),
                          max_tokens=4000)
@@ -144,7 +153,8 @@ def maybe_run(con) -> bool:
         if not payload:
             log.warning("no brief available for %s window", title)
             continue
-        posts = build_thread(payload, title)
+        since = store.last_briefing_ts(con) or (now.timestamp() - 18 * 3600)
+        posts = build_thread(payload, title, store.wire_items_since(con, since))
         if not posts:
             continue
         from . import publisher

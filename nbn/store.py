@@ -94,6 +94,23 @@ def recent_story_keys(con, days: float = 3.0) -> list:
     return [r["story_key"] for r in rows if r["story_key"]]
 
 
+def wire_items_since(con, since_ts: float) -> list:
+    """Stories the wire itself drafted/posted since a timestamp (for Block enrichment)."""
+    rows = con.execute(
+        "SELECT source, title, url, story_key, status FROM items"
+        " WHERE status IN ('posted','drafted') AND first_seen > ? ORDER BY first_seen",
+        (since_ts,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def last_briefing_ts(con) -> float:
+    row = con.execute(
+        "SELECT MAX(created) t FROM posts WHERE class='briefing'"
+    ).fetchone()
+    return row["t"] or 0.0
+
+
 def corroboration_count(con, story_key: str) -> int:
     """Distinct publishers whose items map to this story."""
     if not story_key:
