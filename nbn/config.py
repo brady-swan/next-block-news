@@ -26,6 +26,10 @@ NUELINK_BRAND_ID = os.environ.get("NUELINK_BRAND_ID", "")
 NUELINK_COLLECTION_ID = os.environ.get("NUELINK_COLLECTION_ID", "")
 NUELINK_BASE = "https://nuelink.com/api/public/v1"
 
+# Typefully (preferred posting rail; long posts + threads + publish-now via API)
+TYPEFULLY_API_KEY = os.environ.get("TYPEFULLY_API_KEY", "")
+TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
+
 # Optional X read access (its own key, never the Marketing Node's)
 X_BEARER_TOKEN = os.environ.get("NBN_X_BEARER_TOKEN", "")
 

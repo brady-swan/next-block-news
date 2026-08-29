@@ -18,8 +18,16 @@ from . import config
 log = logging.getLogger("nbn.publisher")
 
 
+def _backend() -> str:
+    if config.TYPEFULLY_API_KEY and config.TYPEFULLY_SOCIAL_SET_ID:
+        return "typefully"
+    if config.NUELINK_API_KEY and config.NUELINK_BRAND_ID and config.NUELINK_COLLECTION_ID:
+        return "nuelink"
+    return "tape"
+
+
 def _mode_for(klass: str) -> str:
-    if not (config.NUELINK_API_KEY and config.NUELINK_BRAND_ID and config.NUELINK_COLLECTION_ID):
+    if _backend() == "tape":
         return "TAPE"
     if config.AUTOPOST_ENABLED and klass in config.AUTOPOST_CLASSES:
         return "IMMEDIATE"
@@ -27,11 +35,16 @@ def _mode_for(klass: str) -> str:
 
 
 def publish(post: str, receipt_url: str, klass: str) -> tuple:
-    """Returns (mode, nuelink_post_id_or_None)."""
+    """Returns (mode, post_id_or_None)."""
     mode = _mode_for(klass)
     tape(post, receipt_url, klass, mode)
     if mode == "TAPE":
         return mode, None
+
+    if _backend() == "typefully":
+        from . import publisher_typefully
+        ok, ref = publisher_typefully.publish(post, receipt_url, immediate=(mode == "IMMEDIATE"))
+        return (mode, ref) if ok else ("TAPE", None)
     body = {
         "publishMode": mode,
         "caption": post,
