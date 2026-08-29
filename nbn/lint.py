@@ -61,8 +61,13 @@ def check(post: str, meta: dict, item: dict) -> list:
     unquoted = _outside_quotes(post)
     if m := NON_BITCOIN_TOKENS.search(unquoted):
         errors.append(f"non-Bitcoin token/scope: {m.group(0)!r}")
-    if re.search(r"\bcryptos?\b|\bcryptocurrenc\w*", unquoted, re.I):
-        errors.append("'crypto' outside a quoted official title")
+    # "crypto" allowed as a business adjective (crypto exchange/custody firm...) and in
+    # quoted official titles; banned as market/asset coverage.
+    BUSINESS_NOUN = (r"\s+(custody|exchanges?|trading|firms?|company|companies|providers?|"
+                     r"lenders?|brokers?|banks?|platforms?|startups?)")
+    stripped = re.sub(r"\bcrypto" + BUSINESS_NOUN, " ", unquoted, flags=re.I)
+    if re.search(r"\bcryptos?\b|\bcryptocurrenc\w*", stripped, re.I):
+        errors.append("'crypto' as coverage (allowed only as business adjective or quoted title)")
     if m := ALLCAPS_RUN.search(post):
         if not all(w in CAPS_OK for w in m.group(0).split()):
             errors.append(f"all-caps run: {m.group(0)!r}")

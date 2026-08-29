@@ -76,7 +76,19 @@ def cycle(con) -> dict:
             result["held"] += 1
             continue
 
-        errors = lint.check(post, {**d, "_source_text": article_text or item.get("summary", "")}, item)
+        src = article_text or item.get("summary", "")
+        errors = lint.check(post, {**d, "_source_text": src}, item)
+        if errors:
+            # One retry with the violations fed back; still failing -> held.
+            log.info("lint retry %s: %s", item["title"][:60], errors)
+            try:
+                d = brain.draft(item, src + "\n\n[Your previous draft was rejected by the "
+                                f"style gate for: {'; '.join(errors)}. Rewrite avoiding "
+                                "exactly those violations.]", handles)
+                post = d.get("post")
+                errors = lint.check(post, {**d, "_source_text": src}, item) if post else ["empty retry"]
+            except Exception as exc:  # noqa: BLE001
+                errors = [f"retry failed: {exc}"]
         if errors:
             store.set_status(con, item["url_hash"], "held", item.get("story_key"),
                              "lint: " + "; ".join(errors)[:300])
