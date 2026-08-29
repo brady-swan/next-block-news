@@ -30,6 +30,16 @@ NUELINK_BASE = "https://nuelink.com/api/public/v1"
 TYPEFULLY_API_KEY = os.environ.get("TYPEFULLY_API_KEY", "")
 TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
 
+# Marketing Node read API (the Brady-tuned daily brief; read-only bearer)
+NODE_BASE_URL = os.environ.get("NBN_NODE_BASE_URL",
+                               "https://swan-marketing-node-production.up.railway.app")
+NODE_READ_TOKEN = os.environ.get("NBN_NODE_READ_TOKEN", "")
+# "HH:MM,Title;HH:MM,Title" in UTC — after the Node's EIC (14:00) and PM intel (20:30) runs
+BRIEFING_SCHEDULE = [
+    tuple(x.split(",")) for x in
+    os.environ.get("NBN_BRIEFING_UTC", "14:40,Morning;21:15,Afternoon").split(";") if x
+] if os.environ.get("NBN_BRIEFING_ENABLED", "true").lower() == "true" else []
+
 # Perception (api.perception.to) — the wire's OWN key, never the Marketing Node's
 # (their /feed rate budget is shared per key). Activates when set.
 PERCEPTION_API_KEY = os.environ.get("NBN_PERCEPTION_API_KEY", "")

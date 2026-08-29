@@ -66,6 +66,19 @@ def publish(post: str, receipt_url: str, klass: str) -> tuple:
         return "TAPE", None
 
 
+def publish_thread(texts: list, klass: str) -> tuple:
+    """Publish/stage an N-post thread (briefing threads). Returns (mode, ref)."""
+    mode = _mode_for(klass)
+    tape("\n\n---\n\n".join(texts), "(thread)", klass, mode)
+    if mode == "TAPE":
+        return mode, None
+    if _backend() == "typefully":
+        from . import publisher_typefully
+        ok, ref = publisher_typefully.publish_thread(texts, immediate=(mode == "IMMEDIATE"))
+        return (mode, ref) if ok else ("TAPE", None)
+    return "TAPE", None  # nuelink cannot thread
+
+
 def tape(post: str, receipt_url: str, klass: str, mode: str):
     """Append every produced post to the daily tape file (the audit trail)."""
     config.TAPE_DIR.mkdir(parents=True, exist_ok=True)

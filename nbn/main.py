@@ -5,7 +5,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import brain, config, lint, publisher, sources, store
+from . import brain, briefing, config, lint, publisher, sources, store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("nbn.main")
@@ -119,6 +119,8 @@ def run():
     while True:
         try:
             STATE["last_cycle"] = cycle(con)
+            if config.NODE_READ_TOKEN:
+                briefing.maybe_run(con)
             STATE["cycles"] += 1
             STATE["last_error"] = None
         except Exception as exc:  # noqa: BLE001 - the loop survives everything

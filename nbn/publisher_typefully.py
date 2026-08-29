@@ -31,12 +31,14 @@ def _headers():
 
 def publish(post: str, receipt_url: str, immediate: bool) -> tuple:
     """Create a 2-post X thread (post, receipt). Returns (ok, draft_id_or_error)."""
+    return publish_thread([post, f"Source: {receipt_url}"], immediate)
+
+
+def publish_thread(texts: list, immediate: bool) -> tuple:
+    """Create an N-post X thread. Returns (ok, draft_id_or_error)."""
     body = {
-        "platforms": {"x": {"enabled": True, "posts": [
-            {"text": post},
-            {"text": f"Source: {receipt_url}"},
-        ]}},
-        "draft_title": post[:60],
+        "platforms": {"x": {"enabled": True, "posts": [{"text": t} for t in texts]}},
+        "draft_title": texts[0][:60],
     }
     if immediate:
         body["publish_at"] = "now"
