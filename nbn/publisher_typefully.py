@@ -10,9 +10,8 @@ Why Typefully over Nuelink/direct X API (researched 2026-08-29):
 - Direct X API is pay-per-use since Feb 2026 and charges $0.20 per post
   containing a link — our receipt replies would eat ~$100/mo at target cadence.
 
-VERIFY ON FIRST LIVE POST: the thread separator. Typefully's editor splits
-thread posts on a blank-line gap; we use four newlines below. The first staged
-post is human-reviewed, so a wrong separator is caught before autopost ever runs.
+Schema verified live 2026-08-29 (the public docs are wrong/stale): threads are an
+explicit array — platforms.x = {"enabled": true, "posts": [{"text": ...}, ...]}.
 """
 import logging
 import time
@@ -24,7 +23,6 @@ from . import config
 log = logging.getLogger("nbn.typefully")
 
 BASE = "https://api.typefully.com/v2"
-THREAD_SEP = "\n\n\n\n"
 
 
 def _headers():
@@ -33,9 +31,11 @@ def _headers():
 
 def publish(post: str, receipt_url: str, immediate: bool) -> tuple:
     """Create a 2-post X thread (post, receipt). Returns (ok, draft_id_or_error)."""
-    content = f"{post}{THREAD_SEP}Source: {receipt_url}"
     body = {
-        "platforms": {"x": {"content": content}},
+        "platforms": {"x": {"enabled": True, "posts": [
+            {"text": post},
+            {"text": f"Source: {receipt_url}"},
+        ]}},
         "draft_title": post[:60],
     }
     if immediate:
