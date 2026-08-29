@@ -43,7 +43,9 @@ Rules:
 - You never write URLs. For each post, if the brief cites a source URL for its story, put
   that URL (copied exactly from the brief) in the separate "receipt" field; the system
   appends receipts. Only URLs that appear in the brief are allowed.
-- Non-Bitcoin tokens may be named only as market fact, never as coverage.
+- HARD SCOPE: Bitcoin only. Never name or price any non-Bitcoin token (no ETH, XRP, etc.),
+  no "altcoins", no crypto-industry stories — drop those sentences from the brief entirely.
+  "Crypto" may appear only inside the quoted title of an official document.
 - Final post: 1-2 sentence flat summary of what to watch next, only if the brief supports it.
 
 Return ONLY JSON: {"posts": [{"text": "...", "receipt": "url-or-null"}, ...]}"""

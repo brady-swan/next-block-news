@@ -32,6 +32,16 @@ def verified_handles() -> dict:
     return json.loads(HANDLES_PATH.read_text())
 
 
+NON_BITCOIN_TOKENS = re.compile(
+    r"\b(ETH|ethereum|ether|XRP|ripple|ZEC|zcash|solana|SOL(?=\W|$)|dogecoin|DOGE|cardano|ADA(?=\W|$)|"
+    r"altcoins?|memecoins?|stablecoins?|tether|USDT|USDC|shitcoins?)\b", re.I)
+
+
+def _outside_quotes(text: str) -> str:
+    """Text with double-quoted spans removed (official document titles are allowed there)."""
+    return re.sub(r'"[^"]*"', " ", text)
+
+
 def check(post: str, meta: dict, item: dict) -> list:
     """Return a list of violations; empty list = pass."""
     errors = []
@@ -47,6 +57,12 @@ def check(post: str, meta: dict, item: dict) -> list:
         errors.append(f"forecast pattern: {m.group(0)!r}")
     if URL_RE.search(post):
         errors.append("URL in post body (receipts go in the first reply, system-attached)")
+    # HARD SCOPE (owner rule 2026-08-29): Bitcoin only — no crypto, no other tokens.
+    unquoted = _outside_quotes(post)
+    if m := NON_BITCOIN_TOKENS.search(unquoted):
+        errors.append(f"non-Bitcoin token/scope: {m.group(0)!r}")
+    if re.search(r"\bcryptos?\b|\bcryptocurrenc\w*", unquoted, re.I):
+        errors.append("'crypto' outside a quoted official title")
     if m := ALLCAPS_RUN.search(post):
         if not all(w in CAPS_OK for w in m.group(0).split()):
             errors.append(f"all-caps run: {m.group(0)!r}")
