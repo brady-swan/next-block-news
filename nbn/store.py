@@ -94,6 +94,24 @@ def recent_story_keys(con, days: float = 3.0) -> list:
     return [r["story_key"] for r in rows if r["story_key"]]
 
 
+def corroboration_count(con, story_key: str) -> int:
+    """Distinct publishers whose items map to this story."""
+    if not story_key:
+        return 0
+    row = con.execute(
+        "SELECT COUNT(DISTINCT source) n FROM items WHERE story_key=?", (story_key,)
+    ).fetchone()
+    return row["n"]
+
+
+def story_already_posted(con, story_key: str) -> bool:
+    if not story_key:
+        return False
+    return con.execute(
+        "SELECT 1 FROM posts WHERE story_key=? LIMIT 1", (story_key,)
+    ).fetchone() is not None
+
+
 def set_status(con, url_hash_: str, status: str, story_key: str = None, note: str = None):
     con.execute(
         "UPDATE items SET status=?, story_key=COALESCE(?, story_key), note=COALESCE(?, note) WHERE url_hash=?",

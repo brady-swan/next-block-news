@@ -86,6 +86,53 @@ def fetch_feeds() -> list:
     return out
 
 
+# ── Perception feed (1,000+ aggregated outlets; activates with NBN_PERCEPTION_API_KEY) ──
+_last_perception_poll = 0.0
+
+
+def fetch_perception() -> list:
+    """Poll Perception /feed for fresh Bitcoin articles, throttled to respect rate budget."""
+    global _last_perception_poll
+    import datetime
+    import time as _time
+    if not config.PERCEPTION_API_KEY:
+        return []
+    if _time.time() - _last_perception_poll < config.PERCEPTION_POLL_SECONDS:
+        return []
+    _last_perception_poll = _time.time()
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    out = []
+    try:
+        with httpx.Client(timeout=20, headers={
+            "Authorization": f"Bearer {config.PERCEPTION_API_KEY}"}) as client:
+            resp = client.get("https://api.perception.to/feed", params={
+                "keyword": "bitcoin",
+                "startDate": (today - datetime.timedelta(days=1)).isoformat(),
+                "endDate": today.isoformat(),
+                "limit": 50, "page": 1,
+            })
+            resp.raise_for_status()
+            raw = resp.json()
+        rows = raw.get("data") or raw.get("items") or raw.get("results") or [] \
+            if isinstance(raw, dict) else raw
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            get = lambda *ks: next((str(row[k]).strip() for k in ks if row.get(k)), "")  # noqa: E731
+            title = get("Title", "title", "headline")
+            url = get("URL", "url", "link")
+            if title and url:
+                out.append({
+                    "source": get("Outlet", "outlet", "publisher", "source") or "Perception",
+                    "title": title, "url": url,
+                    "published": get("Date", "date", "published_at"),
+                    "summary": get("Content", "content", "summary")[:600],
+                })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("perception feed failed: %s", exc)
+    return out
+
+
 # ── Optional X recent-search poller ─────────────────────────────────────────
 # Curated queries on the bitcoin_pulse pattern; official accounts are primary-class.
 X_QUERIES = [

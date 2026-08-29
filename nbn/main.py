@@ -14,7 +14,7 @@ STATE = {"started": time.time(), "cycles": 0, "last_cycle": None, "last_error": 
 
 
 def cycle(con) -> dict:
-    items = sources.fetch_feeds() + sources.fetch_x()
+    items = sources.fetch_feeds() + sources.fetch_perception() + sources.fetch_x()
     inserted = store.upsert_new_items(con, items)
     # Keep summaries for freshly fetched items; DB-recovered items carry title only.
     summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
@@ -34,8 +34,17 @@ def cycle(con) -> dict:
     verdicts = brain.triage(fresh, store.recent_story_keys(con))
     handles = lint.verified_handles()
 
+    # Persist every story_key first so corroboration sees all of this cycle's items.
+    for item in verdicts:
+        if item.get("story_key"):
+            store.set_status(con, item["url_hash"], "new", item["story_key"])
+
     for item in verdicts:
         action = item.get("action", "skip")
+        if action == "draft" and store.story_already_posted(con, item.get("story_key")):
+            store.set_status(con, item["url_hash"], "skipped", item.get("story_key"),
+                             "story already posted")
+            continue
         if action != "draft":
             store.set_status(con, item["url_hash"], "skipped" if action == "skip" else "held",
                              item.get("story_key"), item.get("reason"))
@@ -56,9 +65,14 @@ def cycle(con) -> dict:
             continue
 
         klass = item.get("class", "secondary")
-        if d.get("needs_second_source") and klass != "primary":
+        # Two-source rule, mechanized: a secondary story confirmed by 2+ independent
+        # publishers is promoted to "corroborated" (auto-postable when enabled).
+        corroboration = store.corroboration_count(con, item.get("story_key"))
+        if klass == "secondary" and corroboration >= 2:
+            klass = "corroborated"
+        if d.get("needs_second_source") and klass == "secondary":
             store.set_status(con, item["url_hash"], "held", item.get("story_key"),
-                             "needs second source")
+                             f"needs second source (corroboration={corroboration})")
             result["held"] += 1
             continue
 

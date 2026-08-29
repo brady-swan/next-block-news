@@ -30,6 +30,11 @@ NUELINK_BASE = "https://nuelink.com/api/public/v1"
 TYPEFULLY_API_KEY = os.environ.get("TYPEFULLY_API_KEY", "")
 TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
 
+# Perception (api.perception.to) — the wire's OWN key, never the Marketing Node's
+# (their /feed rate budget is shared per key). Activates when set.
+PERCEPTION_API_KEY = os.environ.get("NBN_PERCEPTION_API_KEY", "")
+PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "600"))
+
 # Optional X read access (its own key, never the Marketing Node's)
 X_BEARER_TOKEN = os.environ.get("NBN_X_BEARER_TOKEN", "")
 
