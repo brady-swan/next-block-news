@@ -31,8 +31,10 @@ Rules:
   • <story two>
   • <story three>
 
-  Details and sources inside."
+  More inside ➡️"
   Use 3-5 index bullets naming the biggest stories, no numbers needed there, receipt null.
+  The "More inside ➡️" signoff is the house convention — the one emoji the wire uses,
+  exactly there and nowhere else.
 - Each following post covers one story or data point from the brief, numbers verbatim
   from the brief text, in the same order as the index where possible.
 - The brief was written for a company called Swan. REMOVE every reference to Swan, its
