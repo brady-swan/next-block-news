@@ -79,6 +79,18 @@ PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "90"))
 # alerts fire on SILENCE, catching crash and stall alike. Empty = disabled.
 HEARTBEAT_URL = os.environ.get("NBN_HEARTBEAT_URL", "")
 
-# Events, not write-ups: a story whose underlying EVENT is older than this never posts,
-# however fresh the article covering it (HWI/quantum lesson, 2026-08-30).
-MAX_EVENT_AGE_HOURS = float(os.environ.get("NBN_MAX_EVENT_AGE_HOURS", "48"))
+# Events, not write-ups: a story whose underlying EVENT is older than the freshness
+# window never posts, however fresh the article covering it (HWI/quantum lesson,
+# 2026-08-30; Brady: "got to earn that NEW tag"). Default: the EVENT window tracks the
+# same time-varying schedule as the article gate (2.5h active / 6h quiet). Since the
+# extracted event_date is date-only and measured from END of the event's day, this
+# means: NEW = a same-day event (yesterday's only with an early-morning grace equal to
+# the window). Set NBN_MAX_EVENT_AGE_HOURS to a number to override with a fixed window.
+_fixed_event_age = os.environ.get("NBN_MAX_EVENT_AGE_HOURS", "")
+
+
+def max_event_age_hours() -> float:
+    if _fixed_event_age:
+        return float(_fixed_event_age)
+    from . import store
+    return store.current_max_age_hours()

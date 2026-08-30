@@ -66,7 +66,7 @@ def cycle(con) -> dict:
                                  f"detector tip unconfirmed ({v.get('reason', '')[:120]})")
                 result["held"] += 1
                 continue
-            if store.event_is_stale(v.get("earliest_coverage_date"), config.MAX_EVENT_AGE_HOURS):
+            if store.event_is_stale(v.get("earliest_coverage_date"), config.max_event_age_hours()):
                 store.set_status(con, item["url_hash"], "held", item.get("story_key"),
                                  f"stale event: earliest coverage {v['earliest_coverage_date']}")
                 result["held"] += 1
@@ -97,10 +97,10 @@ def cycle(con) -> dict:
         # text; an event older than the window never posts, however fresh the article
         # (HWI Aug 18 / StarkWare Aug 26 posted as NEW on Aug 30 — Brady: should not
         # have posted at all). Null/unparseable dates pass; the article gate already ran.
-        if store.event_is_stale(d.get("event_date"), config.MAX_EVENT_AGE_HOURS):
+        if store.event_is_stale(d.get("event_date"), config.max_event_age_hours()):
             store.set_status(con, item["url_hash"], "held", item.get("story_key"),
                              f"stale event: dated {d['event_date']}, window "
-                             f"{config.MAX_EVENT_AGE_HOURS:g}h")
+                             f"{config.max_event_age_hours():g}h")
             log.info("stale event held %s (event_date %s)", item["title"][:60], d["event_date"])
             result["held"] += 1
             continue
@@ -116,7 +116,7 @@ def cycle(con) -> dict:
             from . import verify
             v = verify.web_corroborate(item)
             if v.get("confirmed") and store.event_is_stale(
-                    v.get("earliest_coverage_date"), config.MAX_EVENT_AGE_HOURS):
+                    v.get("earliest_coverage_date"), config.max_event_age_hours()):
                 store.set_status(con, item["url_hash"], "held", item.get("story_key"),
                                  f"stale event: earliest coverage {v['earliest_coverage_date']}")
                 result["held"] += 1
