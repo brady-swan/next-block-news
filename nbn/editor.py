@@ -23,6 +23,9 @@ see the wire's recent feed exactly as a scrolling reader would. Decide:
 
 1. READER VALUE: does this post tell the feed's reader something the feed has not already
    said? A rephrase of covered news, a non-story, or content-free filler gets spiked.
+   When the source is itself an X post, the reader sees the original right under ours
+   (quote/link) — a post that merely restates the original's copy adds nothing and gets
+   spiked; our copy must extend it with material the original does not say.
 2. FEED CONTEXT: given the recent posts, is the framing right? A follow-up must lead with
    what is new and reference earlier coverage in passing, never re-announce it.
 3. COPY: can it be tightened? You may edit DOWNWARD ONLY — cut, reorder, merge, sharpen.
@@ -54,6 +57,9 @@ def review(post: str, item: dict, con) -> dict:
         "candidate_post": post,
         "class": item.get("class"),
         "source": item.get("source"),
+        # For X-sourced items the title IS the original post's text — the editor needs
+        # it to judge whether our copy merely restates what the reader already sees.
+        "source_item_text": (item.get("title") or "")[:600],
         "recent_feed_newest_first": feed,
     }
     try:

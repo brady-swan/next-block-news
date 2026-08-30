@@ -120,6 +120,12 @@ Write the wire post. HARD RULES: every number verbatim from the source text; quo
 only; no URLs anywhere in the post; mentions only from the verified list, max 2, only if
 load-bearing. If the source text is empty or too thin to support a post, set post to null.
 
+If the source is an X post, the reader will see the ORIGINAL post right under ours (as a
+quote or link). Never restate its copy — that is reading the news back to the reader.
+Lead with material the original does NOT say, drawn from the source text (deeper figures,
+the prior reading, what changed, who is affected). If the source text offers nothing
+beyond the original post's own words, set post to null.
+
 If "already_covered" context is provided, the wire has ALREADY PUBLISHED the underlying
 story. Never re-announce it as NEW — if the new development is material, prefix the post
 "UPDATE:" and lead with what is new, referencing the earlier news in passing; if the
