@@ -7,6 +7,7 @@ import time
 from . import config
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS items (
   url_hash TEXT PRIMARY KEY,
   source TEXT, title TEXT, url TEXT, published_at TEXT,
@@ -21,6 +22,16 @@ CREATE TABLE IF NOT EXISTS posts (
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
+
+
+def kv_get(con, k: str) -> str:
+    row = con.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
+    return row["v"] if row else ""
+
+
+def kv_set(con, k: str, v: str):
+    con.execute("INSERT INTO kv(k, v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
+    con.commit()
 
 
 def url_hash(url: str) -> str:

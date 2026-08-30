@@ -145,7 +145,10 @@ X_PRIMARY_AUTHORS = {"SECGov", "federalreserve", "USTreasury"}
 _last_x_poll = 0.0
 
 
-def fetch_x() -> list:
+def fetch_x(con=None) -> list:
+    """X reads are pay-per-POST-READ (~$0.005 each) on the shared bearer. since_id is the
+    cost seam: without it every poll re-returns (re-bills) the same recent tweets; with it
+    a quiet poll returns zero posts and costs zero."""
     global _last_x_poll
     import time as _time
     if not config.X_BEARER_TOKEN:
@@ -153,21 +156,34 @@ def fetch_x() -> list:
     if _time.time() - _last_x_poll < config.X_POLL_SECONDS:
         return []
     _last_x_poll = _time.time()
+    from . import store
     out = []
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
-        for q in X_QUERIES:
+        for qi, q in enumerate(X_QUERIES):
             try:
+                params = {
+                    "query": q, "max_results": 25,
+                    "tweet.fields": "created_at,public_metrics,author_id",
+                    "expansions": "author_id", "user.fields": "username,verified",
+                }
+                since_id = store.kv_get(con, f"x_since_id_{qi}") if con is not None else ""
+                if since_id:
+                    params["since_id"] = since_id
+                else:
+                    # First run: only the freshness window, not 7 days of backlog reads.
+                    import datetime
+                    params["start_time"] = (
+                        datetime.datetime.now(datetime.timezone.utc)
+                        - datetime.timedelta(hours=6)
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
                 resp = client.get(
-                    "https://api.twitter.com/2/tweets/search/recent",
-                    params={
-                        "query": q, "max_results": 25,
-                        "tweet.fields": "created_at,public_metrics,author_id",
-                        "expansions": "author_id", "user.fields": "username,verified",
-                    },
-                )
+                    "https://api.twitter.com/2/tweets/search/recent", params=params)
                 resp.raise_for_status()
                 data = resp.json()
+                newest = data.get("meta", {}).get("newest_id")
+                if newest and con is not None:
+                    store.kv_set(con, f"x_since_id_{qi}", newest)
                 users = {u["id"]: u for u in data.get("includes", {}).get("users", [])}
                 for t in data.get("data", []):
                     user = users.get(t["author_id"], {})

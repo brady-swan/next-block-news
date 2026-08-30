@@ -14,7 +14,7 @@ STATE = {"started": time.time(), "cycles": 0, "last_cycle": None, "last_error": 
 
 
 def cycle(con) -> dict:
-    items = sources.fetch_feeds() + sources.fetch_perception() + sources.fetch_x()
+    items = sources.fetch_feeds() + sources.fetch_perception() + sources.fetch_x(con)
     inserted = store.upsert_new_items(con, items)
     # Keep summaries for freshly fetched items; DB-recovered items carry title only.
     summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
