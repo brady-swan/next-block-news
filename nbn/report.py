@@ -105,4 +105,25 @@ def render(con, hours: float = 26.0) -> str:
         out.append(f"<tr><td>{s['n']}</td><td>{_esc(s['note'] or 'triage: out of scope/dup')}"
                    f"</td></tr>")
     out.append("</table>")
+
+    import json as _json
+    audit_raw = store.kv_get(con, "audit:last")
+    out.append("<h2>Self-audit</h2>")
+    if audit_raw:
+        a = _json.loads(audit_raw)
+        out.append(f"<div class=meta>last run {_esc(a.get('ran'))} · "
+                   f"{a.get('posts_checked', 0)} posts checked</div>")
+        for r in a.get("results", []):
+            klass = {"clean": "published", "minor": "draft",
+                     "material": "held"}.get(r.get("verdict"), "tape")
+            flags = ("" if r.get("class_ok", True) else " · <span class=reason>CLASS SUSPECT</span>") + \
+                    (" · source drift" if r.get("source_drift") else "")
+            findings = "; ".join(r.get("findings", [])) or "no findings"
+            out.append(f"<div class='card {klass}'><small>"
+                       f"<span class=pill>{_esc(r.get('verdict'))}</span>"
+                       f"{_esc(r.get('class'))} · {_esc(r.get('mode'))}{flags}</small>"
+                       f"{_esc(r.get('title'))}\n<span class=meta>{_esc(findings)}</span></div>")
+    else:
+        out.append("<div class=meta>no audit has run yet (daily at "
+                   f"{_esc(config.AUDIT_UTC)} UTC)</div>")
     return "".join(out)

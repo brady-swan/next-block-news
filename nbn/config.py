@@ -12,6 +12,9 @@ MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 # Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
 REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")
 
+# Daily self-audit fire time (UTC HH:MM); empty disables
+AUDIT_UTC = os.environ.get("NBN_AUDIT_UTC", "09:00")
+
 # Loop
 POLL_SECONDS = int(os.environ.get("NBN_POLL_SECONDS", "120"))
 MAX_ITEMS_PER_TRIAGE = int(os.environ.get("NBN_MAX_ITEMS_PER_TRIAGE", "25"))

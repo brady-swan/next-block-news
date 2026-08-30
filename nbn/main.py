@@ -175,6 +175,9 @@ def run():
             STATE["last_cycle"] = cycle(con)
             if config.NODE_READ_TOKEN:
                 briefing.maybe_run(con)
+            if config.AUDIT_UTC:
+                from . import audit
+                audit.maybe_run(con)
             STATE["cycles"] += 1
             STATE["last_error"] = None
         except Exception as exc:  # noqa: BLE001 - the loop survives everything
