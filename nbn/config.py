@@ -45,8 +45,10 @@ BRIEFING_SCHEDULE = [
 PERCEPTION_API_KEY = os.environ.get("NBN_PERCEPTION_API_KEY", "")
 PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "600"))
 
-# Optional X read access (its own key, never the Marketing Node's)
+# X read access — SHARED with the Marketing Node's bearer (Brady's call 2026-08-30);
+# recent-search rate limits are per app, Node's 2x/day pulse + our throttled poll fit easily.
 X_BEARER_TOKEN = os.environ.get("NBN_X_BEARER_TOKEN", "")
+X_POLL_SECONDS = int(os.environ.get("NBN_X_POLL_SECONDS", "600"))
 
 # Classes allowed to auto-publish when AUTOPOST_ENABLED (secondary never auto-publishes;
 # env-tunable so the rollout can start with official sources only)

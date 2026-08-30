@@ -142,9 +142,17 @@ X_QUERIES = [
 X_PRIMARY_AUTHORS = {"SECGov", "federalreserve", "USTreasury"}
 
 
+_last_x_poll = 0.0
+
+
 def fetch_x() -> list:
+    global _last_x_poll
+    import time as _time
     if not config.X_BEARER_TOKEN:
         return []
+    if _time.time() - _last_x_poll < config.X_POLL_SECONDS:
+        return []
+    _last_x_poll = _time.time()
     out = []
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
