@@ -253,7 +253,7 @@ def fetch_x(con=None) -> list:
             try:
                 params = {
                     "query": q, "max_results": 25,
-                    "tweet.fields": "created_at,public_metrics,author_id",
+                    "tweet.fields": "created_at,public_metrics,author_id,entities",
                     "expansions": "author_id", "user.fields": "username,verified",
                 }
                 # Key since_id by query CONTENT hash, not position — list edits reorder queries.
@@ -281,12 +281,30 @@ def fetch_x(con=None) -> list:
                     user = users.get(t["author_id"], {})
                     uname = user.get("username", "unknown")
                     label = "X detector" if X_DETECTOR_QUERY_MARKER in q else "X"
+                    tweet_url = f"https://x.com/{uname}/status/{t['id']}"
+                    # A tweet is usually a POINTER: when a primary/roster account links
+                    # out (FRED graph, press release, filing), THAT page is the story —
+                    # follow it down so drafting reads the source, not the tweet, and the
+                    # published receipt links the primary (SLF/PCE lesson, 2026-08-30).
+                    # Detector tips keep the tweet URL (their links get replaced by
+                    # web corroboration anyway).
+                    outbound = []
+                    if label == "X":
+                        for u in (t.get("entities", {}) or {}).get("urls", []):
+                            target = u.get("unwound_url") or u.get("expanded_url") or ""
+                            host = target.split("/")[2].lower() if target.count("/") >= 2 else ""
+                            if host and not host.endswith(("twitter.com", "x.com", "t.co")):
+                                outbound.append(target)
+                    story_url = outbound[0] if len(outbound) == 1 else tweet_url
+                    summary = t["text"][:600]
+                    if story_url != tweet_url:
+                        summary += f"\n[original post: {tweet_url}]"
                     out.append({
                         "source": f"{label} @{uname}",
                         "title": t["text"][:200],
-                        "url": f"https://x.com/{uname}/status/{t['id']}",
+                        "url": story_url,
                         "published": t.get("created_at", ""),
-                        "summary": t["text"][:600],
+                        "summary": summary,
                     })
             except Exception as exc:  # noqa: BLE001
                 log.warning("x query failed: %s", exc)
@@ -294,13 +312,42 @@ def fetch_x(con=None) -> list:
     return out
 
 
+def _fred_csv(url: str) -> str:
+    """Recent observations for a fred.stlouisfed.org/graph/?g=... URL, else ''."""
+    m = re.search(r"fred\.stlouisfed\.org/graph/\??.*?g=([A-Za-z0-9]+)", url)
+    if not m:
+        return ""
+    try:
+        # FRED's WAF resets a browser UA on a non-browser TLS stack; plain curl UA passes.
+        with httpx.Client(timeout=20, headers={"User-Agent": "curl/8.7.1"}) as client:
+            csv = client.get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?g={m.group(1)}")
+        if csv.status_code != 200 or "," not in csv.text:
+            return ""
+        lines = csv.text.strip().splitlines()
+        return (f"FRED data series (graph {m.group(1)}), header + last 24 observations, "
+                f"most recent last:\n" + "\n".join([lines[0]] + lines[-25:]))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("fred csv fetch failed %s: %s", url, exc)
+        return ""
+
+
 def fetch_article_text(url: str, limit: int = 8000) -> str:
     """Best-effort article body fetch for the drafting step (numbers must come from here)."""
     try:
+        # FRED graph pages are JS shells that reset non-browser connections, but every
+        # graph has a CSV twin carrying the full data series — the actual primary source
+        # behind Fed stat tweets. Go straight to the CSV, never the page.
+        csv_text = _fred_csv(url)
+        if csv_text:
+            return csv_text[:limit]
         with httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=True) as client:
             resp = client.get(url)
             resp.raise_for_status()
             body = resp.text
+            # Shortlinks (bit.ly) unwrap here — re-check the final URL for a FRED graph.
+            csv_text = _fred_csv(str(resp.url))
+            if csv_text:
+                return csv_text[:limit]
         body = re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", body)
         text = html.unescape(_TAG_RE.sub(" ", body))
         return re.sub(r"\s+", " ", text).strip()[:limit]
