@@ -34,8 +34,41 @@ def publish(post: str, receipt_url: str, immediate: bool) -> tuple:
     return publish_thread([post, f"Source: {receipt_url}"], immediate)
 
 
+URL_RE = None  # set below
+
+
 def publish_thread(texts: list, immediate: bool) -> tuple:
-    """Create an N-post X thread. Returns (ok, draft_id_or_error)."""
+    """Create an N-post X thread. Returns (ok, draft_id_or_error).
+
+    Typefully blocks publish-now for drafts containing URLs (X policy, learned live
+    2026-08-30). Ladder: try as-is -> retry with links isolated in a trailing receipt
+    post -> retry linkless -> stage as DRAFT with links intact for a human tap.
+    """
+    import re
+    ok, ref = _create(texts, immediate)
+    if ok or not immediate or "URLs is blocked" not in str(ref):
+        return ok, ref
+    urls = [u for t in texts for u in re.findall(r"https?://\S+", t)]
+    stripped = [re.sub(r"\s*https?://\S+", "", t).rstrip() for t in texts]
+    stripped = [t for t in stripped if t]
+    if urls:
+        ok, ref = _create(stripped + ["Source: " + " ".join(urls[:3])], immediate)
+        if ok:
+            log.info("published with link isolated in receipt post (URL policy)")
+            return ok, ref
+        if "URLs is blocked" in str(ref):
+            ok, ref = _create(stripped, immediate)
+            if ok:
+                log.warning("published LINKLESS (URL policy blocked receipt post too); "
+                            "receipt in tape only")
+                return ok, ref
+    # Autonomy lost for this post: stage the full linked version for a human tap.
+    ok, ref = _create(texts, immediate=False)
+    log.warning("publish-now blocked by URL policy; staged as DRAFT %s", ref)
+    return ok, ref
+
+
+def _create(texts: list, immediate: bool) -> tuple:
     body = {
         "platforms": {"x": {"enabled": True, "posts": [{"text": t} for t in texts]}},
         "draft_title": texts[0][:60],
