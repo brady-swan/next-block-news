@@ -131,6 +131,24 @@ def cycle(con) -> dict:
 
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(self.path)
+        if parsed.path == "/report":
+            token = (parse_qs(parsed.query).get("k") or [""])[0]
+            if not config.REPORT_TOKEN or token != config.REPORT_TOKEN:
+                self.send_response(403)
+                self.end_headers()
+                self.wfile.write(b"forbidden")
+                return
+            from . import report
+            con = store.connect()
+            body = report.render(con).encode()
+            con.close()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         con = store.connect()
         body = json.dumps({**STATE, "db": store.status_summary(con),
                            "autopost": config.AUTOPOST_ENABLED}).encode()

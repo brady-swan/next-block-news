@@ -9,6 +9,9 @@ ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-opus-5")
 TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
+# Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
+REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")
+
 # Loop
 POLL_SECONDS = int(os.environ.get("NBN_POLL_SECONDS", "120"))
 MAX_ITEMS_PER_TRIAGE = int(os.environ.get("NBN_MAX_ITEMS_PER_TRIAGE", "25"))
