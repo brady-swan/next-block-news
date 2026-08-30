@@ -181,7 +181,7 @@ def fetch_edgar() -> list:
 # Every handle verified via /2/users/by on 2026-08-30 before inclusion.
 X_QUERIES = [
     # Regulators / officials (primary class)
-    '(from:SECGov OR from:federalreserve OR from:USTreasury OR from:CFTCgov'
+    '(from:SECGov OR from:federalreserve OR from:USTreasury OR from:CFTC'
     ' OR from:SenLummis OR from:RepTomEmmer) -is:retweet',
     # Company newsrooms (primary for their own announcements)
     '(from:BitGo OR from:NYDIG OR from:coinbase OR from:Strategy OR from:galaxyhq'
