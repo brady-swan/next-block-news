@@ -14,9 +14,9 @@ Two products: breaking singles (anytime) and the Morning/Afternoon Block (schedu
  │                                                                          │
  │  WATCH            TRIAGE              DRAFT              GATE            │ PUBLISH
  │  10 RSS feeds     Sonnet 5 judges     Sonnet 5 writes    deterministic   │ Typefully
- │  (+Perception     each new item:      the post from      lint: scope,    │ IMMEDIATE
- │  when keyed,      draft / hold /      the FETCHED        hype, numbers,  │ (auto) or
- │  +X when keyed)   skip, story key,    article text —     mentions, no    │ DRAFT (your
+ │  +Perception      each new item:      the post from      lint: scope,    │ IMMEDIATE
+ │  every 15 min     draft / hold /      the FETCHED        hype, numbers,  │ (auto) or
+ │  (+X when keyed)  skip, story key,    article text —     mentions, no    │ DRAFT (your
  │                   class               never from memory  model URLs      │ tap)
  └──────────────────────────────────────────────────────────────────────────┘
  weekdays 14:40 & 21:15 UTC: fetch the Marketing Node's tuned brief → the Block thread
