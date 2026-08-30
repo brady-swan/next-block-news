@@ -179,6 +179,15 @@ def _ed_parts(note):
     return verdict.strip(), reason.strip()
 
 
+def _dismissed(con, kind, ref) -> bool:
+    return bool(store.kv_get(con, f"dismissed:{kind}:{ref}"))
+
+
+def _dismiss_link(kind, ref, day):
+    return (f"<a class=sec href='/dismiss?k=__TOK__&kind={kind}&id={ref}&d={day}' "
+            f"style='color:var(--dim)'>dismiss ✓</a>")
+
+
 def render(con, day: str = None) -> str:
     now = datetime.datetime.now(TZ)
     today = now.strftime("%Y-%m-%d")
@@ -224,38 +233,38 @@ def render(con, day: str = None) -> str:
     # ── Needs you ────────────────────────────────────────────────────────────
     needs = []
     for p in posts:
-        lede, rest = _split_lede(p["body"])
+        if p["mode"] not in ("DRAFT", "TAPE") or _dismissed(con, "post", p["id"]):
+            continue
         body_html = _esc(p["body"])
-        if p["mode"] == "DRAFT":
-            needs.append(_need_card("amber", "TAP TO PUBLISH",
-                                    f"{_ct(p['created'])} · {_esc(p['class'])}",
-                                    f"<p>{body_html}</p>",
-                                    [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
-                                     ("receipt ↗", p["receipt_url"], True)]))
-        elif p["mode"] == "TAPE":
-            needs.append(_need_card("red", "POST FAILED",
-                                    f"{_ct(p['created'])} · {_esc(p['class'])}",
-                                    f"<p>{body_html}</p>",
-                                    [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
-                                     ("receipt ↗", p["receipt_url"], True)]))
+        color, verb = (("amber", "TAP TO PUBLISH") if p["mode"] == "DRAFT"
+                       else ("red", "POST FAILED"))
+        needs.append(_need_card(color, verb,
+                                f"{_ct(p['created'])} · {_esc(p['class'])}",
+                                f"<p>{body_html}</p>",
+                                [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
+                                 ("receipt ↗", p["receipt_url"], True)],
+                                extra=_dismiss_link("post", p["id"], day)))
     for h in held:
         note = h["note"] or ""
-        if note.startswith("editor spiked"):
+        if note.startswith("editor spiked") and not _dismissed(con, "item", h["url_hash"]):
             reason = note.replace("editor spiked:", "").strip()
             needs.append(_need_card("orange", "AGREE OR OVERRULE",
                                     f"{_ct(h['first_seen'])} · {_esc(h['source'])}",
                                     f"<p>{_esc(h['title'])}</p>"
                                     f"<p class=ednote>Editor: {_esc(reason)}</p>",
-                                    [("source ↗", h["url"], True)]))
+                                    [("source ↗", h["url"], True)],
+                                    extra=_dismiss_link("item", h["url_hash"], day)))
     if audit and is_today:
-        for r in audit.get("results", []):
-            if r.get("verdict") == "material" or not r.get("class_ok", True):
+        for i, r in enumerate(audit.get("results", [])):
+            if (r.get("verdict") == "material" or not r.get("class_ok", True)) \
+                    and not _dismissed(con, "audit", f"{audit.get('ran')}-{i}"):
                 needs.append(_need_card(
                     "red", "AUDIT FLAG",
                     _esc(r.get("verdict", "")) + (" · class suspect"
                                                   if not r.get("class_ok", True) else ""),
                     f"<p>{_esc(r.get('title'))}</p>"
-                    f"<p class=ednote>{_esc('; '.join(r.get('findings', [])))}</p>", []))
+                    f"<p class=ednote>{_esc('; '.join(r.get('findings', [])))}</p>", [],
+                    extra=_dismiss_link("audit", f"{audit.get('ran')}-{i}", day)))
 
     out.append(f"<h2 class=needs><span class=fill>Needs you</span>"
                f"<span class='count o'>{len(needs)}</span></h2>")
@@ -394,9 +403,9 @@ def render(con, day: str = None) -> str:
     return "".join(out)
 
 
-def _need_card(color, verb, meta, body_html, actions):
+def _need_card(color, verb, meta, body_html, actions, extra=""):
     acts = ""
-    if actions:
+    if actions or extra:
         links = []
         primary = True
         for label, url, secondary in actions:
@@ -406,6 +415,6 @@ def _need_card(color, verb, meta, body_html, actions):
             links.append(f"<a{' class=sec' if not primary else ''} "
                          f"href='{html.escape(url)}'>{html.escape(label)}</a>")
             primary = False
-        acts = f"<div class=acts>{''.join(links)}</div>"
+        acts = f"<div class=acts>{''.join(links)}{extra}</div>"
     return (f"<article class=need><div class='verb {color}'><b>{html.escape(verb)}</b>"
             f"<span>{meta}</span></div><div class=body>{body_html}</div>{acts}</article>")

@@ -159,6 +159,25 @@ class Health(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
+        if parsed.path == "/dismiss":
+            q = parse_qs(parsed.query)
+            token = (q.get("k") or [""])[0]
+            if not config.REPORT_TOKEN or token != config.REPORT_TOKEN:
+                self.send_response(403)
+                self.end_headers()
+                return
+            kind = (q.get("kind") or [""])[0]
+            ref = (q.get("id") or [""])[0]
+            day = (q.get("d") or [""])[0]
+            if kind in ("post", "item", "audit") and ref:
+                con = store.connect()
+                store.kv_set(con, f"dismissed:{kind}:{ref}",
+                             str(time.time()))
+                con.close()
+            self.send_response(302)
+            self.send_header("Location", f"/report?k={token}" + (f"&d={day}" if day else ""))
+            self.end_headers()
+            return
         if parsed.path == "/report":
             token = (parse_qs(parsed.query).get("k") or [""])[0]
             if not config.REPORT_TOKEN or token != config.REPORT_TOKEN:
