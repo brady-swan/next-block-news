@@ -48,23 +48,16 @@ def publish_thread(texts: list, immediate: bool) -> tuple:
     ok, ref = _create(texts, immediate)
     if ok or not immediate or "URLs is blocked" not in str(ref):
         return ok, ref
-    urls = [u for t in texts for u in re.findall(r"https?://\S+", t)]
-    stripped = [re.sub(r"\s*https?://\S+", "", t).rstrip() for t in texts]
-    stripped = [t for t in stripped if t]
-    if urls:
-        ok, ref = _create(stripped + ["Source: " + " ".join(urls[:3])], immediate)
-        if ok:
-            log.info("published with link isolated in receipt post (URL policy)")
-            return ok, ref
-        if "URLs is blocked" in str(ref):
-            ok, ref = _create(stripped, immediate)
-            if ok:
-                log.warning("published LINKLESS (URL policy blocked receipt post too); "
-                            "receipt in tape only")
-                return ok, ref
-    # Autonomy lost for this post: stage the full linked version for a human tap.
+    # Probed 2026-08-30: the URL block is DRAFT-WIDE (a link in any thread post 403s),
+    # so the only autonomous rung is linkless. Receipt lives in the tape/Desk Report;
+    # a human adds the link as a reply. Inline attempt stays first in case X relaxes.
+    stripped = [t for t in (re.sub(r"\s*https?://\S+", "", t).rstrip() for t in texts) if t]
+    ok, ref = _create(stripped, immediate)
+    if ok:
+        log.warning("published LINKLESS (X URL policy); receipt in tape - add as reply")
+        return ok, ref
     ok, ref = _create(texts, immediate=False)
-    log.warning("publish-now blocked by URL policy; staged as DRAFT %s", ref)
+    log.warning("publish-now blocked; staged linked DRAFT %s", ref)
     return ok, ref
 
 
