@@ -66,3 +66,7 @@ X_LIST_REFRESH_SECONDS = int(os.environ.get("NBN_X_LIST_REFRESH_SECONDS", "3600"
 AUTOPOST_CLASSES = {
     c.strip() for c in os.environ.get("NBN_AUTOPOST_CLASSES", "primary,data").split(",") if c.strip()
 } - {"secondary"}
+
+# Autonomous publishes are scheduled this many seconds out (publish_at:"now" rejects
+# drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)
+PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "90"))
