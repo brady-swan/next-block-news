@@ -1,211 +1,219 @@
 # How Next Block News works — the owner's manual
 
-*Written 2026-08-29, matching the deployed code. One always-on Python worker on Railway
-watches the news, decides what's worth publishing, writes it in the wire voice, checks
-itself against deterministic gates, and publishes through Typefully to @nextblocknews_.
-Two products: breaking singles (anytime) and the Morning/Afternoon Block (scheduled).*
+*Rewritten 2026-08-30 (end of launch weekend), matching deployed code. One always-on
+Python worker on Railway watches the news, judges it, writes it, checks itself twice —
+once with rules, once with an editor — and publishes to @nextblocknews_ through
+Typefully. Two products: breaking singles (anytime) and the Morning/Afternoon Block.*
 
 ---
 
 ## The 30-second version
 
 ```
- every 120s ────────────────────────────────────────────────────────────────┐
- │                                                                          │
- │  WATCH            TRIAGE              DRAFT              GATE            │ PUBLISH
- │  10 RSS feeds     Sonnet 5 judges     Sonnet 5 writes    deterministic   │ Typefully
- │  +Perception      each new item:      the post from      lint: scope,    │ IMMEDIATE
- │  every 15 min     draft / hold /      the FETCHED        hype, numbers,  │ (auto) or
- │  (+X when keyed)  skip, story key,    article text —     mentions, no    │ DRAFT (your
- │                   class               never from memory  model URLs      │ tap)
- └──────────────────────────────────────────────────────────────────────────┘
- weekdays 14:40 & 21:15 UTC: fetch the Marketing Node's tuned brief → the Block thread
+ every 60s ──────────────────────────────────────────────────────────────────────┐
+ │                                                                               │
+ │ WATCH          INTAKE GATES      TRIAGE           DRAFT          FACT GATES   │ EDITOR        PUBLISH
+ │ 12 RSS feeds   dedup by URL      Sonnet 5:        Sonnet 5,      lint: scope, │ Fable 5 @low: Typefully,
+ │ SEC EDGAR      freshness         draft/hold/skip  numbers only   hype, attrib,│ reader value, scheduled
+ │ Perception     (2.5h day/6h      + story key      from FETCHED   mentions,    │ feed context, +30s (links
+ │ X (list+       night/wknd)       + class          source text    numbers vs   │ craft; spike/ survive),
+ │ bundles)       non-English                                       source (+1   │ revise/publish confirm-
+ │ web search     gate                                              retry)       │               polled
+ └───────────────────────────────────────────────────────────────────────────────┘
+ weekdays 14:40 & 21:15 UTC: Node brief + wire's own catches → the Block (staged DRAFT)
+ daily 09:00 UTC: self-audit re-verifies yesterday's posts against their receipts
+ every cycle: heartbeat ping → healthchecks.io (silence >15 min pages Brady)
 ```
 
-Everything that happens is also appended to a daily tape file (the audit trail) and a
-SQLite database on the Railway volume.
+Everything lands in the daily tape (`/data/tapes/`) and SQLite (`/data/nbn.db`),
+including the editor's verdict on every autonomous post (`posts.editor_note`).
 
 ---
 
 ## 1. Watching (sources)
 
-**RSS, every cycle (120s):** Federal Reserve press, SEC press releases (the two *primary*
-sources), Bitcoin Magazine, CoinDesk, The Block, Cointelegraph, Bloomberg Markets, CNBC,
-WSJ Markets, Fox Business. A feed failing never kills the cycle; it's logged and skipped.
+**RSS, every cycle (60s):** Federal Reserve press, SEC press releases, CFTC press
+(primaries), Bitcoin Magazine (their broken URL 301s to a working /feed), CoinDesk,
+The Block, Cointelegraph, Bloomberg Markets, CNBC, WSJ Markets, Fox Business,
+PR Newswire Financial (where corporate announcements originate). Per-feed failures
+never kill a cycle.
 
-**Perception `/feed`** (1,000+ outlets): LIVE, polled every 15 minutes. The key is SHARED
-with the Marketing Node (Perception allows one per account), so the poll interval is a
-budget decision: wire 96 calls/day + optimized Node ~31-44/day sits just above the
-116/day that ran error-free for months. If `/feed` 429s appear in either system's logs,
-widen `NBN_PERCEPTION_POLL_SECONDS` first. After a clean week, 600s (10 min) is the
-planned next step.
+**SEC EDGAR full-text watch (60s):** every 8-K mentioning "bitcoin", filed today or
+yesterday — corporate Bitcoin news before journalists write it. Free, unmetered,
+`primary` class.
 
-**X recent-search** (regulator accounts + Bitcoin-ETF/custody breaking terms): built,
-dormant until `NBN_X_BEARER_TOKEN` is set with the wire's own key.
+**Perception `/feed` (15 min):** 1,000+ outlets. The API key is SHARED with the
+Marketing Node (one key per Perception account) — the interval is a budget decision;
+`/feed` 429s in either system's logs mean widen `NBN_PERCEPTION_POLL_SECONDS` first.
 
-Every item is deduplicated by URL hash — seen once, never re-processed.
+**X recent-search (3 min), `since_id`-gated** — critical: X bills ~$0.005 per post
+*returned*, and search re-returns matches unless you ask for "only new"; quiet polls
+cost zero. Three tiers:
+- **The public list "Next Block News Follows"** — membership fetched hourly and
+  compiled into `from:` queries. Brady edits the wire's coverage from the X app;
+  changes take effect within the hour. (Never poll a list *timeline*: no since_id,
+  re-bills reads.)
+- **Quiet hardcoded bundles**: watched legislators; company newsrooms (BitGo, NYDIG,
+  Coinbase, Strategy, Galaxy, BlackRock, Fidelity, Bitwise, Grayscale, River, Strike,
+  Unchained, Casa, Swan) — kept off the public list for association optics.
+- **Fast detectors** (WatcherGuru, CoinDesk, TheBlockCo, Bitcoin Magazine,
+  BitcoinNewsCom, TFTC21, BitcoinArchive) — tips only, never sources (see §3).
 
-## 2. Triage (the intake editor)
+**Web search (on demand):** Claude's server-side web_search, used by verification (§3)
+and the self-audit.
 
-New items go to Sonnet 5 in a batch (max 25/cycle) with the charter and the recently
-covered story keys. For each item it returns:
+## 2. Intake gates (deterministic, pre-model)
 
-- **action** — `draft` (in scope, newsworthy), `skip` (out of scope, promo, altcoin,
-  duplicate), `hold` (in scope but unverifiable right now)
-- **story_key** — names the underlying STORY, so two outlets covering one event share a
-  key. This drives corroboration and the never-post-twice guard.
-- **class** — decides publish behavior (see §4)
+- URL-hash dedup — an item is examined once, ever.
+- **Freshness** tracks the news metabolism: 2.5h during weekday 7am-7pm ET, 6h
+  overnight/weekends (`NBN_MAX_AGE_HOURS_*`; a set `NBN_MAX_AGE_HOURS` overrides with
+  one fixed value). EDGAR exempt (date-only stamps; its query bounds age instead).
+- **Non-English** (>30% non-Latin letters in the title) — skipped before any model call.
 
-Before triage, a deterministic freshness gate drops anything published more than
-`NBN_MAX_AGE_HOURS` ago (currently 6) — a wire never posts old news as NEW.
+## 3. Judgment (triage → verification)
 
-## 3. Drafting (the writer)
+**Triage** (Sonnet 5, batch): action draft/hold/skip, a `story_key` naming the
+underlying story, and a class. It receives both **posted** story keys (skip duplicates)
+and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
+corroboration promotion).
 
-For each `draft` item the worker fetches the article's full text and hands it to Sonnet 5
-with the charter (`prompts/wire_voice.md`). Hard rules baked into the seam:
+**Classes decide autonomy:**
 
-- **Every number must appear verbatim in the fetched source text.** No source text (fetch
-  blocked, paywall) → no post; the item is held as "thin source."
-- **The model never writes URLs.** The system appends the verified receipt link afterward.
-  This is the anti-fabrication seam: a hallucinated link is structurally impossible.
-- Mentions only from `handles.json` (each handle manually verified against the live
-  profile), max 2, tagging data sources at first mention.
-- Shape: narrative by default in short scannable paragraphs; `•` bullets (max 4) only for
-  genuinely enumerable stories; mixed allowed — bullets carry lists, prose carries the
-  story, never bullet a causal argument.
-
-## 4. Classes — what publishes itself vs. waits for you
-
-| Class | Meaning | On autopost (now) |
+| Class | Meaning | Autopost |
 |---|---|---|
-| `primary` | The item IS the official source: Fed/SEC/Treasury release, filing, official account | **Publishes immediately, no human** |
-| `corroborated` | Secondary story whose story_key has **2+ distinct publishers** (your two-source rule, mechanized) | **Publishes immediately** |
-| `secondary` | Single-outlet press report | **Never auto-posts** (hardened in code, not just config) → Typefully DRAFT for your tap |
-| `data` | Pure market/chain data point | In the allowed set but deferred until the wire computes its own numbers |
-| `briefing` | The Block threads | DRAFT for your tap until you add `briefing` to `NBN_AUTOPOST_CLASSES` |
+| `primary` | The item IS the official artifact (regulator release, filing, company's own statement) | yes |
+| `corroborated` | 2+ independent publishers on one story_key, **or** web-verification found independent confirmation | yes |
+| `secondary` | Single-outlet press report | never (code-hardened) → Typefully DRAFT |
+| `data` | Pure market/chain data | in the allowed set; dormant until the wire computes its own numbers |
+| `briefing` | The Blocks | DRAFT until Brady promotes the class |
 
-A `secondary` story needing a second source is not just held passively: the worker
-actively **web-searches for independent confirmation** (`nbn/verify.py`, adversarial
-prompt — "find reasons it is NOT confirmed" — plus deterministic checks: confirming
-domain must differ from the original and aggregators never count). Confirmed → promoted
-to `corroborated` and it publishes within minutes. Not confirmed → held, and it still
-publishes automatically if a second outlet later arrives through the feeds. No story_key
-ever posts twice.
+**Active verification:** a single-source story doesn't wait passively — the worker
+web-searches for INDEPENDENT confirmation (adversarial prompt: "find reasons it is NOT
+confirmed"; deterministic vetoes: confirming domain must differ, aggregators never
+count). Confirmed → `corroborated` → publishes in minutes. **Detector tips invert the
+order**: verify FIRST, then draft from the primary the hunt found — the tip is never
+the source; tip + confirmation = two sources on the key.
 
-## 5. The gates (deterministic, veto everything)
+## 4. Writing
 
-`nbn/lint.py` runs after the model, before the publisher. Any violation = the draft is
-held (after **one retry** where the violations are fed back to the model for a rewrite).
+Sonnet 5 drafts from the FETCHED article text under the charter
+(`prompts/wire_voice.md`; compiled reference `PROMPTS.md`). The load-bearing seams:
+- Every number must appear verbatim in the fetched source text; no text → no post.
+- The model never writes URLs — the system appends the verified receipt (the
+  anti-fabrication seam).
+- If the wire already covered the story, drafting receives `already_covered` — lead
+  with what's new, never re-announce.
+- Shape: narrative default in short scannable paragraphs; `•` bullets (max 4) only for
+  genuinely enumerable stories; mixed allowed (one run ≤3) — bullets carry lists, prose
+  carries the story. Attribute the source ONCE. Mentions only from `handles.json`
+  (hand-verified), max 2.
 
-- Bitcoin-only scope: no non-Bitcoin token named or priced, ever; "crypto" allowed only
-  as a business adjective ("a crypto custody provider") or inside a quoted official title
-- No hype (BREAKING, 🚨, 🚀, "surges", "erupts"...), no forecasts ("will hit $", "price
-  target"), no buy-timing ("don't miss", "buy the dip")
-- Number integrity: every figure in the post must exist in the fetched source text
-- Mention whitelist, max 2; no all-caps runs; no URLs in model output; length cap
-- Block-specific: any post containing "swan" is rejected (brand separation), and every
-  receipt must be a URL that literally appears in the Node's brief
+## 5. The gates (deterministic; one retry with violations fed back)
 
-These gates are the wire's identity (accuracy, neutrality, receipts) — NOT Swan
-compliance. The wire is not Swan-affiliated content.
+`nbn/lint.py`: Bitcoin-only scope (no non-Bitcoin token ever; "crypto" only as a
+business adjective or inside a quoted official title), no hype/forecast/buy-timing
+patterns, number-integrity vs source text, repeated-attribution ban, mention whitelist,
+no model URLs, length caps. Block-specific: any "swan" mention rejected; receipts must
+be URLs present in the Node's brief. These gates are the wire's identity — NOT Swan
+compliance; the wire is not Swan-affiliated content.
 
-## 6. The Block (scheduled briefing threads)
+## 6. The Editor (last mile, autonomous posts only)
 
-Weekdays at **14:40 UTC** (Morning Block, after the Node's EIC brief lands at 14:00) and
-**21:15 UTC** (Afternoon Block, after the Node's 20:30 intel run). Once per window,
-DB-guarded. The worker:
+`nbn/editor.py` — **Fable 5 at low effort** (Brady's call). After all gates, before
+publish, it reads the candidate against the wire's last 10 published posts — the two
+things rule-gates can't see: contextual duplication and craft. Verdicts:
+**publish** / **revise** (downward-only edits, re-linted, original stands on failure) /
+**spike** (held, reasoning shown in the Desk for Brady to agree or overrule). An editor
+outage fails OPEN — judgment problems never block news. Every verdict is recorded on
+the post (`editor_note`): the grading record.
 
-1. Fetches your tuned brief from the Marketing Node's read API (`/api/daily-intel/latest`)
-2. Adds the wire's own unique catches since the previous Block (`wire_items`)
-3. Rewrites into a 5-9 post thread: post 1 is the link-free index
-   (`Morning Block - <date>`, "Top stories:" bullets, "More inside ➡️" — the wire's one
-   emoji, only there); each story post from 2 on carries its own receipt link so the card
-   renders
-4. Gates: Swan-strip, receipts-from-brief-only, the full lint
-5. Stages as a Typefully DRAFT (class `briefing`)
+## 7. Publishing
 
-**Known tradeoff:** the Block trusts the brief. If the brief carries a wrong number, the
-Block inherits it (the "close to 60%" odds figure is the live example). Wire singles, by
-contrast, verify against fetched source text. A cross-check pass is the specced upgrade.
+**Typefully API v2.** The pivotal discovery: `publish_at:"now"` rejects any draft
+containing a URL (X policy, draft-wide, undocumented — the 403 body is the only
+written rule), but **scheduled posts carry links fine**. So "immediate" = scheduled
+`NBN_PUBLISH_DELAY_SECONDS` (30) out; Typefully fires on minute boundaries → real
+latency 30-90s. Fallback ladder if policy shifts: linkless → staged linked DRAFT.
+Publishes are confirm-polled. No delete exists anywhere in the chain — **corrections
+are posted, never scrubbed** (`CORRECTIONS.md`: severity ladder, templates, corrections
+never auto-publish, nothing new posts over an uncorrected material error).
 
-## 7. Publishing (the rail)
+## 8. The Block (scheduled briefing threads)
 
-Typefully API v2, chosen over Nuelink (API can't thread, no read-back) and the direct
-X API (pay-per-use charges $0.20/post containing a link; long-post 403 history). Singles
-publish as one post with the link appended; Blocks as native threads. `IMMEDIATE` posts
-use `publish_at:"now"` and the worker polls until Typefully confirms `finished`.
-Failures fall back to tape + log — never silent. There is no delete anywhere in the
-chain by design: **corrections are posted, never scrubbed.**
+Weekdays 14:40 UTC (Morning, after the Node's 14:00 EIC brief) and 21:15 UTC
+(Afternoon, after the 20:30 intel run); once per window. Fetches Brady's tuned brief
+from the Marketing Node read API, folds in the wire's own catches since the previous
+Block, renders a 5-9 post thread: post 1 = link-free index (`Morning Block - <date>`,
+"Top stories:" bullets, "More inside ➡️" — the wire's one emoji), per-post receipt
+links from post 2. Gates: Swan-strip (deterministic), receipts-from-brief-only, full
+lint. Stages as DRAFT. Known tradeoff: the Block trusts the brief's numbers (the "60%"
+incident); the cross-check pass is the spec'd fix.
 
-X Premium is required on the handle (long posts) — active.
+## 9. Self-audit (daily 09:00 UTC)
 
-## 8. Where everything lives
+Re-fetches every published post's receipt and re-verifies claims, numbers, quotes
+against the CURRENT source (source drift handled honestly), plus the class audit —
+press-classed-`primary` is the one gate-proof failure. Material findings auto-stage a
+CORRECTION draft (never publish). Results in the Desk.
 
-| Thing | Where |
-|---|---|
-| Code | private repo `brady-swan/next-block-news` (local: `~/claude/next-block-news/`) |
-| Deployment | Railway project `next-block-news` (`1e1f32d1…`), single service + volume at `/data` |
-| The prompts | `prompts/wire_voice.md` (charter) + constants in `nbn/brain.py`, `nbn/briefing.py`; compiled reference: `PROMPTS.md` |
-| Verified handles | `handles.json` — never add one without checking the live profile |
-| State | SQLite `/data/nbn.db` (items, stories, post log) |
-| Audit trail | `/data/tapes/tape-YYYY-MM-DD.md` — every produced post, timestamped, with mode |
-| Health | `GET /health` on the service (cycle stats, DB counts, autopost flag) — generate a public domain in Railway settings if you want it in a browser; otherwise `railway logs` |
+## 10. Operating it — the Desk and the switches
 
-## 9. The knobs (Railway service variables)
+**The Desk** (`/report?k=<token>`, bookmark in `DESK-REPORT-URL.txt`): Claude-Design
+"Filed, action-first" UI. Status strip (model seats, freshness window, autopost) →
+**Needs You** (verb-led cards: TAP TO PUBLISH / POST FAILED / AGREE OR OVERRULE /
+AUDIT FLAG, each with a `dismiss ✓` that records acknowledgment without deleting
+history) → 7-day strip (published/held/seen per day, stalled-weekday flags, day
+navigation) → Published (lede-only cards + editor verdicts) → Held grouped by reason
+family → Self-audit → Skips.
 
-| Variable | Current | What it does |
+**Watching the watcher:** every successful cycle pings healthchecks.io
+(`NBN_HEARTBEAT_URL`); ~15 min of silence pages Brady. `/health` returns 500 when the
+last cycle is >10 min old. X notifications on the handle announce publishes.
+
+**Switches:** `NBN_AUTOPOST_ENABLED=false` = master kill (everything stages as
+drafts). Pause the Railway service to stop even drafting. Tape reads:
+`railway ssh "cat /data/tapes/tape-YYYY-MM-DD.md"`.
+
+## 11. The knobs (Railway service variables)
+
+| Variable | Current | Purpose |
 |---|---|---|
-| `NBN_AUTOPOST_ENABLED` | `true` | **Master kill switch.** `false` = everything stages as DRAFT |
-| `NBN_AUTOPOST_CLASSES` | `primary,corroborated` | Which classes may publish unattended (`secondary` is ignored even if listed) |
-| `NBN_MAX_AGE_HOURS` | `6` | Freshness gate — older items skipped at intake |
-| `NBN_POLL_SECONDS` | `120` | Sweep cadence |
-| `NBN_MODEL` | `claude-sonnet-5` | Writer + triage model (`NBN_TRIAGE_MODEL` can split them) |
-| `NBN_NODE_READ_TOKEN` | set | Read access to the Marketing Node's brief (Blocks) |
-| `TYPEFULLY_API_KEY` / `_SOCIAL_SET_ID` | set / `329191` | The posting rail |
-| `NBN_PERCEPTION_API_KEY` | set (SHARED with the Node — one key per Perception account) | The Perception source |
-| `NBN_PERCEPTION_POLL_SECONDS` | `900` | Perception poll interval (budget lever if 429s appear) |
-| `NBN_X_BEARER_TOKEN` | empty | Activates the X poller when set |
-| `NBN_BRIEFING_UTC` | default `14:40,Morning;21:15,Afternoon` | Block schedule |
-| `NBN_MAX_LLM_CALLS_PER_HOUR` | default `60` | Runaway-cost guard |
+| `NBN_AUTOPOST_ENABLED` | `true` | master kill switch |
+| `NBN_AUTOPOST_CLASSES` | `primary,corroborated` | autonomy surface (`secondary` ignored even if listed) |
+| `NBN_PUBLISH_DELAY_SECONDS` | `30` | the scheduled-publish fuse |
+| `NBN_MAX_AGE_HOURS_ACTIVE/QUIET` | `2.5` / `6` | freshness schedule (fixed `NBN_MAX_AGE_HOURS` overrides) |
+| `NBN_POLL_SECONDS` | `60` | RSS/EDGAR cadence |
+| `NBN_X_POLL_SECONDS` / `NBN_X_LIST_ID` / `NBN_X_LIST_REFRESH_SECONDS` | `180` / set / `3600` | X poller + list roster |
+| `NBN_PERCEPTION_API_KEY` / `NBN_PERCEPTION_POLL_SECONDS` | set (shared) / `900` | Perception source |
+| `NBN_MODEL` / `NBN_TRIAGE_MODEL` | `claude-sonnet-5` | writer + triage (effort = API default high) |
+| `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | the editor seat |
+| `NBN_NODE_READ_TOKEN` / `NBN_BRIEFING_UTC` | set / `14:40,Morning;21:15,Afternoon` | the Blocks |
+| `NBN_AUDIT_UTC` | `09:00` | self-audit |
+| `NBN_REPORT_TOKEN` | set | Desk access (rotate to invalidate the bookmark) |
+| `NBN_HEARTBEAT_URL` | set | dead-man's switch |
+| `TYPEFULLY_API_KEY` / `TYPEFULLY_SOCIAL_SET_ID` | set / `329191` | the rail |
+| `NBN_X_BEARER_TOKEN` | set (shared w/ Node) | X reads — ⚠️ regeneration queued (partial chat exposure 8/30) |
+| `NBN_MAX_LLM_CALLS_PER_HOUR` | `60` | runaway-cost guard |
 
-Changing a variable in the Railway UI restarts the worker with it. Code changes deploy
-via `railway up` from the repo directory (or push to GitHub and redeploy).
+## 12. Costs (order of magnitude)
 
-## 10. Operating it
+Railway ~$5-10/mo · Typefully ~$10/mo · X Premium on the handle · LLM: Sonnet triage/
+drafting + Fable editor + web-search verification ≈ $2-5/day typical · X reads ≈
+$10-20/mo (since_id makes quiet polls free) · Perception rides the shared key.
+Run rate ≈ **$100-180/mo all-in**.
 
-- **Pause everything:** `NBN_AUTOPOST_ENABLED=false` (posts keep staging as drafts), or
-  pause the service entirely in Railway to stop even drafting.
-- **See what it's doing:** `railway logs` — every cycle, every hold with its reason,
-  every publish. Or read the daily tape for the content view.
-- **Why didn't X post?** Check the tape first (was it produced?), then the DB reasons:
-  items are marked `skipped` (out of scope/stale/duplicate), `held` (thin source, needs
-  second source, lint after retry), `drafted` (waiting for your tap), `posted`.
-- **A bad post went out:** post the correction as a reply/quote from the handle. Never
-  delete — the accuracy policy is the moat, and visible corrections are part of it.
-- **Widen autonomy:** add `briefing` (and later `data`) to `NBN_AUTOPOST_CLASSES` when
-  the drafts have earned it.
-- **Tune the voice:** edit `prompts/wire_voice.md`, `railway up`. The prompt file is the
-  spec; `PROMPTS.md` is the readable compilation.
+## 13. Failure modes
 
-## 11. Costs (order of magnitude)
-
-Railway ~$5-10/mo. LLM: Sonnet 5 at ~$2/$10 per Mtok; a quiet day is a handful of triage
-calls (~$0.10-0.50), a busy day with many drafts maybe $1-3; web-corroboration searches add ~$0.01-0.04 per
-held story checked; the hourly call cap bounds the blowup case. Typefully ~$10/mo tier. X Premium on the handle. Total: roughly
-$30-60/mo run rate.
-
-## 12. Failure modes and what they look like
-
-| Failure | What happens | Where you see it |
+| Failure | Behavior | Where seen |
 |---|---|---|
-| Feed down / article fetch blocked | Item held "thin source"; other feeds unaffected | logs, DB note |
-| Typefully publish fails | Post falls back to tape, item stays `drafted` | logs (`typefully publish failed`) |
-| Node brief unavailable at Block time | Block skipped, "no brief available" warning | logs |
-| Model writes something out-of-charter | Lint holds it (after one retry) | logs (`lint held`), DB note |
-| Web corroboration errors/ambiguous | Fails safe: story stays held | logs, DB note (`needs second source (...)`) |
-| Perception `/feed` 429 (shared budget) | Poll skipped, RSS unaffected; widen the poll interval | both systems' logs |
-| Press story misclassed `primary` | **The one gate-proof failure** — it would auto-post | audit the class labels on early posts |
-| Worker crash | Railway restarts it; unprocessed items recover from DB (`pending` pickup) | Railway deploy panel |
+| Feed down / fetch blocked / paywall | held "thin source"; other feeds unaffected | Desk holds, logs |
+| Typefully publish fails | fallback ladder → worst case staged linked DRAFT | Needs You (POST FAILED), logs w/ response body |
+| Node brief unavailable at Block time | Block skipped with a warning | logs |
+| Out-of-charter copy | lint holds after one retry | Desk holds ("Style gate") |
+| Contextual dup / weak value | editor spikes with reasoning | Needs You (AGREE OR OVERRULE) |
+| Press story misclassed `primary` | **the one gate-proof failure** — daily class audit is the net | Self-audit (CLASS SUSPECT) |
+| Worker crash or hang | Railway restarts crashes; healthchecks pages on ANY ≥15-min silence; /health 500s when stale | phone |
+| Model API outage | cycle errors logged; loop survives; editor outage fails open | /health `last_error` |
 
-The design principle behind all of it: **the model proposes, deterministic code vetoes,
-and every publish decision is reconstructible from the tape + DB.**
+Design principle throughout: **models propose, deterministic code vetoes, an editor
+judges, and every decision is reconstructible from the tape and the database.**

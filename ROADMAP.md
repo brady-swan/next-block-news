@@ -1,32 +1,65 @@
-# Next Block News — alpha roadmap (2026-08-30)
+# Next Block News — roadmap (updated 2026-08-30, end of launch weekend)
 
-Alpha declared 2026-08-30. Theme of week 1: **Brady is the editor; the highest-leverage
-builds make editing effortless.** Ranked: protect the asset first, then compound it.
+## Where we are
 
-## This week — the watch-and-learn loop
-1. **Desk Report** ✅ (live: /report, token-gated) — token-gated `/report` page on the worker: today's tape,
-   holds with reasons, skips by class, every auto-publish with receipt. The wire's
-   judgment, skimmable from a phone in two minutes.
-2. **Pinned methodology post** ✅ (published + pinned 2026-08-30) — what the wire is, sourcing rules,
-   the corrections promise. The trust moat made visible; charter item from day one.
-3. **Corrections protocol** ✅ (CORRECTIONS.md) — template (CORRECTION quote-post), severity rule, who fires.
-   Written BEFORE the first error, not during it.
-4. **Daily self-audit** — scheduled pass re-reading yesterday's published posts against
-   receipts + class audit (press-story-misclassed-primary is the one gate-proof failure).
-   Output lands in the Desk Report.
+Alpha declared Saturday morning; by Sunday evening the wire is a complete autonomous
+newsroom: five source layers, active web-verification, deterministic gates, a Fable
+editor with recorded verdicts, scheduled-publish autonomy with links, a designed Desk
+with an action queue, a daily self-audit, a corrections doctrine, and a dead-man's
+switch paging Brady on silence. Four stories found and published autonomously in the
+first ~30 hours; two voice defects caught on the live timeline and made structurally
+impossible; zero factual errors; first editor verdict on record.
 
-## Weeks 2-3 — build
-5. **Block number cross-check** — verify the brief's figures against wire-verified items
-   and cited sources before threading (the "60%" fix).
-6. **Data posts autopost class** — computed from CoinGecko/mempool (daily close,
-   difficulty, halving milestones; ETF flows once Farside is read properly).
-   Zero-hallucination cadence filler; exercises autonomous publish safely.
+**Monday 2026-08-31 is the real test**: first weekday news cycle — regulators awake,
+EDGAR flowing, the 14:40 UTC Morning Block firing on its own.
 
-## Growth — once the week proves quality
-7. Distribution in order: register **nextblock.news**; **Nostr mirror**; first
-   being-first moment gets a quote-post from Brady's personal account (never @Swan).
-8. **`briefing` autopost decision** after ~5 good Blocks.
+## Week 1 (launch weekend) — ALL SHIPPED ✅
+
+1. ✅ Desk Report → shipped, then redesigned via Claude Design ("Filed, action-first"),
+   incl. dismiss flow, day navigation, editor verdicts per post
+2. ✅ Pinned methodology post (published + pinned; "produced by a team of agents")
+3. ✅ Corrections protocol (`CORRECTIONS.md`)
+4. ✅ Daily self-audit (09:00 UTC; material findings stage CORRECTION drafts)
+
+Shipped beyond plan: the Editor seat (Fable 5 @ low) · scheduled-publish loophole
+(links + autonomy, no provider switch) · X List as UI-managed roster · web-corroboration
+promotion · follow-up framing (`already_covered`) · attribution lint · non-English
+intake gate · time-varying freshness · heartbeat/healthchecks · real logo + favicon.
+
+## Week 2 — watch, grade, then build
+
+**The editor week proper (no code needed):**
+- Grade the wire daily from the Desk: wrongly held? wrongly skipped? class labels right?
+  editor verdicts sound? Feedback lands as charter lines or lint rules, same as launch
+  weekend's three cycles.
+- Watch the metrics that compound: followers-per-post, profile-visit conversion,
+  time-to-post vs the aggregators on shared stories.
+
+**Build queue, in order:**
+1. **Editor casebook** — once ~a week of agree/overrule gradings exists, quote the best
+   as precedents inside the editor prompt. The closest thing to training we have.
+2. **Block number cross-check** — verify the brief's figures against wire-verified items
+   and cited sources before threading (the "60%" fix). Prerequisite for promoting
+   `briefing` to autopost.
+3. **`briefing` autopost decision** — after ~5 good Blocks + the cross-check.
+4. **Data posts class** — computed from CoinGecko/mempool (daily close, difficulty,
+   halving milestones; ETF flows once Farside is read properly). Zero-hallucination
+   cadence filler; activates the dormant `data` autopost class.
+5. **Small queued fixes**: no-verdict triage requeue · retry infra-failed verifications
+   (search-quota holds) · ⚠️ **regenerate the shared X bearer** (partial chat exposure
+   8/30) and update Node + wire envs.
+
+## Growth — once week 2 proves quality
+
+- Register **nextblock.news** (checked available 8/29) — future site/newsletter home.
+- **Nostr mirror** — near-zero cost, exactly this audience, credibility with Bitcoiners.
+- First **being-first moment** (wire beats everyone to a Fed statement or 8-K):
+  quote-post from Brady's personal account. Sparingly. Never from @Swan.
+- The **go-loud decision**: when the wire has earned it, Marketing Node integration +
+  team disclosure ends skunkworks mode (supersedes the "quiet" constraint in memory).
 
 ## Deferred deliberately
-On-this-day almanac · newsletter · PACER/international surfaces — real, not urgent;
-no new surfaces before the editor loop exists.
+
+On-this-day almanac · newsletter · PACER/international surfaces · engagement-metrics
+ingestion (X read costs) · X-API direct write path (only if Typefully's scheduled-post
+loophole ever closes).
