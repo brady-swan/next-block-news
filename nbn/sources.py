@@ -30,9 +30,12 @@ FEEDS = {
     "CNBC": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
     "Wall Street Journal": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
     "Fox Business": "https://moxie.foxbusiness.com/google-publisher/latest.xml",
+    # Regulators + newswires (added with the speed package; URLs live-tested 2026-08-30)
+    "CFTC": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml",
+    "PR Newswire Financial": "https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss",
 }
 
-PRIMARY_SOURCES = {"Federal Reserve", "SEC Press Releases"}
+PRIMARY_SOURCES = {"Federal Reserve", "SEC Press Releases", "CFTC", "SEC EDGAR"}
 
 UA = "NextBlockNews/0.1 (+news wire; contact via x.com)"
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -133,13 +136,64 @@ def fetch_perception() -> list:
     return out
 
 
-# ── Optional X recent-search poller ─────────────────────────────────────────
-# Curated queries on the bitcoin_pulse pattern; official accounts are primary-class.
+# ── SEC EDGAR full-text watch: where corporate Bitcoin news legally originates ──
+# Free, unmetered (SEC fair use). Filings mentioning "bitcoin", filed today or later.
+EDGAR_URL = "https://efts.sec.gov/LATEST/search-index"
+
+
+def fetch_edgar() -> list:
+    import datetime
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    out = []
+    try:
+        with httpx.Client(timeout=20, headers={"User-Agent": UA}) as client:
+            resp = client.get(EDGAR_URL, params={
+                "q": '"bitcoin"', "forms": "8-K",
+                "startdt": str(today - datetime.timedelta(days=1)), "enddt": str(today),
+            })
+            resp.raise_for_status()
+            hits = resp.json().get("hits", {}).get("hits", [])
+        for h in hits[:25]:
+            src = h.get("_source", {})
+            adsh, _, filename = h.get("_id", "::").partition(":")
+            cik = (src.get("ciks") or [""])[0].lstrip("0")
+            if not (adsh and filename and cik):
+                continue
+            name = (src.get("display_names") or ["Unknown filer"])[0]
+            url = (f"https://www.sec.gov/Archives/edgar/data/{cik}/"
+                   f"{adsh.replace('-', '')}/{filename}")
+            out.append({
+                "source": "SEC EDGAR",
+                "title": f"{name} filed {src.get('file_type', '8-K')} mentioning bitcoin",
+                "url": url,
+                # file_date is date-only; leave published empty so the freshness gate
+                # doesn't misread a same-day filing as stale (startdt bounds age anyway).
+                "published": "",
+                "summary": f"Form {src.get('file_type', '8-K')} filed {src.get('file_date', '')} by {name}. Items: {src.get('items', '')}",
+            })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("edgar fetch failed: %s", exc)
+    return out
+
+
+# ── X recent-search poller ───────────────────────────────────────────────────
+# from: bundles only — X's job here is account-watching, not searching.
+# Every handle verified via /2/users/by on 2026-08-30 before inclusion.
 X_QUERIES = [
-    '(from:SECGov OR from:federalreserve OR from:USTreasury) -is:retweet',
-    '(bitcoin ETF OR bitcoin custody) (filing OR approved OR acquires OR acquisition) -is:retweet lang:en',
+    # Regulators / officials (primary class)
+    '(from:SECGov OR from:federalreserve OR from:USTreasury OR from:CFTCgov'
+    ' OR from:SenLummis OR from:RepTomEmmer) -is:retweet',
+    # Company newsrooms (primary for their own announcements)
+    '(from:BitGo OR from:NYDIG OR from:coinbase OR from:Strategy OR from:galaxyhq'
+    ' OR from:BlackRock OR from:DigitalAssets OR from:BitwiseInvest OR from:Grayscale'
+    ' OR from:River OR from:Strike OR from:unchainedcom OR from:CasaHODL OR from:Swan)'
+    ' -is:retweet',
+    # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
+    # web-corroboration hunt that finds the primary.
+    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlock__ OR from:BitcoinMagazine'
+    ' OR from:BitcoinNewsCom OR from:TFTC21 OR from:BitcoinArchive) -is:retweet',
 ]
-X_PRIMARY_AUTHORS = {"SECGov", "federalreserve", "USTreasury"}
+X_DETECTOR_QUERY_INDEX = 2
 
 
 _last_x_poll = 0.0
@@ -188,8 +242,9 @@ def fetch_x(con=None) -> list:
                 for t in data.get("data", []):
                     user = users.get(t["author_id"], {})
                     uname = user.get("username", "unknown")
+                    label = "X detector" if qi == X_DETECTOR_QUERY_INDEX else "X"
                     out.append({
-                        "source": f"X @{uname}",
+                        "source": f"{label} @{uname}",
                         "title": t["text"][:200],
                         "url": f"https://x.com/{uname}/status/{t['id']}",
                         "published": t.get("created_at", ""),

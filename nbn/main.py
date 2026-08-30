@@ -14,7 +14,8 @@ STATE = {"started": time.time(), "cycles": 0, "last_cycle": None, "last_error": 
 
 
 def cycle(con) -> dict:
-    items = sources.fetch_feeds() + sources.fetch_perception() + sources.fetch_x(con)
+    items = (sources.fetch_feeds() + sources.fetch_edgar()
+             + sources.fetch_perception() + sources.fetch_x(con))
     inserted = store.upsert_new_items(con, items)
     # Keep summaries for freshly fetched items; DB-recovered items carry title only.
     summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
@@ -50,6 +51,20 @@ def cycle(con) -> dict:
                              item.get("story_key"), item.get("reason"))
             result["held" if action == "hold" else "drafted"] += 0
             continue
+
+        # Detector tips (aggregator accounts) are never our source: hunt the primary
+        # first, then draft from IT. The detector + confirming outlet = 2 distinct
+        # sources on the story_key, so a confirmed tip rides the corroborated lane.
+        if item["source"].startswith("X detector"):
+            from . import verify
+            v = verify.web_corroborate(item)
+            if not v.get("confirmed"):
+                store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                                 f"detector tip unconfirmed ({v.get('reason', '')[:120]})")
+                result["held"] += 1
+                continue
+            item["url"] = v["confirming_url"]
+            item["source"] = v.get("confirming_outlet", "confirmed source")
 
         article_text = sources.fetch_article_text(item["url"])
         try:

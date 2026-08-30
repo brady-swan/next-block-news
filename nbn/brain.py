@@ -67,6 +67,16 @@ covered recently. For EACH item decide:
   account), "secondary" (press reporting), or "data" (pure market/chain data point).
 - reason: five words max.
 
+Source-type rules:
+- Source "SEC EDGAR": a filing mentioning bitcoin. Class primary. Action draft ONLY when
+  the filing is material Bitcoin news (a treasury purchase, acquisition, ETF change,
+  Bitcoin-business event); skip incidental boilerplate mentions of bitcoin.
+- Source starting "X detector": an aggregator's post — a TIP, never a source. Never class
+  it primary. If genuinely newsworthy, action draft with class secondary (the pipeline
+  hunts the primary source before drafting); otherwise skip.
+- Source starting "X @" (officials and company accounts): primary for statements about
+  themselves and their own actions.
+
 Be strict: a wire that posts everything is noise. Typical batch yields 0-3 drafts.
 Return ONLY a JSON array: [{{"url_hash": ..., "action": ..., "story_key": ..., "class": ..., "reason": ...}}]"""
 
