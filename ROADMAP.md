@@ -63,3 +63,58 @@ intake gate · time-varying freshness · heartbeat/healthchecks · real logo + f
 On-this-day almanac · newsletter · PACER/international surfaces · engagement-metrics
 ingestion (X read costs) · X-API direct write path (only if Typefully's scheduled-post
 loophole ever closes).
+
+## Idea bank — everything stashed, from the founding plan + weekend notes
+
+*(Source of record for the founding strategy: `~/claude/bitcoin-news-handle-plan.md` —
+competitive study, charter rationale, phase plan, metrics. Nothing there is superseded
+except what shipped.)*
+
+**Content & products**
+- **Evergreen daily history slot** — the DocumentingBTC lane between news cycles;
+  requires the **verified on-this-day almanac** (365 source-verified entries; flagged in
+  tape 001, never built). The soul of the feed on quiet days.
+- **Price-milestone posts at genuine milestones** — the competitive study's top-performing
+  format (BitcoinMagazine/WatcherGuru data); belongs to the data-posts class.
+- **Real-data charts on data posts** — house dataviz standards; never model charts,
+  never image-model charts.
+- **Weekly recap Block** ("The Week Block") — Sunday synthesis once daily Blocks are
+  autonomous. *(new idea, unvetted)*
+
+**Detection & sources**
+- **Perception Watchlist keyword ALERTS** — push, not poll, and credit-free; unlimited
+  keywords on the plan. A delivery channel the worker can read would make this a free
+  intraday detection layer (flagged 8/30 when reviewing the Perception plan).
+- **Grok Bot as read-only detection scout** — the bounded experiment from the original
+  assessment: race it against bitcoin_pulse + hop-crawl on time-to-detection; no logins,
+  no posting rights; adopt only if it consistently wins (~$300/mo bundle cost).
+- **PACER / court filings** and **non-US regulators** — the named blind spots for
+  stories that break outside our surfaces.
+
+**Distribution & growth**
+- **Multi-platform mirrors via the existing rail** — Typefully natively posts to
+  Threads, Bluesky, Mastodon; the wire could mirror everywhere for near-zero marginal
+  work. Nostr separately (also near-zero, highest credibility-per-dollar).
+- **nextblock.news** — site/newsletter home (checked available 8/29; register before
+  someone reads a podcast transcript).
+- **Canonical @nextblocknews acquisition** — Brady pursuing via the X handle marketplace.
+- **Public corrections count** — the trust moat made into a visible stat (methodology
+  page / pinned thread update); the Desk already tracks it.
+- **First being-first quote-post** from Brady's personal account; never @Swan.
+
+**Metrics & governance (from the founding plan)**
+- The compounding metric: **followers-per-post** (DocumentingBTC benchmark ~136/post
+  lifetime; Cointelegraph ~15). Secondary: likes/1k followers (wire benchmark 1.0).
+- **Day-90 kill/persevere review**: if followers-per-post economics aren't visibly
+  compounding and the workload isn't automating, fold the learnings into @Swan and stop.
+- **The go-loud decision**: Marketing Node integration + team disclosure + Swan weight,
+  when the quality record earns it.
+
+**Engineering**
+- Editor casebook (precedent-quoting from Brady's gradings) — week 2 queue.
+- Block number cross-check → `briefing` autopost — week 2 queue.
+- Data-posts generator — week 2 queue.
+- No-verdict triage requeue · infra-failed verification retry · X bearer regeneration.
+- X-API direct write path — only if Typefully's scheduled-post loophole closes.
+- Engagement-metrics ingestion (own posts' impressions/likes for tuning) — deferred on
+  X read costs; revisit if a decision actually depends on it.
