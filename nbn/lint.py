@@ -94,6 +94,16 @@ def check(post: str, meta: dict, item: dict) -> list:
         if plain and plain not in source_text:
             errors.append(f"number not in source text: {num}")
 
+    # Attribution repetition: name the source once; the receipt covers the rest.
+    attributions = re.findall(r"\bper\s+((?:[A-Z@][\w.']*\s?){1,4})", post)
+    seen_attr = {}
+    for a in attributions:
+        k = a.strip().lower()
+        seen_attr[k] = seen_attr.get(k, 0) + 1
+    for k, n in seen_attr.items():
+        if n > 1:
+            errors.append(f"attribution repeated {n}x: 'per {k}' (name the source once)")
+
     if len(post) > 2800:
         errors.append(f"post too long ({len(post)} chars)")
     return errors
