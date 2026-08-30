@@ -62,6 +62,27 @@ def upsert_new_items(con, items) -> list:
     return fresh
 
 
+def current_max_age_hours() -> float:
+    """Freshness window tracks the news metabolism (Brady 2026-08-30): 2.5h during the
+    weekday active cycle (7am-7pm ET), 6h overnight and on weekends. A fixed
+    NBN_MAX_AGE_HOURS overrides the schedule entirely if set."""
+    import datetime
+    import os
+    fixed = os.environ.get("NBN_MAX_AGE_HOURS")
+    if fixed:
+        return float(fixed)
+    active = float(os.environ.get("NBN_MAX_AGE_HOURS_ACTIVE", "2.5"))
+    quiet = float(os.environ.get("NBN_MAX_AGE_HOURS_QUIET", "6"))
+    try:
+        from zoneinfo import ZoneInfo
+        now_et = datetime.datetime.now(ZoneInfo("America/New_York"))
+    except Exception:  # noqa: BLE001 - missing tzdata must not kill intake
+        return quiet
+    if now_et.weekday() < 5 and 7 <= now_et.hour < 19:
+        return active
+    return quiet
+
+
 def is_stale(published: str, max_age_hours: float = None) -> bool:
     """Deterministic freshness gate: a wire never posts old news as NEW.
 
@@ -70,7 +91,7 @@ def is_stale(published: str, max_age_hours: float = None) -> bool:
     import datetime
     import email.utils
     if max_age_hours is None:
-        max_age_hours = float(__import__("os").environ.get("NBN_MAX_AGE_HOURS", "36"))
+        max_age_hours = current_max_age_hours()
     if not published:
         return False
     dt = None
