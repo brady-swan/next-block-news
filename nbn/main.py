@@ -126,6 +126,24 @@ def cycle(con) -> dict:
             result["held"] += 1
             continue
 
+        # The Editor: last-mile judgment (feed context + craft) after all gates.
+        # Only gates autonomous publishes; drafts get Brady's eyes anyway.
+        if config.AUTOPOST_ENABLED and klass in config.AUTOPOST_CLASSES:
+            from . import editor
+            ed = editor.review(post, item, con)
+            if ed["verdict"] == "spike":
+                store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                                 f"editor spiked: {ed['reason'][:220]}")
+                log.info("editor spiked %s: %s", item["title"][:60], ed["reason"][:120])
+                result["held"] += 1
+                continue
+            if ed["verdict"] == "revise" and ed["post"] != post:
+                # Revised copy must re-pass the full lint; on failure, original stands.
+                if not lint.check(ed["post"], {**d, "_source_text": src}, item):
+                    post = ed["post"]
+                else:
+                    log.warning("editor revision failed lint; original published")
+
         mode, nuelink_id = publisher.publish(post, item["url"], klass)
         store.set_status(con, item["url_hash"], "posted" if mode == "IMMEDIATE" else "drafted",
                          item.get("story_key"))

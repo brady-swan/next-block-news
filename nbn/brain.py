@@ -24,7 +24,7 @@ def _budget_ok() -> bool:
     return len(_call_times) < config.MAX_LLM_CALLS_PER_HOUR
 
 
-def _create(model: str, system: str, user: str, max_tokens: int = 4000):
+def _create(model: str, system: str, user: str, max_tokens: int = 4000, effort: str = None):
     if not _budget_ok():
         raise RuntimeError("LLM hourly call budget exhausted")
     _call_times.append(time.time())
@@ -34,6 +34,8 @@ def _create(model: str, system: str, user: str, max_tokens: int = 4000):
         system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user}],
     )
+    if effort:
+        kwargs["output_config"] = {"effort": effort}
     # Server-side refusal fallbacks exist only on Opus 5 / Fable 5 (Sonnet 5 400s on the
     # parameter — learned in production 2026-08-30); TypeError covers pre-fallbacks SDKs.
     if model.startswith(("claude-opus-5", "claude-fable-5")):

@@ -7,6 +7,10 @@ ROOT = Path(__file__).resolve().parent.parent
 # LLM
 ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-opus-5")
 TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
+# The Editor: last-mile judgment seat — few calls/day, so the model bill is irrelevant;
+# Fable 5 at low effort is the one-env-flip upgrade if verdicts feel shallow.
+EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-opus-5")
+EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "high")
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
 # Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
