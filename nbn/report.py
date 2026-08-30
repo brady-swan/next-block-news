@@ -184,7 +184,7 @@ def _dismissed(con, kind, ref) -> bool:
 
 
 def _dismiss_link(kind, ref, day):
-    return (f"<a class=sec href='/dismiss?k=__TOK__&kind={kind}&id={ref}&d={day}' "
+    return (f"<a class=sec href='/dismiss?k={config.REPORT_TOKEN}&kind={kind}&id={ref}&d={day}' "
             f"style='color:var(--dim)'>dismiss ✓</a>")
 
 
