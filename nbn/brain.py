@@ -34,12 +34,15 @@ def _create(model: str, system: str, user: str, max_tokens: int = 4000):
         system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user}],
     )
-    try:
-        # Server-side refusal fallbacks (needs a current SDK; degrades gracefully on older ones)
-        return client.beta.messages.create(
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
-    except TypeError:
-        return client.messages.create(**kwargs)
+    # Server-side refusal fallbacks exist only on Opus 5 / Fable 5 (Sonnet 5 400s on the
+    # parameter — learned in production 2026-08-30); TypeError covers pre-fallbacks SDKs.
+    if model.startswith(("claude-opus-5", "claude-fable-5")):
+        try:
+            return client.beta.messages.create(
+                betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
+        except TypeError:
+            pass
+    return client.messages.create(**kwargs)
 
 
 def _json_from(response) -> dict:
