@@ -32,7 +32,7 @@ def cycle(con) -> dict:
     if not fresh:
         return result
 
-    verdicts = brain.triage(fresh, store.recent_story_keys(con))
+    verdicts = brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
     handles = lint.verified_handles()
 
     # Persist every story_key first so corroboration sees all of this cycle's items.

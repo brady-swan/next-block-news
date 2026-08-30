@@ -65,7 +65,10 @@ covered recently. For EACH item decide:
   opinion, altcoin-primary, duplicate of a recent story key), or "hold" (in scope but
   single-source rumor / unverifiable — worth watching, not drafting).
 - story_key: a short kebab-case key identifying the underlying STORY (two outlets covering
-  the same event must get the same key; reuse a recent key if it is the same story).
+  the same event must get the same key). You receive two key lists: an item matching a
+  "posted_story_keys" entry is already covered — action skip, reuse that key. An item
+  matching an "open_story_keys" entry is NOT yet covered — do NOT skip for that reason;
+  REUSE that exact key (a second outlet on an open story is what confirms it).
 - class: "primary" (item IS an official source: Fed/SEC/Treasury release, filing, official
   account), "secondary" (press reporting), or "data" (pure market/chain data point).
 - reason: five words max.
@@ -84,9 +87,10 @@ Be strict: a wire that posts everything is noise. Typical batch yields 0-3 draft
 Return ONLY a JSON array: [{{"url_hash": ..., "action": ..., "story_key": ..., "class": ..., "reason": ...}}]"""
 
 
-def triage(items: list, recent_keys: list) -> list:
+def triage(items: list, recent_keys: list, open_keys: list = None) -> list:
     payload = {
-        "recent_story_keys": recent_keys,
+        "posted_story_keys": recent_keys,
+        "open_story_keys": open_keys or [],
         "items": [
             {"url_hash": i["url_hash"], "source": i["source"], "title": i["title"],
              "summary": i.get("summary", ""), "published": i.get("published", "")}

@@ -98,11 +98,24 @@ def pending_items(con, limit: int) -> list:
 
 
 def recent_story_keys(con, days: float = 3.0) -> list:
+    """Story keys already POSTED (triage skips duplicates of these)."""
     rows = con.execute(
         "SELECT DISTINCT story_key FROM posts WHERE created > ? ORDER BY created DESC LIMIT 100",
         (time.time() - days * 86400,),
     ).fetchall()
     return [r["story_key"] for r in rows if r["story_key"]]
+
+
+def open_story_keys(con, days: float = 2.0) -> list:
+    """Keys of stories seen but NOT posted (held/drafted/tracked). Triage must REUSE
+    these for new items about the same event — key identity is what makes a second
+    outlet's arrival trip the corroboration promotion."""
+    rows = con.execute(
+        "SELECT DISTINCT story_key FROM items WHERE story_key IS NOT NULL"
+        " AND first_seen > ? LIMIT 150", (time.time() - days * 86400,),
+    ).fetchall()
+    posted = set(recent_story_keys(con, days))
+    return [r["story_key"] for r in rows if r["story_key"] and r["story_key"] not in posted]
 
 
 def wire_items_since(con, since_ts: float) -> list:
