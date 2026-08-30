@@ -53,6 +53,10 @@ def publish_thread(texts: list, immediate: bool) -> tuple:
         if immediate:
             _confirm(draft_id)
         return True, draft_id
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text[:300]
+        log.error("typefully publish failed: %s | body: %s", exc, body)
+        return False, f"{exc.response.status_code}: {body}"[:200]
     except Exception as exc:  # noqa: BLE001
         log.error("typefully publish failed: %s", exc)
         return False, str(exc)[:200]
