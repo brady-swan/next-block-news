@@ -178,11 +178,12 @@ def fetch_edgar() -> list:
 
 # ── X recent-search poller ───────────────────────────────────────────────────
 # from: bundles only — X's job here is account-watching, not searching.
-# Every handle verified via /2/users/by on 2026-08-30 before inclusion.
-X_QUERIES = [
-    # Regulators / officials (primary class)
-    '(from:SECGov OR from:federalreserve OR from:USTreasury OR from:CFTC'
-    ' OR from:SenLummis OR from:RepTomEmmer) -is:retweet',
+# The PRIMARY roster comes from the public X List (membership fetched hourly, compiled
+# into search queries); the bundles below stay hardcoded because they are deliberately
+# NOT on the wire's public list (companies = association optics, detectors = tips only).
+X_STATIC_QUERIES = [
+    # Watched officials not on the public list
+    '(from:SenLummis OR from:RepTomEmmer) -is:retweet',
     # Company newsrooms (primary for their own announcements)
     '(from:BitGo OR from:NYDIG OR from:coinbase OR from:Strategy OR from:galaxyhq'
     ' OR from:BlackRock OR from:DigitalAssets OR from:BitwiseInvest OR from:Grayscale'
@@ -193,7 +194,40 @@ X_QUERIES = [
     '(from:WatcherGuru OR from:CoinDesk OR from:TheBlock__ OR from:BitcoinMagazine'
     ' OR from:BitcoinNewsCom OR from:TFTC21 OR from:BitcoinArchive) -is:retweet',
 ]
-X_DETECTOR_QUERY_INDEX = 2
+X_DETECTOR_QUERY_MARKER = "WatcherGuru"
+
+_list_cache = {"members": [], "fetched": 0.0}
+
+
+def _list_member_queries(client) -> list:
+    """Compile the X List's membership into from: search queries (chunked under 512 chars)."""
+    import time as _time
+    if not config.X_LIST_ID:
+        return []
+    if _time.time() - _list_cache["fetched"] > config.X_LIST_REFRESH_SECONDS:
+        try:
+            resp = client.get(
+                f"https://api.twitter.com/2/lists/{config.X_LIST_ID}/members",
+                params={"max_results": 100},
+            )
+            resp.raise_for_status()
+            members = [u["username"] for u in resp.json().get("data", [])]
+            if members:
+                _list_cache["members"] = members
+                _list_cache["fetched"] = _time.time()
+                log.info("x list roster refreshed: %d members", len(members))
+        except Exception as exc:  # noqa: BLE001 - stale roster beats no roster
+            log.warning("x list members fetch failed: %s", exc)
+            _list_cache["fetched"] = _time.time()  # don't hammer on failure
+    queries, chunk = [], []
+    for m in _list_cache["members"]:
+        chunk.append(f"from:{m}")
+        if len("(" + " OR ".join(chunk) + ") -is:retweet") > 460:
+            queries.append("(" + " OR ".join(chunk[:-1]) + ") -is:retweet")
+            chunk = chunk[-1:]
+    if chunk:
+        queries.append("(" + " OR ".join(chunk) + ") -is:retweet")
+    return queries
 
 
 _last_x_poll = 0.0
@@ -214,14 +248,18 @@ def fetch_x(con=None) -> list:
     out = []
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
-        for qi, q in enumerate(X_QUERIES):
+        queries = _list_member_queries(client) + X_STATIC_QUERIES
+        for qi, q in enumerate(queries):
             try:
                 params = {
                     "query": q, "max_results": 25,
                     "tweet.fields": "created_at,public_metrics,author_id",
                     "expansions": "author_id", "user.fields": "username,verified",
                 }
-                since_id = store.kv_get(con, f"x_since_id_{qi}") if con is not None else ""
+                # Key since_id by query CONTENT hash, not position — list edits reorder queries.
+                import hashlib as _hl
+                qkey = _hl.sha256(q.encode()).hexdigest()[:12]
+                since_id = store.kv_get(con, f"x_since_{qkey}") if con is not None else ""
                 if since_id:
                     params["since_id"] = since_id
                 else:
@@ -237,12 +275,12 @@ def fetch_x(con=None) -> list:
                 data = resp.json()
                 newest = data.get("meta", {}).get("newest_id")
                 if newest and con is not None:
-                    store.kv_set(con, f"x_since_id_{qi}", newest)
+                    store.kv_set(con, f"x_since_{qkey}", newest)
                 users = {u["id"]: u for u in data.get("includes", {}).get("users", [])}
                 for t in data.get("data", []):
                     user = users.get(t["author_id"], {})
                     uname = user.get("username", "unknown")
-                    label = "X detector" if qi == X_DETECTOR_QUERY_INDEX else "X"
+                    label = "X detector" if X_DETECTOR_QUERY_MARKER in q else "X"
                     out.append({
                         "source": f"{label} @{uname}",
                         "title": t["text"][:200],

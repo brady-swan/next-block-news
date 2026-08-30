@@ -49,6 +49,11 @@ PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "600
 # recent-search rate limits are per app, Node's 2x/day pulse + our throttled poll fit easily.
 X_BEARER_TOKEN = os.environ.get("NBN_X_BEARER_TOKEN", "")
 X_POLL_SECONDS = int(os.environ.get("NBN_X_POLL_SECONDS", "180"))
+# Public X List whose MEMBERS define the primary watch roster (managed in the X app).
+# Membership is fetched hourly and compiled into a since_id-gated search query —
+# never the list timeline itself (that endpoint lacks since_id and re-bills reads).
+X_LIST_ID = os.environ.get("NBN_X_LIST_ID", "")
+X_LIST_REFRESH_SECONDS = int(os.environ.get("NBN_X_LIST_REFRESH_SECONDS", "3600"))
 
 # Classes allowed to auto-publish when AUTOPOST_ENABLED (secondary never auto-publishes;
 # env-tunable so the rollout can start with official sources only)
