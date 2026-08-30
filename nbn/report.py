@@ -1,10 +1,10 @@
-"""The Desk Report v2: what needs the editor's eyes, then the record — day by day.
+"""The Desk Report v3 — "Filed, action-first" (Claude Design turn 2, option 2a).
 
-Layout answers "what must I see and do?" in priority order:
-  status strip -> Needs You -> Published -> The machine's judgment (grouped holds)
-  -> Self-audit -> Skips (collapsed). A 7-day activity strip + prev/next navigation
-make history browsable; all times are America/Chicago (the desk's clock).
-Server-rendered, no JS beyond native <details>; token-gated at /report?k=...
+Ported from Desk Report Refresh.dc.html: IBM Plex Sans/Mono, panel-and-hairline,
+verb-led needs-you cards with full-width tap targets, 7-day strip with jump-link
+counts, lede-only published cards (the charter's standalone atom makes the summary
+lossless), grouped holds and audit in hairline stacks. All times America/Chicago.
+Server-rendered, native <details> only, token-gated at /report?k=...
 """
 import datetime
 import html
@@ -15,50 +15,142 @@ from zoneinfo import ZoneInfo
 from . import config, store
 
 TZ = ZoneInfo("America/Chicago")
+PROFILE_URL = "https://x.com/nextblocknews_"
+TYPEFULLY_URL = "https://typefully.com"
+HEX_LINE = "00000000 01000000 00000000 00000000 00000000 3ba3ed"
+LOGO_SVG = ('<svg width="18" height="20" viewBox="0 0 18 20" aria-hidden="true">'
+            '<path d="M9 0.6 17.2 5.3v9.4L9 19.4.8 14.7V5.3z" fill="#fff"></path></svg>')
 
 CSS = """
-:root{--bg:#0b0e14;--card:#131822;--line:#1e2633;--txt:#d8dee9;--dim:#6b7686;
-      --sub:#8fa1b3;--green:#3fb950;--amber:#d29922;--red:#f85149;--blue:#58a6ff;
-      --orange:#f0883e}
+:root{
+  --bg:#07090b; --panel:#0e1218; --panel2:#141a22;
+  --line:#1c232d; --line2:#2a333f;
+  --txt:#dfe5ec; --sub:#93a2b3; --dim:#5c6875;
+  --green:#3fb950; --amber:#d2a02b; --red:#f85149; --orange:#f7931a; --link:#58a6ff;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,system-ui,sans-serif;
-     margin:0;padding:0 14px 60px;max-width:780px;margin:auto}
-.strip{position:sticky;top:0;background:linear-gradient(var(--bg) 85%,transparent);
-       padding:12px 0 8px;z-index:5}
-h1{font-size:17px;margin:0 0 4px}
-.meta{color:var(--dim);font-size:12.5px}
-.pills{margin-top:6px}
-.pill{display:inline-block;background:var(--line);border-radius:99px;padding:2px 10px;
-      font-size:12px;margin:0 6px 4px 0;color:var(--sub)}
-.pill.ok{color:var(--green)} .pill.warn{color:var(--amber)} .pill.err{color:var(--red)}
-.days{display:flex;gap:6px;margin:12px 0 4px;overflow-x:auto;padding-bottom:4px}
-.day{flex:0 0 auto;text-align:center;background:var(--card);border:1px solid var(--line);
-     border-radius:10px;padding:6px 10px;text-decoration:none;color:var(--sub);
-     font-size:12px;min-width:64px}
-.day b{display:block;color:var(--txt);font-size:15px}
-.day.sel{border-color:var(--blue);color:var(--blue)}
-.day.sel b{color:var(--blue)}
-h2{font-size:13.5px;margin:26px 0 10px;color:var(--sub);text-transform:uppercase;
-   letter-spacing:.07em;display:flex;align-items:center;gap:8px}
-h2 .n{background:var(--line);border-radius:99px;padding:0 8px;font-size:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-      padding:12px 14px;margin:10px 0;white-space:pre-wrap;overflow-wrap:anywhere}
-.card small{color:var(--dim);display:block;margin-bottom:7px;white-space:normal}
-.published{border-left:3px solid var(--green)} .draft{border-left:3px solid var(--amber)}
-.held{border-left:3px solid var(--red)} .tape{border-left:3px solid var(--dim)}
-.spike{border-left:3px solid var(--orange)}
-.need{border:1px solid #3a2d12;background:#1a1508}
-a{color:var(--blue);text-decoration:none}
-.reason{color:var(--orange)}
-.ednote{color:var(--sub);font-size:13px;border-top:1px solid var(--line);
-        margin-top:8px;padding-top:7px;white-space:normal}
-details{margin:8px 0} summary{cursor:pointer;color:var(--sub);font-size:14px;
-        padding:6px 0} summary::marker{color:var(--dim)}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td{padding:3px 8px 3px 0;color:var(--sub);vertical-align:top}
+body{margin:0 auto;max-width:780px;background:var(--bg);color:var(--txt);
+     font:400 15px/1.5 var(--sans);padding:0 16px 44px}
+a{color:var(--link);text-decoration:none} a:hover{color:var(--orange)}
+summary{cursor:pointer;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'+';float:right;font-family:var(--mono);color:var(--dim)}
+details[open]>summary::after{content:'\\2013'}
+.strip{position:sticky;top:0;z-index:5;padding:14px 0 12px;
+       background:linear-gradient(180deg,var(--bg) 0,var(--bg) 78%,rgba(7,9,11,0) 100%)}
+.ident{display:flex;align-items:center;gap:9px}
+.ident .name{font:600 14px/1.1 var(--sans);letter-spacing:.01em;flex:1}
+.ident .name span{color:var(--dim);font-weight:400}
+.dot{width:7px;height:7px;border-radius:99px;background:var(--green);
+     box-shadow:0 0 0 3px rgba(63,185,80,.16)}
+.hex{font:400 11px/1.4 var(--mono);color:var(--dim);letter-spacing:.02em;margin:7px 0 0;
+     overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.pill{font:500 11px/1 var(--mono);letter-spacing:.04em;text-transform:uppercase;
+      color:var(--sub);background:var(--panel2);border:1px solid var(--line);
+      border-radius:4px;padding:5px 8px;white-space:nowrap}
+.pill.on{color:var(--green);background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.28)}
+.pill.off{color:var(--red);background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.28)}
+.clock{font:400 12px/1.4 var(--sans);color:var(--sub);margin-top:9px}
+h2{display:flex;align-items:center;gap:8px;font:600 11px/1 var(--mono);
+   letter-spacing:.12em;text-transform:uppercase;color:var(--sub);margin:26px 0 10px}
+h2 .fill{flex:1}
+h2.needs{color:var(--orange)}
+.count{font:600 11px/1 var(--mono);border-radius:3px;padding:3px 6px}
+.count.o{color:var(--bg);background:var(--orange)}
+.count.g{color:var(--green);background:rgba(63,185,80,.12)}
+.count.r{color:var(--red);background:rgba(248,81,73,.12)}
+.emptybox{border:1px dashed var(--line2);border-radius:10px;padding:26px 18px;text-align:center}
+.emptybox b{font:500 15px/1.4 var(--sans);color:var(--txt);display:block}
+.emptybox span{font:400 13.5px/1.5 var(--sans);color:var(--dim);margin-top:3px;display:block}
+.stack{display:flex;flex-direction:column;gap:12px}
+.need{background:var(--panel);border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.verb{display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--line);padding:9px 13px}
+.verb b{font:600 12.5px/1 var(--mono);letter-spacing:.03em;flex:1}
+.verb span{font:400 11.5px/1 var(--mono);color:var(--sub)}
+.verb.amber{background:rgba(210,160,43,.1)} .verb.amber b{color:var(--amber)}
+.verb.red{background:rgba(248,81,73,.1)} .verb.red b{color:var(--red)}
+.verb.orange{background:rgba(247,147,26,.1)} .verb.orange b{color:var(--orange)}
+.need .body{padding:11px 13px}
+.need .body p{margin:0;font:400 14.5px/1.5 var(--sans);white-space:pre-wrap;overflow-wrap:anywhere}
+.need .ednote{margin:9px 0 0;font:400 13.5px/1.5 var(--sans);color:var(--orange)}
+.acts{display:flex;border-top:1px solid var(--line)}
+.acts a{flex:1;text-align:center;min-height:32px;display:flex;align-items:center;
+        justify-content:center;font:600 12.5px/1 var(--mono);letter-spacing:.04em;
+        background:rgba(247,147,26,.1);border-right:1px solid var(--line);color:var(--orange)}
+.acts a.sec{flex:none;min-width:116px;font-weight:500;background:none;border-right:none;
+            color:var(--sub)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{text-decoration:none;background:var(--panel);border:1px solid var(--line);
+     border-radius:8px;padding:7px 0 6px;text-align:center}
+.day div{font:400 10px/1.3 var(--mono)}
+.day .lbl{font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.day .pub{font:600 15px/1.2 var(--mono);color:var(--green);margin-top:4px}
+.day .h{color:var(--red)} .day .s{color:var(--dim)}
+.day.today{background:rgba(247,147,26,.08);border-color:var(--orange)}
+.day.today .lbl{color:var(--orange);font-weight:600}
+.day.today .pub{color:var(--txt)}
+.day.sel{border-color:var(--link)} .day.sel .lbl{color:var(--link)}
+.day.stall .lbl{color:var(--red)}
+.dnav{display:flex;align-items:center;justify-content:space-between;margin-top:8px;
+      font:500 12px/1 var(--mono)}
+.dnav .mid{color:var(--sub);letter-spacing:.04em}
+.dnav .off{color:var(--line2)}
+.jumps{display:flex;flex-wrap:wrap;gap:12px;margin-top:9px;font:500 12px/1 var(--mono)}
+.rec{background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--green);
+     border-radius:0 10px 10px 0}
+.rec summary{padding:11px 13px}
+.gut{display:flex;gap:8px;align-items:baseline;font:400 11.5px/1 var(--mono);
+     color:var(--dim);margin-bottom:7px}
+.gut .cls{color:var(--green);font-weight:500;text-transform:uppercase}
+.gut .t{color:var(--sub)}
+.gut .key{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lede{font:400 14.5px/1.45 var(--sans);color:var(--txt);padding-right:14px;
+      white-space:pre-wrap;overflow-wrap:anywhere}
+.rest{padding:0 13px 12px}
+.rest p{margin:0;font:400 14.5px/1.5 var(--sans);color:var(--sub);white-space:pre-wrap;
+        overflow-wrap:anywhere}
+.edblock{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.edblock .lab{font:500 10.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;
+              color:var(--dim);margin-bottom:5px}
+.edblock .lab.rev{color:var(--amber)}
+.edblock p{margin:0;font:400 13.5px/1.5 var(--sans);color:var(--sub)}
+.links{display:flex;gap:16px;margin-top:10px;font:500 12.5px/1 var(--mono)}
+.hstack{display:flex;flex-direction:column;gap:1px;background:var(--line);
+        border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.hstack details{background:var(--panel)}
+.hstack summary{padding:11px 13px;font:500 13px/1.3 var(--sans);color:var(--txt)}
+.hstack summary .n{font:400 12px var(--mono);color:var(--dim)}
+.hentry{border-left:2px solid var(--red);padding-left:10px;margin:0 13px 9px}
+.hentry .m{font:400 11.5px/1 var(--mono);color:var(--dim);margin-bottom:5px}
+.hentry .ttl{font:400 14px/1.45 var(--sans)}
+.hentry .why{font:400 12.5px/1.4 var(--mono);color:var(--red);margin-top:4px;
+             overflow-wrap:anywhere}
+.chip{font:500 10.5px var(--mono);letter-spacing:.08em;border-radius:3px;padding:2px 5px;
+      margin-right:7px;border:1px solid}
+.chip.material{color:var(--red);border-color:rgba(248,81,73,.4)}
+.chip.minor{color:var(--amber);border-color:rgba(210,160,43,.4)}
+.chip.clean{color:var(--green);border-color:rgba(63,185,80,.4)}
+.chip.unverifiable{color:var(--dim);border-color:var(--line2)}
+.audrow summary{font:400 13.5px/1.4 var(--sans);color:var(--txt)}
+.audrow .find{padding:0 13px 12px;font:400 13.5px/1.5 var(--sans);color:var(--sub)}
+.skipbox{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.skipbox summary{padding:11px 13px;font:600 11px/1 var(--mono);letter-spacing:.12em;
+                 text-transform:uppercase;color:var(--sub)}
+.skipbox td{padding:3px 13px 3px 0;font:400 12.5px/1.5 var(--mono);color:var(--sub);
+            vertical-align:top}
+.skipbox td.n{padding:3px 13px;width:34px;color:var(--txt);text-align:right}
+.metaline{font:400 12px/1.4 var(--mono);color:var(--dim);margin-bottom:9px}
+.suspect{font:400 11.5px var(--mono);color:var(--red)}
 .empty{color:var(--dim);font-size:14px}
-.nav{display:flex;justify-content:space-between;font-size:14px;margin:6px 0 0}
 """
+
+FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
+         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600'
+         '&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">')
 
 
 def _esc(s) -> str:
@@ -69,19 +161,22 @@ def _ct(ts: float) -> str:
     return datetime.datetime.fromtimestamp(ts, TZ).strftime("%-I:%M %p")
 
 
-def _post_card(p, klass_css):
-    receipt = (f" · <a href='{_esc(p['receipt_url'])}'>receipt</a>"
-               if (p["receipt_url"] or "").startswith("http") else "")
-    ed = ""
-    try:
-        if p["editor_note"]:
-            ed = f"<div class=ednote>editor: {_esc(p['editor_note'])}</div>"
-    except (KeyError, IndexError):
-        pass
-    return (f"<div class='card {klass_css}'><small>"
-            f"<span class=pill>{_esc(p['class'])}</span>{_ct(p['created'])}"
-            f" · {_esc(p['story_key'] or '')}{receipt}</small>"
-            f"{_esc(p['body'])}{ed}</div>")
+def _u(day=None):
+    base = f"?k={config.REPORT_TOKEN}"
+    return base + (f"&d={day}" if day else "")
+
+
+def _split_lede(body: str):
+    parts = (body or "").split("\n", 1)
+    rest = parts[1].strip() if len(parts) > 1 else ""
+    return parts[0], rest
+
+
+def _ed_parts(note):
+    if not note:
+        return None, None
+    verdict, _, reason = note.partition(":")
+    return verdict.strip(), reason.strip()
 
 
 def render(con, day: str = None) -> str:
@@ -101,132 +196,216 @@ def render(con, day: str = None) -> str:
     skipped = con.execute("SELECT note, COUNT(*) n FROM items WHERE status='skipped' AND "
                           "first_seen>=? AND first_seen<? GROUP BY note ORDER BY n DESC "
                           "LIMIT 14", (s, e)).fetchall()
+    summary = store.day_summary(con, day)
+    audit_raw = store.kv_get(con, "audit:last")
+    audit = json.loads(audit_raw) if audit_raw else None
 
-    out = [f"<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
-           f"<title>NBN Desk</title><style>{CSS}</style>"]
+    out = ["<!doctype html><meta charset=utf-8>"
+           "<meta name=viewport content='width=device-width,initial-scale=1'>"
+           f"<title>NBN Desk</title>{FONTS}<style>{CSS}</style>"]
 
     # ── Status strip ─────────────────────────────────────────────────────────
-    fresh_h = store.current_max_age_hours()
-    auto = ("<span class='pill ok'>autopost ON · " + ", ".join(sorted(config.AUTOPOST_CLASSES))
-            + "</span>") if config.AUTOPOST_ENABLED else "<span class='pill err'>autopost OFF</span>"
-    out.append(f"<div class=strip><h1>Next Block News — Desk</h1>"
-               f"<div class=meta>{now:%A %B %-d · %-I:%M %p} Central</div>"
-               f"<div class=pills>{auto}"
-               f"<span class=pill>freshness {fresh_h:g}h</span>"
-               f"<span class=pill>editor: {_esc(config.EDITOR_MODEL.replace('claude-',''))}"
-               f" @ {_esc(config.EDITOR_EFFORT)}</span></div></div>")
-
-    # ── 7-day strip + day nav ────────────────────────────────────────────────
-    out.append("<div class=days>")
-    for i in range(6, -1, -1):
-        d = (now - datetime.timedelta(days=i)).strftime("%Y-%m-%d")
-        sm = store.day_summary(con, d)
-        label = "today" if d == today else (now - datetime.timedelta(days=i)).strftime("%a")
-        sel = " sel" if d == day else ""
-        out.append(f"<a class='day{sel}' href='?k={_esc(config.REPORT_TOKEN)}&d={d}'>"
-                   f"{label}<b>{sm['published']}</b><span>{sm['seen']} seen</span></a>")
-    out.append("</div>")
-    prev_d = (datetime.date.fromisoformat(day) - datetime.timedelta(days=1)).isoformat()
-    next_d = (datetime.date.fromisoformat(day) + datetime.timedelta(days=1)).isoformat()
-    nav_next = ("" if is_today else
-                f"<a href='?k={_esc(config.REPORT_TOKEN)}&d={next_d}'>{next_d} ›</a>")
-    out.append(f"<div class=nav><a href='?k={_esc(config.REPORT_TOKEN)}&d={prev_d}'>"
-               f"‹ {prev_d}</a><b>{day}</b>{nav_next}</div>")
+    auto = (f"<span class='pill on'>autopost on · "
+            f"{', '.join(sorted(config.AUTOPOST_CLASSES))}</span>"
+            if config.AUTOPOST_ENABLED else "<span class='pill off'>autopost off</span>")
+    out.append(
+        f"<div class=strip><div class=ident>{LOGO_SVG}"
+        f"<div class=name>Next Block News <span>· Desk</span></div>"
+        f"<span class=dot></span></div>"
+        f"<div class=hex>{HEX_LINE}</div>"
+        f"<div class=pills>{auto}"
+        f"<span class=pill>fresh {store.current_max_age_hours():g}h</span>"
+        f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
+        f" @ high</span>"
+        f"<span class=pill>editor: {_esc(config.EDITOR_MODEL.replace('claude-', ''))}"
+        f" @ {_esc(config.EDITOR_EFFORT)}</span></div>"
+        f"<div class=clock>{now:%A %B %-d · %-I:%M %p} Central</div></div>")
 
     # ── Needs you ────────────────────────────────────────────────────────────
     needs = []
     for p in posts:
+        lede, rest = _split_lede(p["body"])
+        body_html = _esc(p["body"])
         if p["mode"] == "DRAFT":
-            needs.append(("Staged draft awaiting your tap in Typefully", _post_card(p, "draft need")))
-        if p["mode"] == "TAPE":
-            needs.append(("Publish rail failed — post only reached the tape", _post_card(p, "tape need")))
+            needs.append(_need_card("amber", "TAP TO PUBLISH",
+                                    f"{_ct(p['created'])} · {_esc(p['class'])}",
+                                    f"<p>{body_html}</p>",
+                                    [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
+                                     ("receipt ↗", p["receipt_url"], True)]))
+        elif p["mode"] == "TAPE":
+            needs.append(_need_card("red", "POST FAILED",
+                                    f"{_ct(p['created'])} · {_esc(p['class'])}",
+                                    f"<p>{body_html}</p>",
+                                    [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
+                                     ("receipt ↗", p["receipt_url"], True)]))
     for h in held:
         note = h["note"] or ""
         if note.startswith("editor spiked"):
-            needs.append(("Editor spike — agree or overrule",
-                          f"<div class='card spike need'><small><span class=pill>"
-                          f"{_esc(h['source'])}</span>{_ct(h['first_seen'])} · "
-                          f"<a href='{_esc(h['url'])}'>source</a></small>{_esc(h['title'])}\n"
-                          f"<span class=reason>{_esc(note)}</span></div>"))
-    audit_raw = store.kv_get(con, "audit:last")
-    if audit_raw and is_today:
-        a = json.loads(audit_raw)
-        for r in a.get("results", []):
+            reason = note.replace("editor spiked:", "").strip()
+            needs.append(_need_card("orange", "AGREE OR OVERRULE",
+                                    f"{_ct(h['first_seen'])} · {_esc(h['source'])}",
+                                    f"<p>{_esc(h['title'])}</p>"
+                                    f"<p class=ednote>Editor: {_esc(reason)}</p>",
+                                    [("source ↗", h["url"], True)]))
+    if audit and is_today:
+        for r in audit.get("results", []):
             if r.get("verdict") == "material" or not r.get("class_ok", True):
-                needs.append(("Self-audit flag",
-                              f"<div class='card held need'><small>{_esc(r.get('verdict'))}"
-                              f" · class_ok={r.get('class_ok')}</small>{_esc(r.get('title'))}\n"
-                              f"<span class=reason>{_esc('; '.join(r.get('findings', [])))}"
-                              f"</span></div>"))
-    out.append(f"<h2>Needs you <span class=n>{len(needs)}</span></h2>")
+                needs.append(_need_card(
+                    "red", "AUDIT FLAG",
+                    _esc(r.get("verdict", "")) + (" · class suspect"
+                                                  if not r.get("class_ok", True) else ""),
+                    f"<p>{_esc(r.get('title'))}</p>"
+                    f"<p class=ednote>{_esc('; '.join(r.get('findings', [])))}</p>", []))
+
+    out.append(f"<h2 class=needs><span class=fill>Needs you</span>"
+               f"<span class='count o'>{len(needs)}</span></h2>")
     if needs:
-        for label, card in needs:
-            out.append(f"<div class=meta>{_esc(label)}</div>{card}")
+        out.append(f"<div class=stack>{''.join(needs)}</div>")
     else:
-        out.append("<div class=empty>Nothing. The wire is running itself — "
-                   "you can close the tab.</div>")
+        out.append("<div class=emptybox><b>Nothing.</b>"
+                   "<span>The wire is running itself.</span></div>")
 
-    # ── Published ────────────────────────────────────────────────────────────
+    # ── Seven days + nav + jump links ────────────────────────────────────────
+    out.append("<h2><span class=fill>Seven days</span></h2><div class=days>")
+    for i in range(6, -1, -1):
+        d_dt = now - datetime.timedelta(days=i)
+        d = d_dt.strftime("%Y-%m-%d")
+        sm = store.day_summary(con, d)
+        classes = ["day"]
+        if d == today:
+            classes.append("today")
+        elif d == day:
+            classes.append("sel")
+        if d != today and d_dt.weekday() < 5 and sm["seen"] == 0:
+            classes.append("stall")
+        label = "Today" if d == today else d_dt.strftime("%a")
+        out.append(f"<a class='{' '.join(classes)}' href='{_u(d)}'>"
+                   f"<div class=lbl>{label}</div><div class=pub>{sm['published']}</div>"
+                   f"<div class=h>{sm['held']}</div><div class=s>{sm['seen']}</div></a>")
+    out.append("</div>")
+    prev_d = (datetime.date.fromisoformat(day) - datetime.timedelta(days=1)).isoformat()
+    next_d = (datetime.date.fromisoformat(day) + datetime.timedelta(days=1)).isoformat()
+    nxt = (f"<span class=off>{next_d} ›</span>" if is_today
+           else f"<a href='{_u(next_d)}'>{next_d} ›</a>")
+    out.append(f"<div class=dnav><a href='{_u(prev_d)}'>‹ {prev_d}</a>"
+               f"<span class=mid>{day}</span>{nxt}</div>")
+    n_skip = sum(r["n"] for r in skipped)
+    out.append(f"<div class=jumps>"
+               f"<a href='#published' style='color:var(--green)'>{summary['published']} published</a>"
+               f"<a href='#held' style='color:var(--red)'>{summary['held']} held</a>"
+               f"<a href='#skipped' style='color:var(--sub)'>{n_skip} skipped</a>"
+               f"<span style='color:var(--dim)'>= {summary['seen']} seen</span></div>")
+
+    # ── Published (lede-only + expand) ───────────────────────────────────────
     pub = [p for p in posts if p["mode"] == "IMMEDIATE"]
-    out.append(f"<h2>Published <span class=n>{len(pub)}</span></h2>")
-    out.extend(_post_card(p, "published") for p in pub) if pub else out.append(
-        "<div class=empty>none this day</div>")
+    out.append(f"<h2 id=published><span class=fill>Published</span>"
+               f"<span class='count g'>{len(pub)}</span></h2>")
+    if pub:
+        out.append("<div class=stack style='gap:10px'>")
+        for idx, p in enumerate(pub):
+            lede, rest = _split_lede(p["body"])
+            verdict, reason = _ed_parts(p["editor_note"] if "editor_note" in p.keys() else None)
+            ed_html = ""
+            if verdict:
+                lab_cls = " rev" if verdict == "revise" else ""
+                ed_html = (f"<div class=edblock><div class='lab{lab_cls}'>Editor · "
+                           f"{_esc(verdict)}</div><p>{_esc(reason)}</p></div>")
+            receipt = (f"<a href='{_esc(p['receipt_url'])}'>receipt ↗</a>"
+                       if (p["receipt_url"] or "").startswith("http") else "")
+            out.append(
+                f"<details class=rec{' open' if idx == 0 else ''}>"
+                f"<summary><div class=gut><span class=cls>{_esc(p['class'])}</span>"
+                f"<span class=t>{_ct(p['created'])}</span>"
+                f"<span class=key>{_esc(p['story_key'] or '')}</span></div>"
+                f"<div class=lede>{_esc(lede)}</div></summary>"
+                f"<div class=rest>{f'<p>{_esc(rest)}</p>' if rest else ''}{ed_html}"
+                f"<div class=links>{receipt}"
+                f"<a href='{PROFILE_URL}' style='color:var(--sub)'>on X ↗</a></div>"
+                f"</div></details>")
+        out.append("</div>")
+    else:
+        out.append("<div class=empty>none this day</div>")
 
-    # ── The machine's judgment: holds grouped by reason family ──────────────
-    groups = {"Waiting on a second source": [], "Editor spiked": [],
-              "Style gate (lint)": [], "Thin source / unverifiable": [], "Other": []}
+    # ── Held, grouped ────────────────────────────────────────────────────────
+    groups = [("Waiting on a second source",
+               lambda n: "second source" in n or "unconfirmed" in n),
+              ("Editor spiked", lambda n: n.startswith("editor spiked")),
+              ("Style gate (lint)", lambda n: n.startswith("lint")),
+              ("Thin source / unverifiable",
+               lambda n: "thin source" in n or "unverifiable" in n)]
+    grouped, other = {g: [] for g, _ in groups}, []
     for h in held:
         note = h["note"] or ""
-        if "second source" in note or "unconfirmed" in note:
-            groups["Waiting on a second source"].append(h)
-        elif note.startswith("editor spiked"):
-            groups["Editor spiked"].append(h)
-        elif note.startswith("lint"):
-            groups["Style gate (lint)"].append(h)
-        elif "thin source" in note or "unverifiable" in note:
-            groups["Thin source / unverifiable"].append(h)
+        for gname, test in groups:
+            if test(note):
+                grouped[gname].append(h)
+                break
         else:
-            groups["Other"].append(h)
-    out.append(f"<h2>Held <span class=n>{len(held)}</span></h2>")
-    for gname, rows in groups.items():
-        if not rows:
-            continue
-        out.append(f"<details><summary>{_esc(gname)} ({len(rows)})</summary>")
-        for h in rows:
-            out.append(f"<div class='card held'><small><span class=pill>{_esc(h['source'])}"
-                       f"</span>{_ct(h['first_seen'])} · <a href='{_esc(h['url'])}'>source</a>"
-                       f"</small>{_esc(h['title'])}\n<span class=reason>"
-                       f"{_esc(h['note'] or '')}</span></div>")
-        out.append("</details>")
-    if not held:
+            other.append(h)
+    if other:
+        grouped["Other"] = other
+    out.append(f"<h2 id=held><span class=fill>Held</span>"
+               f"<span class='count r'>{len(held)}</span></h2>")
+    if held:
+        out.append("<div class=hstack>")
+        first = True
+        for gname, rows in grouped.items():
+            if not rows:
+                continue
+            out.append(f"<details{' open' if first else ''}><summary>{_esc(gname)} "
+                       f"<span class=n>{len(rows)}</span></summary>")
+            first = False
+            for h in rows:
+                out.append(f"<div class=hentry><div class=m>{_ct(h['first_seen'])} · "
+                           f"{_esc(h['source'])} · <a href='{_esc(h['url'])}'>source ↗</a></div>"
+                           f"<div class=ttl>{_esc(h['title'])}</div>"
+                           f"<div class=why>{_esc(h['note'] or '')}</div></div>")
+            out.append("</details>")
+        out.append("</div>")
+    else:
         out.append("<div class=empty>none this day</div>")
 
     # ── Self-audit ───────────────────────────────────────────────────────────
-    out.append("<h2>Self-audit</h2>")
-    if audit_raw:
-        a = json.loads(audit_raw)
-        out.append(f"<div class=meta>last run {_esc(a.get('ran'))} · "
-                   f"{a.get('posts_checked', 0)} posts checked</div>")
-        for r in a.get("results", []):
-            css = {"clean": "published", "minor": "draft", "material": "held"}.get(
-                r.get("verdict"), "tape")
+    out.append("<h2><span class=fill>Self-audit</span></h2>")
+    if audit:
+        out.append(f"<div class=metaline>last run {_esc(audit.get('ran'))} · "
+                   f"{audit.get('posts_checked', 0)} posts checked</div><div class=hstack>")
+        for idx, r in enumerate(audit.get("results", [])):
+            v = r.get("verdict", "unverifiable")
             flags = ("" if r.get("class_ok", True)
-                     else " · <span class=reason>CLASS SUSPECT</span>") + \
+                     else " <span class=suspect>· class suspect</span>") + \
                     (" · source drift" if r.get("source_drift") else "")
-            out.append(f"<details><summary><span class=pill>{_esc(r.get('verdict'))}</span> "
-                       f"{_esc(r.get('title'))}{flags}</summary><div class='card {css}'>"
-                       f"{_esc('; '.join(r.get('findings', [])) or 'no findings')}"
+            out.append(f"<details class=audrow{' open' if idx == 0 and v != 'clean' else ''}>"
+                       f"<summary><span class='chip {v}'>{v.upper()}</span>"
+                       f"{_esc(r.get('title'))}{flags}</summary>"
+                       f"<div class=find>{_esc('; '.join(r.get('findings', [])) or 'No findings.')}"
                        f"</div></details>")
+        out.append("</div>")
     else:
         out.append(f"<div class=empty>no audit yet (daily at {_esc(config.AUDIT_UTC)} UTC)</div>")
 
-    # ── Skips (collapsed) ────────────────────────────────────────────────────
-    total_skips = sum(sk["n"] for sk in skipped)
-    out.append(f"<details><summary><h2 style='display:inline-flex;margin:0'>Skipped "
-               f"<span class=n>{total_skips}</span></h2></summary><table>")
-    for sk in skipped:
-        out.append(f"<tr><td>{sk['n']}</td><td>"
-                   f"{_esc(sk['note'] or 'triage: out of scope / duplicate')}</td></tr>")
+    # ── Skipped ──────────────────────────────────────────────────────────────
+    out.append(f"<details class=skipbox id=skipped><summary>Skipped "
+               f"<span style='color:var(--dim)'>{n_skip}</span></summary><table>")
+    for r in skipped:
+        out.append(f"<tr><td class=n>{r['n']}</td>"
+                   f"<td>{_esc(r['note'] or 'triage: out of scope / duplicate')}</td></tr>")
     out.append("</table></details>")
-
     return "".join(out)
+
+
+def _need_card(color, verb, meta, body_html, actions):
+    acts = ""
+    if actions:
+        links = []
+        primary = True
+        for label, url, secondary in actions:
+            if not url:
+                continue
+            cls = " class=sec" if (secondary and not primary) or label.startswith(("receipt", "source")) and not primary else ""
+            links.append(f"<a{' class=sec' if not primary else ''} "
+                         f"href='{html.escape(url)}'>{html.escape(label)}</a>")
+            primary = False
+        acts = f"<div class=acts>{''.join(links)}</div>"
+    return (f"<article class=need><div class='verb {color}'><b>{html.escape(verb)}</b>"
+            f"<span>{meta}</span></div><div class=body>{body_html}</div>{acts}</article>")
