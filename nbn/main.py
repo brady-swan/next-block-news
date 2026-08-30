@@ -25,6 +25,9 @@ def cycle(con) -> dict:
         if store.is_stale(it.get("published", "")):
             store.set_status(con, it["url_hash"], "skipped", None, "stale at intake")
             continue
+        if store.is_non_english(it.get("title", "")):
+            store.set_status(con, it["url_hash"], "skipped", None, "non-English source")
+            continue
         it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
         fresh.append(it)
     result = {"fetched": len(items), "new": len(inserted), "pending": len(fresh),

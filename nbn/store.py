@@ -115,6 +115,17 @@ def is_stale(published: str, max_age_hours: float = None) -> bool:
     return age.total_seconds() > max_age_hours * 3600
 
 
+def is_non_english(title: str) -> bool:
+    """Deterministic language gate: the wire publishes in English; non-Latin-script
+    items (Korean TokenPost via Perception, etc.) burn draft calls and fail JSON
+    parsing. >30% of letters outside Latin ranges = skip at intake."""
+    letters = [c for c in title if c.isalpha()]
+    if not letters:
+        return False
+    non_latin = sum(1 for c in letters if ord(c) > 0x024F)
+    return non_latin / len(letters) > 0.3
+
+
 def pending_items(con, limit: int) -> list:
     """Items awaiting triage — includes anything stranded by a crash mid-cycle."""
     rows = con.execute(

@@ -47,12 +47,16 @@ def _create(model: str, system: str, user: str, max_tokens: int = 4000, effort: 
     return client.messages.create(**kwargs)
 
 
-def _json_from(response) -> dict:
+def _json_from(response, lenient_draft: bool = False) -> dict:
     if response.stop_reason == "refusal":
         raise RuntimeError(f"model refused: {response.stop_details}")
     text = "".join(b.text for b in response.content if b.type == "text")
     match = re.search(r"\{.*\}|\[.*\]", text, re.DOTALL)
     if not match:
+        if lenient_draft:
+            # A prose non-answer from the drafting call = "no post" — degrade to a
+            # clean hold ("thin source") instead of an exception in the retry path.
+            return {"post": None, "needs_second_source": False}
         raise ValueError(f"no JSON in response: {text[:200]}")
     return json.loads(match.group(0))
 
@@ -135,4 +139,4 @@ def draft(item: dict, article_text: str, verified_handles: dict, already_covered
     if already_covered:
         payload["already_covered"] = already_covered
     resp = _create(config.ANTHROPIC_MODEL, DRAFT_SYSTEM, json.dumps(payload), max_tokens=2000)
-    return _json_from(resp)
+    return _json_from(resp, lenient_draft=True)
