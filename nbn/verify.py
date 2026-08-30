@@ -43,9 +43,12 @@ not sure the confirming source is genuinely independent, it is not confirmed.
 Story (from {outlet}): {title}
 Original URL: {url}
 
+Also report the EARLIEST coverage date you saw for this story anywhere, if evident.
+
 Search for confirmation. Then return ONLY JSON:
 {{"confirmed": true/false, "confirming_url": "...", "confirming_outlet": "...",
-  "confirmation_type": "independent_report|primary_source|none", "reason": "one sentence"}}"""
+  "confirmation_type": "independent_report|primary_source|none",
+  "earliest_coverage_date": "YYYY-MM-DD or null", "reason": "one sentence"}}"""
 
 
 def _domain(url: str) -> str:
@@ -96,4 +99,6 @@ def web_corroborate(item: dict) -> dict:
     log.info("web-corroborated %s via %s", item["title"][:60], conf_dom)
     return {"confirmed": True, "confirming_url": conf_url,
             "confirming_outlet": verdict.get("confirming_outlet", conf_dom),
-            "type": verdict.get("confirmation_type"), "reason": verdict.get("reason", "")}
+            "type": verdict.get("confirmation_type"),
+            "earliest_coverage_date": verdict.get("earliest_coverage_date"),
+            "reason": verdict.get("reason", "")}

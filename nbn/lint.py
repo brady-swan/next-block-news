@@ -72,9 +72,10 @@ def check(post: str, meta: dict, item: dict) -> list:
         if not all(w in CAPS_OK for w in m.group(0).split()):
             errors.append(f"all-caps run: {m.group(0)!r}")
 
-    # News posts must open with the house prefix
-    if item.get("class") in ("primary", "secondary") and not post.startswith("NEW:"):
-        errors.append("news post must start with 'NEW:'")
+    # News posts must open with a house prefix: NEW: for first coverage, UPDATE: only
+    # when the wire already covered the story and this adds a material development.
+    if item.get("class") in ("primary", "secondary") and not post.startswith(("NEW:", "UPDATE:")):
+        errors.append("news post must start with 'NEW:' (or 'UPDATE:' on covered stories)")
 
     # Mentions: only verified handles, max 2
     allowed = {h.lower() for h in verified_handles()}

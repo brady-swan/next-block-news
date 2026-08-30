@@ -126,6 +126,23 @@ def is_non_english(title: str) -> bool:
     return non_latin / len(letters) > 0.3
 
 
+def event_is_stale(date_str, max_hours: float) -> bool:
+    """True when a model-extracted event/coverage date (YYYY-MM-DD) is older than the
+    event window. Unparseable/null passes (the article-date gate already ran)."""
+    import datetime
+    if not date_str:
+        return False
+    try:
+        d = datetime.date.fromisoformat(str(date_str)[:10])
+    except ValueError:
+        return False
+    age = (datetime.datetime.now(datetime.timezone.utc)
+           - datetime.datetime(d.year, d.month, d.day, tzinfo=datetime.timezone.utc))
+    # Date-only precision: measure from end of the event's day so a same-day or
+    # yesterday event is never falsely stale.
+    return age.total_seconds() - 86400 > max_hours * 3600
+
+
 def pending_items(con, limit: int) -> list:
     """Items awaiting triage — includes anything stranded by a crash mid-cycle."""
     rows = con.execute(

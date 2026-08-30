@@ -66,6 +66,11 @@ def cycle(con) -> dict:
                                  f"detector tip unconfirmed ({v.get('reason', '')[:120]})")
                 result["held"] += 1
                 continue
+            if store.event_is_stale(v.get("earliest_coverage_date"), config.MAX_EVENT_AGE_HOURS):
+                store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                                 f"stale event: earliest coverage {v['earliest_coverage_date']}")
+                result["held"] += 1
+                continue
             item["url"] = v["confirming_url"]
             item["source"] = v.get("confirming_outlet", "confirmed source")
 
@@ -88,6 +93,18 @@ def cycle(con) -> dict:
             result["held"] += 1
             continue
 
+        # Events, not write-ups: the drafter dates the underlying EVENT from the source
+        # text; an event older than the window never posts, however fresh the article
+        # (HWI Aug 18 / StarkWare Aug 26 posted as NEW on Aug 30 — Brady: should not
+        # have posted at all). Null/unparseable dates pass; the article gate already ran.
+        if store.event_is_stale(d.get("event_date"), config.MAX_EVENT_AGE_HOURS):
+            store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                             f"stale event: dated {d['event_date']}, window "
+                             f"{config.MAX_EVENT_AGE_HOURS:g}h")
+            log.info("stale event held %s (event_date %s)", item["title"][:60], d["event_date"])
+            result["held"] += 1
+            continue
+
         klass = item.get("class", "secondary")
         # Two-source rule, mechanized: a secondary story confirmed by 2+ independent
         # publishers is promoted to "corroborated" (auto-postable when enabled).
@@ -98,6 +115,12 @@ def cycle(con) -> dict:
             # Actively hunt for an independent second source before holding.
             from . import verify
             v = verify.web_corroborate(item)
+            if v.get("confirmed") and store.event_is_stale(
+                    v.get("earliest_coverage_date"), config.MAX_EVENT_AGE_HOURS):
+                store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                                 f"stale event: earliest coverage {v['earliest_coverage_date']}")
+                result["held"] += 1
+                continue
             if v.get("confirmed"):
                 klass = "corroborated"
                 store.set_status(con, item["url_hash"], "new", item.get("story_key"),

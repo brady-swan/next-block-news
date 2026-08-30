@@ -121,11 +121,19 @@ only; no URLs anywhere in the post; mentions only from the verified list, max 2,
 load-bearing. If the source text is empty or too thin to support a post, set post to null.
 
 If "already_covered" context is provided, the wire has ALREADY PUBLISHED the underlying
-story. Never re-announce it as NEW — lead with what is genuinely new in this item and
-reference the earlier news in passing ("...following his exit announced Friday").
+story. Never re-announce it as NEW — if the new development is material, prefix the post
+"UPDATE:" and lead with what is new, referencing the earlier news in passing; if the
+item adds nothing material, set post to null.
+
+EVENT DATING (hard): determine when the news-making EVENT itself occurred or was
+announced, from the source text — not when the article was written. An investigative
+revelation of old facts counts as new disclosure (use the disclosure date). Return it
+as "event_date" (YYYY-MM-DD, or null if the text gives no basis). The wire covers
+events, not write-ups; a stale event will be dropped by the system regardless of copy.
 
 Return ONLY JSON:
-{{"post": "...", "needs_second_source": true/false, "mentions_used": [...],
+{{"post": "...", "event_date": "YYYY-MM-DD or null",
+  "needs_second_source": true/false, "mentions_used": [...],
   "numbers_used": ["every numeric figure you wrote, exactly as written"]}}"""
 
 
