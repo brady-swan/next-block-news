@@ -74,3 +74,7 @@ AUTOPOST_CLASSES = {
 # Autonomous publishes are scheduled this many seconds out (publish_at:"now" rejects
 # drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)
 PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "90"))
+
+# Dead-man's switch: ping this URL after every successful cycle (healthchecks.io);
+# alerts fire on SILENCE, catching crash and stall alike. Empty = disabled.
+HEARTBEAT_URL = os.environ.get("NBN_HEARTBEAT_URL", "")

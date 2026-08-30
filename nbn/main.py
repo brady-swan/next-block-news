@@ -202,7 +202,8 @@ class Health(BaseHTTPRequestHandler):
         body = json.dumps({**STATE, "db": store.status_summary(con),
                            "autopost": config.AUTOPOST_ENABLED}).encode()
         con.close()
-        self.send_response(200)
+        stale = time.time() - STATE.get("last_cycle_ts", STATE["started"]) > 600
+        self.send_response(500 if stale else 200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(body)
@@ -228,7 +229,14 @@ def run():
                 from . import audit
                 audit.maybe_run(con)
             STATE["cycles"] += 1
+            STATE["last_cycle_ts"] = time.time()
             STATE["last_error"] = None
+            if config.HEARTBEAT_URL:
+                try:
+                    import httpx
+                    httpx.get(config.HEARTBEAT_URL, timeout=5)
+                except Exception:  # noqa: BLE001 - heartbeat failure never breaks news
+                    pass
         except Exception as exc:  # noqa: BLE001 - the loop survives everything
             STATE["last_error"] = str(exc)[:300]
             log.exception("cycle failed")
