@@ -191,7 +191,7 @@ X_STATIC_QUERIES = [
     ' -is:retweet',
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
     # web-corroboration hunt that finds the primary.
-    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlock__ OR from:BitcoinMagazine'
+    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:BitcoinMagazine'
     ' OR from:BitcoinNewsCom OR from:TFTC21 OR from:BitcoinArchive) -is:retweet',
 ]
 X_DETECTOR_QUERY_MARKER = "WatcherGuru"
