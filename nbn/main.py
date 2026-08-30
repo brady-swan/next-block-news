@@ -128,9 +128,11 @@ def cycle(con) -> dict:
 
         # The Editor: last-mile judgment (feed context + craft) after all gates.
         # Only gates autonomous publishes; drafts get Brady's eyes anyway.
+        editor_note = None
         if config.AUTOPOST_ENABLED and klass in config.AUTOPOST_CLASSES:
             from . import editor
             ed = editor.review(post, item, con)
+            editor_note = f"{ed['verdict']}: {ed['reason']}"[:300]
             if ed["verdict"] == "spike":
                 store.set_status(con, item["url_hash"], "held", item.get("story_key"),
                                  f"editor spiked: {ed['reason'][:220]}")
@@ -148,7 +150,7 @@ def cycle(con) -> dict:
         store.set_status(con, item["url_hash"], "posted" if mode == "IMMEDIATE" else "drafted",
                          item.get("story_key"))
         store.log_post(con, item.get("story_key"), item["url_hash"], klass, post,
-                       item["url"], mode, nuelink_id)
+                       item["url"], mode, nuelink_id, editor_note=editor_note)
         result["posted" if mode == "IMMEDIATE" else "drafted"] += 1
     return result
 
@@ -165,8 +167,9 @@ class Health(BaseHTTPRequestHandler):
                 self.wfile.write(b"forbidden")
                 return
             from . import report
+            day = (parse_qs(parsed.query).get("d") or [None])[0]
             con = store.connect()
-            body = report.render(con).encode()
+            body = report.render(con, day=day).encode()
             con.close()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

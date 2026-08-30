@@ -23,6 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
 
+MIGRATIONS = ["ALTER TABLE posts ADD COLUMN editor_note TEXT"]
+
 
 def kv_get(con, k: str) -> str:
     row = con.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
@@ -43,6 +45,11 @@ def connect() -> sqlite3.Connection:
     con = sqlite3.connect(config.DB_PATH)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
+    for mig in MIGRATIONS:
+        try:
+            con.execute(mig)
+        except sqlite3.OperationalError:
+            pass  # already applied
     return con
 
 
@@ -182,13 +189,41 @@ def set_status(con, url_hash_: str, status: str, story_key: str = None, note: st
     con.commit()
 
 
-def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, nuelink_id=None):
+def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, nuelink_id=None,
+             editor_note=None):
     con.execute(
-        "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode, nuelink_id)"
-        " VALUES (?,?,?,?,?,?,?,?)",
-        (time.time(), story_key, item_hash, klass, body, receipt_url, mode, nuelink_id),
+        "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
+        " nuelink_id, editor_note) VALUES (?,?,?,?,?,?,?,?,?)",
+        (time.time(), story_key, item_hash, klass, body, receipt_url, mode, nuelink_id,
+         editor_note),
     )
     con.commit()
+
+
+def day_bounds(day_str: str):
+    """(start_ts, end_ts) for a YYYY-MM-DD day in America/Chicago (the desk's clock)."""
+    import datetime
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("America/Chicago")
+    d = datetime.date.fromisoformat(day_str)
+    start = datetime.datetime(d.year, d.month, d.day, tzinfo=tz)
+    return start.timestamp(), (start + datetime.timedelta(days=1)).timestamp()
+
+
+def day_summary(con, day_str: str) -> dict:
+    s, e = day_bounds(day_str)
+    posts = con.execute(
+        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='IMMEDIATE'",
+        (s, e)).fetchone()["n"]
+    drafts = con.execute(
+        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='DRAFT'",
+        (s, e)).fetchone()["n"]
+    held = con.execute(
+        "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<? AND status='held'",
+        (s, e)).fetchone()["n"]
+    seen = con.execute(
+        "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<?", (s, e)).fetchone()["n"]
+    return {"published": posts, "drafts": drafts, "held": held, "seen": seen}
 
 
 def status_summary(con) -> dict:
