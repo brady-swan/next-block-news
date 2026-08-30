@@ -18,8 +18,9 @@ TZ = ZoneInfo("America/Chicago")
 PROFILE_URL = "https://x.com/nextblocknews_"
 TYPEFULLY_URL = "https://typefully.com"
 HEX_LINE = "00000000 01000000 00000000 00000000 00000000 3ba3ed"
-LOGO_SVG = ('<svg width="18" height="20" viewBox="0 0 18 20" aria-hidden="true">'
-            '<path d="M9 0.6 17.2 5.3v9.4L9 19.4.8 14.7V5.3z" fill="#fff"></path></svg>')
+LOGO_B64 = "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"
+LOGO_IMG = (f'<img src="data:image/png;base64,{LOGO_B64}" width="22" height="22" '
+            f'alt="Next Block News" style="display:block;border-radius:5px;flex:none">')
 
 CSS = """
 :root{
@@ -211,14 +212,16 @@ def render(con, day: str = None) -> str:
 
     out = ["<!doctype html><meta charset=utf-8>"
            "<meta name=viewport content='width=device-width,initial-scale=1'>"
-           f"<title>NBN Desk</title>{FONTS}<style>{CSS}</style>"]
+           f"<title>NBN Desk</title>"
+           f"<link rel=icon type=image/png href='data:image/png;base64,{LOGO_B64}'>"
+           f"{FONTS}<style>{CSS}</style>"]
 
     # ── Status strip ─────────────────────────────────────────────────────────
     auto = (f"<span class='pill on'>autopost on · "
             f"{', '.join(sorted(config.AUTOPOST_CLASSES))}</span>"
             if config.AUTOPOST_ENABLED else "<span class='pill off'>autopost off</span>")
     out.append(
-        f"<div class=strip><div class=ident>{LOGO_SVG}"
+        f"<div class=strip><div class=ident>{LOGO_IMG}"
         f"<div class=name>Next Block News <span>· Desk</span></div>"
         f"<span class=dot></span></div>"
         f"<div class=hex>{HEX_LINE}</div>"
