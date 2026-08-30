@@ -71,10 +71,19 @@ def cycle(con) -> dict:
         if klass == "secondary" and corroboration >= 2:
             klass = "corroborated"
         if d.get("needs_second_source") and klass == "secondary":
-            store.set_status(con, item["url_hash"], "held", item.get("story_key"),
-                             f"needs second source (corroboration={corroboration})")
-            result["held"] += 1
-            continue
+            # Actively hunt for an independent second source before holding.
+            from . import verify
+            v = verify.web_corroborate(item)
+            if v.get("confirmed"):
+                klass = "corroborated"
+                store.set_status(con, item["url_hash"], "new", item.get("story_key"),
+                                 f"web-corroborated via {v.get('confirming_outlet')}: "
+                                 f"{v.get('confirming_url', '')[:150]}")
+            else:
+                store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                                 f"needs second source ({v.get('reason', '')[:150]})")
+                result["held"] += 1
+                continue
 
         src = article_text or item.get("summary", "")
         errors = lint.check(post, {**d, "_source_text": src}, item)

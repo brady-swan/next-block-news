@@ -80,9 +80,13 @@ with the charter (`prompts/wire_voice.md`). Hard rules baked into the seam:
 | `data` | Pure market/chain data point | In the allowed set but deferred until the wire computes its own numbers |
 | `briefing` | The Block threads | DRAFT for your tap until you add `briefing` to `NBN_AUTOPOST_CLASSES` |
 
-A `secondary` story that gets held for "needs second source" publishes automatically the
-moment a second independent outlet covers it (the new item arrives, corroboration hits 2,
-it drafts and goes). And no story_key ever posts twice.
+A `secondary` story needing a second source is not just held passively: the worker
+actively **web-searches for independent confirmation** (`nbn/verify.py`, adversarial
+prompt — "find reasons it is NOT confirmed" — plus deterministic checks: confirming
+domain must differ from the original and aggregators never count). Confirmed → promoted
+to `corroborated` and it publishes within minutes. Not confirmed → held, and it still
+publishes automatically if a second outlet later arrives through the feeds. No story_key
+ever posts twice.
 
 ## 5. The gates (deterministic, veto everything)
 
