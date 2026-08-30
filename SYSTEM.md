@@ -33,8 +33,12 @@ SQLite database on the Railway volume.
 sources), Bitcoin Magazine, CoinDesk, The Block, Cointelegraph, Bloomberg Markets, CNBC,
 WSJ Markets, Fox Business. A feed failing never kills the cycle; it's logged and skipped.
 
-**Perception `/feed`** (1,000+ outlets): polled every 10 minutes, activates the moment
-`NBN_PERCEPTION_API_KEY` is set. Must be the wire's own key, never the Node's.
+**Perception `/feed`** (1,000+ outlets): LIVE, polled every 15 minutes. The key is SHARED
+with the Marketing Node (Perception allows one per account), so the poll interval is a
+budget decision: wire 96 calls/day + optimized Node ~31-44/day sits just above the
+116/day that ran error-free for months. If `/feed` 429s appear in either system's logs,
+widen `NBN_PERCEPTION_POLL_SECONDS` first. After a clean week, 600s (10 min) is the
+planned next step.
 
 **X recent-search** (regulator accounts + Bitcoin-ETF/custody breaking terms): built,
 dormant until `NBN_X_BEARER_TOKEN` is set with the wire's own key.
@@ -158,7 +162,8 @@ X Premium is required on the handle (long posts) — active.
 | `NBN_MODEL` | `claude-sonnet-5` | Writer + triage model (`NBN_TRIAGE_MODEL` can split them) |
 | `NBN_NODE_READ_TOKEN` | set | Read access to the Marketing Node's brief (Blocks) |
 | `TYPEFULLY_API_KEY` / `_SOCIAL_SET_ID` | set / `329191` | The posting rail |
-| `NBN_PERCEPTION_API_KEY` | empty | Activates the Perception source when set |
+| `NBN_PERCEPTION_API_KEY` | set (SHARED with the Node — one key per Perception account) | The Perception source |
+| `NBN_PERCEPTION_POLL_SECONDS` | `900` | Perception poll interval (budget lever if 429s appear) |
 | `NBN_X_BEARER_TOKEN` | empty | Activates the X poller when set |
 | `NBN_BRIEFING_UTC` | default `14:40,Morning;21:15,Afternoon` | Block schedule |
 | `NBN_MAX_LLM_CALLS_PER_HOUR` | default `60` | Runaway-cost guard |
@@ -185,8 +190,8 @@ via `railway up` from the repo directory (or push to GitHub and redeploy).
 ## 11. Costs (order of magnitude)
 
 Railway ~$5-10/mo. LLM: Sonnet 5 at ~$2/$10 per Mtok; a quiet day is a handful of triage
-calls (~$0.10-0.50), a busy day with many drafts maybe $1-3; the hourly call cap bounds
-the blowup case. Typefully ~$10/mo tier. X Premium on the handle. Total: roughly
+calls (~$0.10-0.50), a busy day with many drafts maybe $1-3; web-corroboration searches add ~$0.01-0.04 per
+held story checked; the hourly call cap bounds the blowup case. Typefully ~$10/mo tier. X Premium on the handle. Total: roughly
 $30-60/mo run rate.
 
 ## 12. Failure modes and what they look like
@@ -197,6 +202,8 @@ $30-60/mo run rate.
 | Typefully publish fails | Post falls back to tape, item stays `drafted` | logs (`typefully publish failed`) |
 | Node brief unavailable at Block time | Block skipped, "no brief available" warning | logs |
 | Model writes something out-of-charter | Lint holds it (after one retry) | logs (`lint held`), DB note |
+| Web corroboration errors/ambiguous | Fails safe: story stays held | logs, DB note (`needs second source (...)`) |
+| Perception `/feed` 429 (shared budget) | Poll skipped, RSS unaffected; widen the poll interval | both systems' logs |
 | Press story misclassed `primary` | **The one gate-proof failure** — it would auto-post | audit the class labels on early posts |
 | Worker crash | Railway restarts it; unprocessed items recover from DB (`pending` pickup) | Railway deploy panel |
 
