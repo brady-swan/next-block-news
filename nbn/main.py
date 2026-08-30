@@ -67,8 +67,14 @@ def cycle(con) -> dict:
             item["source"] = v.get("confirming_outlet", "confirmed source")
 
         article_text = sources.fetch_article_text(item["url"])
+        # If the wire already published related coverage, the draft must lead with the
+        # NEW development, never re-announce (first seen live 2026-08-30: OCEAN follow-up
+        # re-broke the Dashjr exit 8h after our own debut post).
+        covered = [r["body"].split("\n")[0][:200] for r in con.execute(
+            "SELECT body FROM posts WHERE story_key=? OR story_key LIKE ? ORDER BY created DESC LIMIT 2",
+            (item.get("story_key"), "%" + (item.get("story_key") or "")[:12] + "%")).fetchall()]
         try:
-            d = brain.draft(item, article_text, handles)
+            d = brain.draft(item, article_text, handles, already_covered=covered)
         except Exception as exc:  # noqa: BLE001
             store.set_status(con, item["url_hash"], "error", item.get("story_key"), str(exc)[:200])
             continue

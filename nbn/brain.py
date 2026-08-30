@@ -114,17 +114,23 @@ Write the wire post. HARD RULES: every number verbatim from the source text; quo
 only; no URLs anywhere in the post; mentions only from the verified list, max 2, only if
 load-bearing. If the source text is empty or too thin to support a post, set post to null.
 
+If "already_covered" context is provided, the wire has ALREADY PUBLISHED the underlying
+story. Never re-announce it as NEW — lead with what is genuinely new in this item and
+reference the earlier news in passing ("...following his exit announced Friday").
+
 Return ONLY JSON:
 {{"post": "...", "needs_second_source": true/false, "mentions_used": [...],
   "numbers_used": ["every numeric figure you wrote, exactly as written"]}}"""
 
 
-def draft(item: dict, article_text: str, verified_handles: dict) -> dict:
+def draft(item: dict, article_text: str, verified_handles: dict, already_covered: list = None) -> dict:
     payload = {
         "source": item["source"], "title": item["title"], "url_class": item.get("class"),
         "published": item.get("published", ""),
         "verified_handles": verified_handles,
         "source_text": article_text or item.get("summary", ""),
     }
+    if already_covered:
+        payload["already_covered"] = already_covered
     resp = _create(config.ANTHROPIC_MODEL, DRAFT_SYSTEM, json.dumps(payload), max_tokens=2000)
     return _json_from(resp)
