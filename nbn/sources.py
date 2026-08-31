@@ -312,6 +312,24 @@ def fetch_x(con=None) -> list:
     return out
 
 
+def chart_image(url: str):
+    """(png_bytes, file_name) for story URLs with an official chart image, else None.
+    FRED graph pages render a PNG twin at fredgraph.png — the same chart the source's
+    own social preview shows (Brady 2026-08-30: FRED links preview poorly on X; attach
+    the chart, keep the link)."""
+    m = re.search(r"fred\.stlouisfed\.org/graph/\??.*?g=([A-Za-z0-9]+)", url)
+    if not m:
+        return None
+    try:
+        with httpx.Client(timeout=20, headers={"User-Agent": "curl/8.7.1"}) as client:
+            r = client.get(f"https://fred.stlouisfed.org/graph/fredgraph.png?g={m.group(1)}")
+        if r.status_code == 200 and r.headers.get("content-type", "").startswith("image/"):
+            return r.content, f"fredgraph-{m.group(1)}.png"
+    except Exception as exc:  # noqa: BLE001
+        log.warning("chart image fetch failed %s: %s", url, exc)
+    return None
+
+
 def _fred_csv(url: str) -> str:
     """Recent observations for a fred.stlouisfed.org/graph/?g=... URL, else ''."""
     m = re.search(r"fred\.stlouisfed\.org/graph/\??.*?g=([A-Za-z0-9]+)", url)

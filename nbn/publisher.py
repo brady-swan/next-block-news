@@ -34,8 +34,9 @@ def _mode_for(klass: str) -> str:
     return "DRAFT"
 
 
-def publish(post: str, receipt_url: str, klass: str) -> tuple:
-    """Returns (mode, post_id_or_None)."""
+def publish(post: str, receipt_url: str, klass: str, image: tuple = None) -> tuple:
+    """Returns (mode, post_id_or_None). image: optional (bytes, file_name) chart from
+    the source page, attached to the lead post (FRED links preview poorly on X)."""
     mode = _mode_for(klass)
     tape(post, receipt_url, klass, mode)
     if mode == "TAPE":
@@ -43,9 +44,11 @@ def publish(post: str, receipt_url: str, klass: str) -> tuple:
 
     if _backend() == "typefully":
         from . import publisher_typefully
+        media_id = publisher_typefully.upload_media(*image) if image else ""
         # Link ON the post so the card renders and readers click through (Brady 2026-08-29).
         ok, ref = publisher_typefully.publish_thread(
-            [f"{post}\n\n{receipt_url}"], immediate=(mode == "IMMEDIATE"))
+            [f"{post}\n\n{receipt_url}"], immediate=(mode == "IMMEDIATE"),
+            lead_media_ids=[media_id] if media_id else None)
         return (mode, ref) if ok else ("TAPE", None)
     body = {
         "publishMode": mode,

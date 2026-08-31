@@ -182,7 +182,8 @@ def cycle(con) -> dict:
                 else:
                     log.warning("editor revision failed lint; original published")
 
-        mode, nuelink_id = publisher.publish(post, item["url"], klass)
+        chart = sources.chart_image(item["url"])
+        mode, nuelink_id = publisher.publish(post, item["url"], klass, image=chart)
         store.set_status(con, item["url_hash"], "posted" if mode == "IMMEDIATE" else "drafted",
                          item.get("story_key"))
         store.log_post(con, item.get("story_key"), item["url_hash"], klass, post,

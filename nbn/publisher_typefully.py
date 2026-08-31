@@ -29,15 +29,49 @@ def _headers():
     return {"Authorization": f"Bearer {config.TYPEFULLY_API_KEY}"}
 
 
-def publish(post: str, receipt_url: str, immediate: bool) -> tuple:
-    """Create a 2-post X thread (post, receipt). Returns (ok, draft_id_or_error)."""
-    return publish_thread([post, f"Source: {receipt_url}"], immediate)
+def upload_media(data: bytes, file_name: str) -> str:
+    """Upload an image via the v2 media flow; returns media_id or '' (fail-safe).
+    Flow (docs 2026-08-30): POST media/upload -> presigned PUT of raw bytes -> poll ready."""
+    try:
+        resp = httpx.post(
+            f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/media/upload",
+            json={"file_name": file_name}, headers=_headers(), timeout=30)
+        resp.raise_for_status()
+        j = resp.json()
+        media_id, upload_url = j.get("media_id"), j.get("upload_url")
+        if not (media_id and upload_url):
+            log.warning("media upload: unexpected response %s", str(j)[:200])
+            return ""
+        put = httpx.put(upload_url, content=data, timeout=60)
+        if put.status_code not in (200, 204):
+            log.warning("media S3 PUT failed: %s", put.status_code)
+            return ""
+        for _ in range(15):
+            st = httpx.get(
+                f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/media/{media_id}",
+                headers=_headers(), timeout=30)
+            if st.status_code == 200 and st.json().get("status") == "ready":
+                return media_id
+            time.sleep(2)
+        log.warning("media %s never became ready", media_id)
+    except Exception as exc:  # noqa: BLE001 — an image must never block a post
+        log.warning("media upload failed (%s): %s", file_name, exc)
+    return ""
+
+
+def publish(post: str, receipt_url: str, immediate: bool, image: tuple = None) -> tuple:
+    """Create a 2-post X thread (post, receipt). Returns (ok, draft_id_or_error).
+    image: optional (bytes, file_name) attached to the lead post (chart from the
+    source page — FRED links preview poorly on X; Brady 2026-08-30)."""
+    media_id = upload_media(*image) if image else ""
+    return publish_thread([post, f"Source: {receipt_url}"], immediate,
+                          lead_media_ids=[media_id] if media_id else None)
 
 
 URL_RE = None  # set below
 
 
-def publish_thread(texts: list, immediate: bool) -> tuple:
+def publish_thread(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
     """Create an N-post X thread. Returns (ok, draft_id_or_error).
 
     Typefully blocks publish-now for drafts containing URLs (X policy, learned live
@@ -48,24 +82,27 @@ def publish_thread(texts: list, immediate: bool) -> tuple:
     # draft-wide), but a SCHEDULED post carries links fine. So autonomous publishing is
     # "scheduled ~90s out" — links intact, autonomy intact, latency negligible.
     import re
-    ok, ref = _create(texts, immediate)
+    ok, ref = _create(texts, immediate, lead_media_ids)
     if ok or not immediate or "URLs is blocked" not in str(ref):
         return ok, ref
     # Policy changed on us? Last resorts: linkless now, then a staged linked draft.
     stripped = [t for t in (re.sub(r"\s*https?://\S+", "", t).rstrip() for t in texts) if t]
-    ok, ref = _create(stripped, immediate)
+    ok, ref = _create(stripped, immediate, lead_media_ids)
     if ok:
         log.warning("published LINKLESS (URL policy hit even when scheduled)")
         return ok, ref
-    ok, ref = _create(texts, immediate=False)
+    ok, ref = _create(texts, immediate=False, lead_media_ids=lead_media_ids)
     log.warning("publishing blocked; staged linked DRAFT %s", ref)
     return ok, ref
 
 
-def _create(texts: list, immediate: bool) -> tuple:
+def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
     import datetime
+    posts = [{"text": t} for t in texts]
+    if lead_media_ids:
+        posts[0]["media_ids"] = lead_media_ids
     body = {
-        "platforms": {"x": {"enabled": True, "posts": [{"text": t} for t in texts]}},
+        "platforms": {"x": {"enabled": True, "posts": posts}},
         "draft_title": texts[0][:60],
     }
     if immediate:
