@@ -358,8 +358,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             continue
 
         editor_note = None
-        if (config.SOURCE_POLICY_MODE == "enforce" and config.AUTOPOST_ENABLED
-                and klass in config.AUTOPOST_CLASSES):
+        if config.SOURCE_POLICY_MODE == "enforce":
             from . import editor
             ed = editor.review(post, effective, con)
             editor_note = f"{ed['verdict']}: {ed['reason']}"[:300]

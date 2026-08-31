@@ -112,7 +112,7 @@ class CycleTests(unittest.TestCase):
             self.assertEqual(record["items"][0]["triage_action"], "skip")
             self.assertEqual(record["items"][0]["final_status"], "skipped")
 
-    def test_secondary_never_reaches_editor_autopost_gate(self):
+    def test_secondary_draft_reaches_editor_with_autopost_off(self):
         with temporary_store() as con:
             result, _draft, _publish, review, _verify = self.run_cycle(
                 con, [item()],
@@ -121,7 +121,20 @@ class CycleTests(unittest.TestCase):
                 mode="DRAFT", auto=True,
             )
             self.assertEqual(result["drafted"], 1)
-            review.assert_not_called()
+            review.assert_called_once()
+
+    def test_editor_spike_holds_candidate_with_autopost_off(self):
+        with temporary_store() as con:
+            result, _draft, publish, review, _verify = self.run_cycle(
+                con, [item()],
+                [{"action": "draft", "story_key": "staged-spike", "class": "primary"}],
+                auto=False,
+                editor_result={"verdict": "spike", "post": None,
+                               "reason": "insufficient reader value"},
+            )
+            self.assertEqual(result["held"], 1)
+            review.assert_called_once()
+            publish.assert_not_called()
 
     def test_nonofficial_source_cannot_keep_model_primary_class(self):
         def nonofficial(row, text):
@@ -133,7 +146,7 @@ class CycleTests(unittest.TestCase):
                 [{"action": "draft", "story_key": "bad-primary", "class": "primary"}],
                 auto=True, resolution_factory=nonofficial)
             self.assertEqual(publish.call_args.args[2], "secondary")
-            review.assert_not_called()
+            review.assert_called_once()
 
     def test_hostile_host_labeled_sec_cannot_reach_autopost(self):
         def hostile(row, text):
@@ -406,7 +419,7 @@ class CycleTests(unittest.TestCase):
                 drafts=drafts, auto=True, resolution_factory=official)
             self.assertEqual(result["drafted"], 1)
             self.assertEqual(publish.call_args.args[2], "secondary")
-            review.assert_not_called()
+            review.assert_called_once()
 
     def test_data_provider_second_mismatch_holds_without_loop(self):
         with temporary_store() as con:

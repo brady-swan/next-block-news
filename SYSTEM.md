@@ -26,7 +26,8 @@ Typefully. Two products: breaking singles (anytime) and the Morning/Afternoon Bl
 ```
 
 Everything lands in the daily tape (`/data/tapes/`) and SQLite (`/data/nbn.db`),
-including the editor's verdict on every autonomous post (`posts.editor_note`).
+including the editor's verdict on every gate-passed delivery candidate
+(`posts.editor_note`).
 
 ---
 
@@ -146,7 +147,7 @@ one targeted provider lookup and one redraft from the replacement text. A second
 empty source, unsupported number/quote, or ambiguous adversarial claim-support verdict
 holds. It never swaps a receipt beneath already-written copy or loops back to the old one.
 
-## 6. The Editor (last mile, autonomous posts only)
+## 6. The Editor (last mile, before every delivery)
 
 `nbn/editor.py` — **Fable 5 at low effort** (Brady's call). After all gates, before
 publish, it reads the candidate against the wire's last 10 published posts — the two
@@ -154,10 +155,10 @@ things rule-gates can't see: contextual duplication and craft. Verdicts:
 **publish** / **revise** (downward-only edits, re-linted, original stands on failure) /
 **spike** (held, reasoning shown in the Desk for Brady to agree or overrule). An editor
 outage fails OPEN — judgment problems never block news. Every verdict is recorded on
-the post (`editor_note`): the grading record. The Editor is invoked only for an
-autopost-eligible class while `NBN_AUTOPOST_ENABLED=true`; with the current master
-switch off, candidates stage without an Editor call. It therefore cannot be the cause
-of holds while autonomy is paused.
+the post (`editor_note`): the grading record. The Editor runs on every gate-passed
+candidate in enforced source-policy mode, whether the publisher will send it immediately
+or stage it in Typefully. `NBN_AUTOPOST_ENABLED` controls delivery mode only; it does not
+remove the Editor from the funnel.
 
 ## 7. Publishing
 
