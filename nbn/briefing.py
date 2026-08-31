@@ -112,13 +112,14 @@ def build_thread(brief_payload: dict, window_title: str, wire_items: list = None
         "wire_items": [{"title": w["title"], "source": w["source"], "url": w["url"]}
                        for w in wire_items[:10]],
     }
-    out = None
+    retry_reason = ""
     for attempt in range(2):
         request = dict(payload)
         if attempt:
             request["retry_instruction"] = (
-                "The previous response was empty, truncated, or invalid JSON. Return a compact "
-                "complete JSON object with 5-7 concise posts; close every string and array."
+                "The previous response failed. Return a compact complete JSON object with 5-7 "
+                "concise posts; close every string and array. Do not add or alter any fact, "
+                f"number, name, quote, or URL. Fix exactly this: {retry_reason[:1200]}"
             )
         resp = brain._create(config.ANTHROPIC_MODEL, BRIEFING_PROMPT, json.dumps(request),
                              max_tokens=8000)
@@ -126,33 +127,37 @@ def build_thread(brief_payload: dict, window_title: str, wire_items: list = None
             candidate = brain._json_from(resp)
         except ValueError as exc:
             log.warning("briefing JSON attempt %d failed: %s", attempt + 1, exc)
+            retry_reason = str(exc)
             continue
-        if isinstance(candidate, dict):
-            out = candidate
-            break
-        log.warning("briefing JSON attempt %d returned %s", attempt + 1,
-                    type(candidate).__name__)
-    if out is None:
-        log.error("briefing generation failed after two attempts")
-        return None
-    posts = out.get("posts") or []
-    if not (4 <= len(posts) <= 10):
-        log.error("briefing thread wrong size: %d", len(posts))
-        return None
-    # Gates: lint each post; receipts must be URLs from the brief; no Swan leakage.
-    for p in posts:
-        text = p.get("text", "")
-        errors = lint.check(text, {"_source_text": source_text}, {"class": "briefing"})
-        errors = [e for e in errors if not e.startswith("news post must start")]
-        if re.search(r"\bswan\b", text, re.I):
-            errors.append("Swan reference leaked")
-        r = p.get("receipt")
-        if r and r not in allowed_urls:
-            errors.append(f"receipt not in brief: {r}")
-        if errors:
-            log.warning("briefing post failed gates: %s | %s", errors, text[:80])
-            return None
-    return posts
+        if not isinstance(candidate, dict):
+            retry_reason = f"top-level response was {type(candidate).__name__}, not an object"
+            log.warning("briefing JSON attempt %d %s", attempt + 1, retry_reason)
+            continue
+        posts = candidate.get("posts") or []
+        if not (4 <= len(posts) <= 10):
+            retry_reason = f"thread contained {len(posts)} posts; required 5-9"
+            log.warning("briefing attempt %d: %s", attempt + 1, retry_reason)
+            continue
+        # Gates: lint each post; receipts must be URLs from the brief; no Swan leakage.
+        gate_failures = []
+        for index, p in enumerate(posts):
+            text = p.get("text", "")
+            errors = lint.check(text, {"_source_text": source_text}, {"class": "briefing"})
+            errors = [e for e in errors if not e.startswith("news post must start")]
+            if re.search(r"\bswan\b", text, re.I):
+                errors.append("Swan reference leaked")
+            r = p.get("receipt")
+            if r and r not in allowed_urls:
+                errors.append(f"receipt not in brief: {r}")
+            if errors:
+                gate_failures.append(f"post {index + 1}: {'; '.join(errors)}")
+                log.warning("briefing post failed gates: %s | %s", errors, text[:80])
+        if gate_failures:
+            retry_reason = " | ".join(gate_failures)
+            continue
+        return posts
+    log.error("briefing generation failed after two attempts: %s", retry_reason[:300])
+    return None
 
 
 def maybe_run(con) -> bool:

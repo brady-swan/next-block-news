@@ -61,6 +61,17 @@ class BriefingTests(unittest.TestCase):
                 patch.object(brain, "_json_from", side_effect=ValueError("truncated")):
             self.assertIsNone(briefing.build_thread(brief_payload(), "Afternoon"))
 
+    def test_gate_failure_gets_one_feedback_retry(self):
+        bad = block_posts(text="Bitcoin policy reached $99,999.")
+        with patch.object(brain, "_create", side_effect=[object(), object()]) as create, \
+                patch.object(brain, "_json_from", side_effect=[
+                    {"posts": bad}, {"posts": block_posts()}
+                ]):
+            posts = briefing.build_thread(brief_payload(), "Afternoon")
+        self.assertEqual(posts, block_posts())
+        retry_payload = json.loads(create.call_args_list[1].args[2])
+        self.assertIn("number not in source text", retry_payload["retry_instruction"])
+
     def test_triage_prompt_allows_factual_data_and_official_media_research(self):
         self.assertIn("Factual Bitcoin market-state reporting is eligible", brain.TRIAGE_SYSTEM)
         self.assertIn("Judge the factual payload", brain.TRIAGE_SYSTEM)
