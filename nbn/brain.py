@@ -132,10 +132,14 @@ story. Never re-announce it as NEW — if the new development is material, prefi
 item adds nothing material, set post to null.
 
 EVENT DATING (hard): determine when the news-making EVENT itself occurred or was
-announced, from the source text — not when the article was written. An investigative
-revelation of old facts counts as new disclosure (use the disclosure date). Return it
-as "event_date" (YYYY-MM-DD, or null if the text gives no basis). The wire covers
-events, not write-ups; a stale event will be dropped by the system regardless of copy.
+announced, from the source text — NEVER the date of the article in front of you (a
+fresh write-up of an old event is the exact failure this field exists to catch). Rules:
+a date range ("between Aug. 16 and Aug. 26") uses the END date; a research finding or
+report uses when it was FIRST published or reported, not when this article covered it;
+an investigative revelation of old facts counts as new disclosure (disclosure date).
+If the only date you can anchor is the article's own, return null — do not substitute
+it. Return "event_date" (YYYY-MM-DD or null). The wire covers events, not write-ups;
+a stale event will be dropped by the system regardless of copy.
 
 Return ONLY JSON:
 {{"post": "...", "event_date": "YYYY-MM-DD or null",

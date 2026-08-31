@@ -111,6 +111,16 @@ def cycle(con) -> dict:
         corroboration = store.corroboration_count(con, item.get("story_key"))
         if klass == "secondary" and corroboration >= 2:
             klass = "corroborated"
+            # Count-based promotion proves the story is REAL, not that it is FRESH —
+            # two rewrites of a 3-day-old report count the same as two fresh reports
+            # (Galaxy dormant-wallets miss, 2026-08-30). One web pass for recency.
+            from . import verify
+            v = verify.web_corroborate(item)
+            if store.event_is_stale(v.get("earliest_coverage_date"), config.max_event_age_hours()):
+                store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                                 f"stale event: earliest coverage {v['earliest_coverage_date']}")
+                result["held"] += 1
+                continue
         if d.get("needs_second_source") and klass == "secondary":
             # Actively hunt for an independent second source before holding.
             from . import verify
