@@ -1,3 +1,4 @@
+import json
 import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
@@ -97,6 +98,19 @@ class CycleTests(unittest.TestCase):
                 row = con.execute("SELECT status FROM items").fetchone()
                 self.assertEqual(row["status"], status)
                 self.assertEqual(result[counter], 1)
+
+    def test_cycle_records_triage_and_final_decision_for_desk(self):
+        with temporary_store() as con:
+            result, *_ = self.run_cycle(
+                con, [item(title="Candidate <one>")],
+                [{"action": "skip", "story_key": "candidate-one",
+                  "reason": "outside the Bitcoin charter"}],
+            )
+            record = json.loads(store.kv_get(con, "desk:last_decision_run"))
+            self.assertEqual(result["considered"], 1)
+            self.assertEqual(record["items"][0]["title"], "Candidate <one>")
+            self.assertEqual(record["items"][0]["triage_action"], "skip")
+            self.assertEqual(record["items"][0]["final_status"], "skipped")
 
     def test_secondary_never_reaches_editor_autopost_gate(self):
         with temporary_store() as con:

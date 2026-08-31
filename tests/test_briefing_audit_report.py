@@ -148,6 +148,42 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Reuters directly supports the story", html)
         self.assertIn("eligible evidence: 0", html)
 
+    def test_desk_shows_last_run_decisions_and_escapes_item_text(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            pending = store.upsert_new_items(con, [{
+                "source": "Example", "title": "Bitcoin <script>alert(1)</script>",
+                "url": "https://example.com/decision", "published": "", "summary": "",
+            }])
+            store.set_status(con, pending[0]["url_hash"], "skipped", "desk-test",
+                             "outside charter")
+            store.record_decision_run(
+                con, pending,
+                [{**pending[0], "action": "skip", "story_key": "desk-test",
+                  "reason": "not material"}],
+                {"fetched": 10, "new": 1, "considered": 1, "pending": 1}, time.time(),
+            )
+            html = report.render(con)
+        self.assertIn("Last decision run", html)
+        self.assertIn("triage · skip", html)
+        self.assertIn("final · skipped", html)
+        self.assertIn("Decision: not material", html)
+        self.assertIn("Bitcoin &lt;script&gt;alert(1)&lt;/script&gt;", html)
+        self.assertNotIn("<script>alert(1)</script>", html)
+
+    def test_skipped_headline_is_exact_when_reason_table_is_limited(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            for index in range(16):
+                row = store.upsert_new_items(con, [{
+                    "source": "Example", "title": f"Skipped {index}",
+                    "url": f"https://example.com/skipped-{index}", "published": "",
+                }])[0]
+                store.set_status(con, row["url_hash"], "skipped", note=f"reason {index}")
+            html = report.render(con)
+        self.assertIn("16 skipped", html)
+        self.assertIn("16 · top reasons", html)
+        self.assertNotIn("= 16 seen", html)
+        self.assertIn("intake: 16 seen · 16 evaluated", html)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -133,6 +133,19 @@ h2.needs{color:var(--orange)}
 .hentry .ttl{font:400 14px/1.45 var(--sans)}
 .hentry .why{font:400 12.5px/1.4 var(--mono);color:var(--red);margin-top:4px;
              overflow-wrap:anywhere}
+.decision{border-left:2px solid var(--orange)}
+.decision summary{padding:11px 13px}
+.decision .route{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
+.decision .route .chip{margin:0;color:var(--sub);border-color:var(--line2)}
+.decision .route .final{color:var(--orange);border-color:rgba(247,147,26,.35)}
+.decision .ttl{font:500 14px/1.4 var(--sans);color:var(--txt);padding-right:18px}
+.decision .meta{font:400 11.5px/1.4 var(--mono);color:var(--dim);margin-top:5px}
+.decision .body{padding:0 13px 12px;color:var(--sub);font-size:13px}
+.decision .body p{margin:6px 0 0}
+.countdefs{margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.countdefs summary{padding:9px 11px;font:500 11px/1.3 var(--mono);color:var(--sub)}
+.countdefs .body{padding:0 11px 10px;font:400 12.5px/1.5 var(--sans);color:var(--dim)}
+.countdefs .body p{margin:5px 0}
 .chip{font:500 10.5px var(--mono);letter-spacing:.08em;border-radius:3px;padding:2px 5px;
       margin-right:7px;border:1px solid}
 .chip.material{color:var(--red);border-color:rgba(248,81,73,.4)}
@@ -273,6 +286,11 @@ def render(con, day: str = None) -> str:
     summary = store.day_summary(con, day)
     audit_raw = store.kv_get(con, "audit:last")
     audit = json.loads(audit_raw) if audit_raw else None
+    decision_raw = store.kv_get(con, "desk:last_decision_run")
+    try:
+        decision_run = json.loads(decision_raw) if decision_raw else None
+    except (TypeError, ValueError):
+        decision_run = None
 
     out = ["<!doctype html><meta charset=utf-8>"
            "<meta name=viewport content='width=device-width,initial-scale=1'>"
@@ -373,6 +391,53 @@ def render(con, day: str = None) -> str:
         f"<div><b>{summary['held']}</b><span>currently held</span></div>"
         "</div>")
 
+    # ── Last completed non-empty decision run ───────────────────────────────
+    decision_items = decision_run.get("items", []) if decision_run else []
+    out.append(f"<h2><span class=fill>Last decision run</span>"
+               f"<span class='count o'>{len(decision_items)}</span></h2>")
+    if decision_run:
+        run_result = decision_run.get("result", {})
+        completed = datetime.datetime.fromtimestamp(
+            decision_run.get("completed", 0), TZ).strftime("%a %b %-d · %-I:%M %p Central")
+        out.append(f"<div class=metaline>{_esc(completed)} · "
+                   f"{run_result.get('fetched', 0)} fetched · "
+                   f"{run_result.get('new', 0)} new · "
+                   f"{run_result.get('considered', len(decision_items))} considered · "
+                   f"{run_result.get('pending', 0)} sent to triage</div>")
+        out.append("<div class=hstack>")
+        for index, item in enumerate(decision_items):
+            triage_action = item.get("triage_action") or "intake skip"
+            triage_reason = item.get("triage_reason") or item.get("final_note") or \
+                "No reason recorded."
+            final_status = item.get("final_status") or "unknown"
+            output_mode = item.get("output_mode")
+            final_label = f"{final_status} / {output_mode}" if output_mode else final_status
+            final_note = item.get("final_note") or ""
+            source_path = ""
+            if item.get("selected_source"):
+                source_path = (f"<p>Receipt: {_esc(item.get('original_source') or item.get('source'))} "
+                               f"({_esc(item.get('original_tier'))}) → "
+                               f"<a href='{_esc(item.get('selected_url'))}'>"
+                               f"{_esc(item.get('selected_source'))}</a> "
+                               f"({_esc(item.get('selected_tier'))}) · "
+                               f"{_esc(item.get('resolution_status'))}</p>")
+            downstream = (f"<p>Final: {_esc(final_note)}</p>"
+                          if final_note and final_note != triage_reason else "")
+            out.append(
+                f"<details class=decision{' open' if index == 0 else ''}>"
+                f"<summary><div class=route>"
+                f"<span class=chip>triage · {_esc(triage_action)}</span>"
+                f"<span class='chip final'>final · {_esc(final_label)}</span></div>"
+                f"<div class=ttl>{_esc(item.get('title'))}</div>"
+                f"<div class=meta>{_esc(item.get('source'))} · "
+                f"{_esc(item.get('story_key') or 'no story key')}</div></summary>"
+                f"<div class=body><p>Decision: {_esc(triage_reason)}</p>"
+                f"{downstream}{source_path}<p><a href='{_esc(item.get('url'))}'>"
+                f"discovery item ↗</a></p></div></details>")
+        out.append("</div>")
+    else:
+        out.append("<div class=empty>no completed non-empty decision run recorded yet</div>")
+
     # ── Seven days + nav + jump links ────────────────────────────────────────
     out.append("<h2><span class=fill>Seven days</span></h2><div class=days>")
     for i in range(6, -1, -1):
@@ -399,7 +464,7 @@ def render(con, day: str = None) -> str:
            else f"<a href='{_u(next_d)}'>{next_d} ›</a>")
     out.append(f"<div class=dnav><a href='{_u(prev_d)}'>‹ {prev_d}</a>"
                f"<span class=mid>{day}</span>{nxt}</div>")
-    n_skip = sum(r["n"] for r in skipped)
+    n_skip = summary["skipped"]
     out.append(f"<div class=jumps>"
                f"<a href='#published' style='color:var(--green)'>{summary['published']} published</a>"
                f"<span style='color:var(--amber)'>{summary['drafts']} drafts</span>"
@@ -408,7 +473,19 @@ def render(con, day: str = None) -> str:
                f"<span style='color:var(--dim)'>{summary['tape']} tape</span>"
                f"<a href='#held' style='color:var(--red)'>{summary['held']} held</a>"
                f"<a href='#skipped' style='color:var(--sub)'>{n_skip} skipped</a>"
-               f"<span style='color:var(--dim)'>= {summary['seen']} seen</span></div>")
+               f"<span style='color:var(--dim)'>intake: {summary['seen']} seen · "
+               f"{summary['evaluated']} evaluated</span></div>")
+    out.append(
+        "<details class=countdefs><summary>What these counts mean</summary><div class=body>"
+        "<p><b>Published</b> is a locally tracked story output confirmed live during this "
+        "Central-time day. <b>Drafts, uncertain, failed,</b> and <b>tape</b> are outputs "
+        "created this day in those current delivery states.</p>"
+        "<p><b>Held</b> and <b>skipped</b> are source items first seen this day whose current "
+        "state is held or skipped. <b>Seen</b> is every unique source URL first ingested; "
+        "<b>evaluated</b> is seen items no longer awaiting triage.</p>"
+        "<p>These are different units and date axes—several source items can resolve to one "
+        "story output—so the status counts are not expected to add up to seen.</p>"
+        "</div></details>")
 
     # ── Published (lede-only + expand) ───────────────────────────────────────
     pub = [p for p in posts if p["mode"] == "IMMEDIATE"]
@@ -517,7 +594,7 @@ def render(con, day: str = None) -> str:
 
     # ── Skipped ──────────────────────────────────────────────────────────────
     out.append(f"<details class=skipbox id=skipped><summary>Skipped "
-               f"<span style='color:var(--dim)'>{n_skip}</span></summary><table>")
+               f"<span style='color:var(--dim)'>{n_skip} · top reasons</span></summary><table>")
     for r in skipped:
         out.append(f"<tr><td class=n>{r['n']}</td>"
                    f"<td>{_esc(r['note'] or 'triage: out of scope / duplicate')}</td></tr>")

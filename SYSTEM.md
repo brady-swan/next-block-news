@@ -1,6 +1,6 @@
 # How Next Block News works — the owner's manual
 
-*Rewritten 2026-08-30 (end of launch weekend), matching deployed code. One always-on
+*Current as of 2026-08-31, matching deployed code. One always-on
 Python worker on Railway watches the news, judges it, writes it, checks itself twice —
 once with rules, once with an editor — and publishes to @nextblocknews_ through
 Typefully. Two products: breaking singles (anytime) and the Morning/Afternoon Block.*
@@ -73,7 +73,7 @@ and the self-audit.
 ## 3. Judgment (triage → source resolution)
 
 **Triage** (Sonnet 5, batch): action draft/update/hold/skip, a `story_key` naming the
-underlying story, and a class. It receives both **posted** story keys (skip duplicates)
+underlying story, and a proposed class. It receives both **posted** story keys (skip duplicates)
 and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
 corroboration promotion).
 
@@ -154,7 +154,10 @@ things rule-gates can't see: contextual duplication and craft. Verdicts:
 **publish** / **revise** (downward-only edits, re-linted, original stands on failure) /
 **spike** (held, reasoning shown in the Desk for Brady to agree or overrule). An editor
 outage fails OPEN — judgment problems never block news. Every verdict is recorded on
-the post (`editor_note`): the grading record.
+the post (`editor_note`): the grading record. The Editor is invoked only for an
+autopost-eligible class while `NBN_AUTOPOST_ENABLED=true`; with the current master
+switch off, candidates stage without an Editor call. It therefore cannot be the cause
+of holds while autonomy is paused.
 
 ## 7. Publishing
 
@@ -197,10 +200,34 @@ freshness window, autopost) → **Needs You** (verb-led cards: AWAITING PUBLICAT
 VERIFY ON TYPEFULLY / X / PUBLISH FAILED /
 TAPE ONLY / AGREE OR OVERRULE / AUDIT FLAG, each with a `dismiss ✓` that records
 acknowledgment without deleting history) → daily lifecycle strip (seen/evaluated/outputs/
-confirmed published/currently held) → 7-day strip (published/held/seen per day,
+confirmed published/currently held) → **Last decision run** (the most recent completed
+non-empty cycle, every considered source item, triage action/reason, final state/reason,
+and any receipt upgrade; empty polls do not erase it) → 7-day strip (published/held/seen per day,
 stalled-weekday flags, day
 navigation) → Published (lede-only cards + editor verdicts) → Held grouped by reason
 family → Self-audit → Skips.
+
+Desk counters deliberately do not form one equation; they use two units and two date
+axes:
+
+- **published** — locally tracked story outputs Typefully confirms live during the
+  selected Central-time day (`confirmed_at`); a thread/story output is one row, not a
+  count of every tweet in it.
+- **drafts / uncertain / failed / tape** — output rows created during the selected day
+  whose current delivery mode is respectively staged for human publication, ambiguous
+  after a publish attempt, definitively failed, or written without a publisher backend.
+- **held / skipped** — source items first seen during the selected day whose current
+  state is held or skipped. These are source URLs, not necessarily distinct stories.
+- **seen** — unique source URLs first ingested during the selected day, regardless of
+  current state. It is intake volume, not the sum of the output and disposition counts.
+- **evaluated** — those seen items no longer in `new` state. **outputs created** is every
+  post row created during the day, including non-published delivery modes.
+
+Several source items can collapse to one story output; a held item can later change
+state; and a manually published draft is dated by its confirmed publication time.
+Accordingly, published/held/skipped and seen should not be added together. The Skipped
+headline is an exact database count; its expanded table shows only the top 14 reason
+groups.
 
 Before each worker cycle, a rate-limited Typefully read reconciles locally known draft IDs
 against its published feed. Exact confirmed receipts promote manual drafts, uncertain, or

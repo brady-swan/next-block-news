@@ -81,6 +81,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     """Resolve and prepare complete story groups before choosing one final receipt."""
     from . import verify
 
+    run_started = time.time()
     items = (sources.fetch_feeds() + sources.fetch_edgar()
              + sources.fetch_perception() + sources.fetch_x(con))
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
@@ -98,10 +99,12 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             continue
         it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
         fresh.append(it)
-    result = {"fetched": len(items), "new": len(inserted), "pending": len(fresh),
+    result = {"fetched": len(items), "new": len(inserted), "considered": len(pending),
+              "pending": len(fresh),
               "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
               "failed": 0, "taped": 0, "policy_held": 0}
     if not fresh:
+        store.record_decision_run(con, pending, [], result, run_started)
         return result
 
     verdicts = brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
@@ -391,6 +394,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                        publisher_ref, editor_note=editor_note, resolution_id=item["url_hash"],
                        publisher_backend=publisher_backend)
         result[counter] += 1
+    store.record_decision_run(con, pending, verdicts, result, run_started)
     return result
 
 

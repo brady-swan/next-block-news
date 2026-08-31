@@ -1,5 +1,6 @@
 import unittest
 import datetime
+import json
 import sqlite3
 import tempfile
 import time
@@ -18,6 +19,27 @@ class StoreTests(unittest.TestCase):
             second = store.upsert_new_items(con, [item()])
             self.assertEqual(len(first), 1)
             self.assertEqual(second, [])
+
+    def test_last_decision_run_keeps_final_state_and_survives_empty_poll(self):
+        with temporary_store() as con:
+            pending = store.upsert_new_items(con, [item(title="Decision candidate")])
+            store.set_status(con, pending[0]["url_hash"], "held", "decision-story",
+                             "needs second source")
+            store.record_decision_run(
+                con, pending,
+                [{**pending[0], "action": "draft", "story_key": "decision-story",
+                  "reason": "material Bitcoin story"}],
+                {"fetched": 1, "new": 1, "considered": 1, "pending": 1}, 100.0,
+            )
+            saved = store.kv_get(con, "desk:last_decision_run")
+            record = json.loads(saved)
+            self.assertEqual(record["items"][0]["triage_action"], "draft")
+            self.assertEqual(record["items"][0]["triage_reason"], "material Bitcoin story")
+            self.assertEqual(record["items"][0]["final_status"], "held")
+            self.assertEqual(record["items"][0]["final_note"], "needs second source")
+
+            store.record_decision_run(con, [], [], {"fetched": 0}, 200.0)
+            self.assertEqual(store.kv_get(con, "desk:last_decision_run"), saved)
 
     def test_qualified_evidence_is_cross_cycle_fresh_and_independent(self):
         with temporary_store() as con:

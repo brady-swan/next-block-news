@@ -119,6 +119,54 @@ def kv_set(con, k: str, v: str):
     con.commit()
 
 
+def record_decision_run(con, pending: list, verdicts: list, result: dict,
+                        started_at: float) -> None:
+    """Keep the last completed, non-empty intake decision run for Desk inspection."""
+    if not pending:
+        return
+    by_hash = {row.get("url_hash"): row for row in verdicts}
+    decisions = []
+    for candidate in pending:
+        item_hash = candidate["url_hash"]
+        verdict = by_hash.get(item_hash, {})
+        final = con.execute(
+            "SELECT status, story_key, note FROM items WHERE url_hash=?", (item_hash,)
+        ).fetchone()
+        resolution = con.execute(
+            "SELECT original_source, original_tier, selected_source, selected_tier,"
+            " selected_url, status FROM source_resolutions WHERE item_hash=?", (item_hash,)
+        ).fetchone()
+        output = con.execute(
+            "SELECT mode FROM posts WHERE item_hash=? ORDER BY id DESC LIMIT 1", (item_hash,)
+        ).fetchone()
+        decisions.append({
+            "url_hash": item_hash,
+            "source": str(candidate.get("source") or "")[:120],
+            "title": str(candidate.get("title") or "")[:300],
+            "url": str(candidate.get("url") or "")[:1000],
+            "published": str(candidate.get("published") or "")[:100],
+            "triage_action": str(verdict.get("action") or "")[:40],
+            "triage_reason": str(verdict.get("reason") or "")[:400],
+            "story_key": (final["story_key"] if final else None) or verdict.get("story_key"),
+            "final_status": final["status"] if final else "unknown",
+            "final_note": (final["note"] if final else "") or "",
+            "original_source": resolution["original_source"] if resolution else "",
+            "original_tier": resolution["original_tier"] if resolution else "",
+            "selected_source": resolution["selected_source"] if resolution else "",
+            "selected_tier": resolution["selected_tier"] if resolution else "",
+            "selected_url": resolution["selected_url"] if resolution else "",
+            "resolution_status": resolution["status"] if resolution else "",
+            "output_mode": output["mode"] if output else "",
+        })
+    payload = {
+        "started": started_at,
+        "completed": time.time(),
+        "result": dict(result),
+        "items": decisions,
+    }
+    kv_set(con, "desk:last_decision_run", json.dumps(payload, separators=(",", ":")))
+
+
 def url_hash(url: str) -> str:
     return hashlib.sha256(url.strip().lower().encode()).hexdigest()[:24]
 
@@ -633,6 +681,9 @@ def day_summary(con, day_str: str) -> dict:
     held = con.execute(
         "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<? AND status='held'",
         (s, e)).fetchone()["n"]
+    skipped = con.execute(
+        "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<? AND status='skipped'",
+        (s, e)).fetchone()["n"]
     seen = con.execute(
         "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<?", (s, e)).fetchone()["n"]
     evaluated = con.execute(
@@ -641,7 +692,7 @@ def day_summary(con, day_str: str) -> dict:
     outputs_created = con.execute(
         "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<?", (s, e)).fetchone()["n"]
     return {"published": posts, "drafts": drafts, "uncertain": uncertain,
-            "failed": failed, "tape": tape, "held": held, "seen": seen,
+            "failed": failed, "tape": tape, "held": held, "skipped": skipped, "seen": seen,
             "evaluated": evaluated, "outputs_created": outputs_created}
 
 
