@@ -26,6 +26,36 @@ class StoreTests(unittest.TestCase):
             "https://[2606:4700:4700::1111]/a",
         )
 
+    def test_connect_migrates_legacy_items_before_discovery_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.db"
+            con = sqlite3.connect(path)
+            con.execute(
+                "CREATE TABLE items (url_hash TEXT PRIMARY KEY, source TEXT, title TEXT,"
+                " url TEXT, published_at TEXT, first_seen REAL, status TEXT DEFAULT 'new',"
+                " story_key TEXT, note TEXT)"
+            )
+            con.execute(
+                "INSERT INTO items(url_hash,source,title,url,first_seen) VALUES (?,?,?,?,?)",
+                ("legacy", "Legacy", "Old item", "https://example.com/a?utm_source=x", 1),
+            )
+            con.commit()
+            con.close()
+            with patch.object(config, "DATA_DIR", Path(directory)), \
+                    patch.object(config, "DB_PATH", path):
+                migrated = store.connect()
+                try:
+                    columns = {r["name"] for r in migrated.execute("PRAGMA table_info(items)")}
+                    indexes = {r["name"] for r in migrated.execute("PRAGMA index_list(items)")}
+                    row = migrated.execute(
+                        "SELECT discovery_key FROM items WHERE url_hash='legacy'"
+                    ).fetchone()
+                    self.assertIn("discovery_key", columns)
+                    self.assertIn("idx_items_discovery_key", indexes)
+                    self.assertEqual(row["discovery_key"], "https://example.com/a")
+                finally:
+                    migrated.close()
+
     def test_research_job_gets_one_automatic_retry(self):
         with temporary_store() as con:
             row = store.upsert_new_items(con, [item()])[0]

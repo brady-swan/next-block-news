@@ -148,7 +148,6 @@ CREATE TABLE IF NOT EXISTS pipeline_events (
 );
 CREATE INDEX IF NOT EXISTS idx_pipeline_events_at ON pipeline_events(at);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
-CREATE INDEX IF NOT EXISTS idx_items_discovery_key ON items(discovery_key);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
 
