@@ -11,6 +11,7 @@ FAILED is distinct from tape-only operation. Corrections are staged for human re
 """
 import datetime
 import logging
+import time
 
 import httpx
 
@@ -25,6 +26,37 @@ def _backend() -> str:
     if config.NUELINK_API_KEY and config.NUELINK_BRAND_ID and config.NUELINK_COLLECTION_ID:
         return "nuelink"
     return "tape"
+
+
+def backend_name() -> str:
+    """Stable public name for recording delivery provenance with the output row."""
+    return _backend()
+
+
+def reconcile_publications(con) -> dict:
+    """Best-effort Typefully-to-local publication reconciliation, rate-limited."""
+    if _backend() != "typefully":
+        return {"disabled": 1}
+    from . import publisher_typefully, store
+    now = time.time()
+    try:
+        last_attempt = float(store.kv_get(con, "publisher:last_attempt") or 0)
+    except ValueError:
+        last_attempt = 0
+    if now - last_attempt < config.PUBLISH_RECONCILE_SECONDS:
+        return {"rate_limited": 1}
+    # Commit the attempt before the request so an outage does not cause a retry storm.
+    store.kv_set(con, "publisher:last_attempt", str(now))
+    try:
+        records = publisher_typefully.list_published()
+        stats = store.reconcile_typefully_publications(con, records, synced_at=time.time())
+        log.info("Typefully publication sync: %s", stats)
+        return stats
+    except Exception as exc:  # noqa: BLE001 - reconciliation must never stop intake
+        message = str(exc)[:200]
+        store.kv_set(con, "publisher:last_error", message)
+        log.warning("Typefully publication sync failed: %s", message)
+        return {"error": message}
 
 
 def _mode_for(klass: str) -> str:

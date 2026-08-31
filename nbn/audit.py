@@ -68,9 +68,11 @@ def maybe_run(con) -> bool:
         return False
     store.kv_set(con, key, str(time.time()))
 
+    effective_ts = store.effective_post_ts_sql()
     posts = con.execute(
-        "SELECT * FROM posts WHERE created > ? AND class != 'briefing'"
-        " AND mode IN ('IMMEDIATE','UNCERTAIN') ORDER BY created",
+        f"SELECT * FROM posts WHERE {effective_ts} > ? AND class != 'briefing'"
+        " AND mode IN ('IMMEDIATE','UNCERTAIN')"
+        f" ORDER BY {effective_ts}",
         (time.time() - 26 * 3600,)).fetchall()
     results = []
     for p in posts:

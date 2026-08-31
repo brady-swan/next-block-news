@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 import unittest
 from unittest.mock import patch
 
@@ -79,6 +80,27 @@ class AuditTests(unittest.TestCase):
             audit._stage_correction(row, "CORRECTION: Test.")
         self.assertFalse(publish.call_args.kwargs["immediate"])
 
+    def test_audit_uses_confirmation_time_for_late_published_draft(self):
+        with temporary_store() as con:
+            store.log_post(con, "late", None, "primary", "NEW: Late publication.",
+                           "https://example.com", "IMMEDIATE")
+            con.execute(
+                "UPDATE posts SET created=?,confirmed_at=? WHERE story_key='late'",
+                (time.time() - 3 * 86400, time.time()),
+            )
+            con.commit()
+            checked = []
+
+            def clean(row):
+                checked.append(row["story_key"])
+                return {"verdict": "clean", "class_ok": True, "findings": [],
+                        "source_drift": False}
+
+            with patch.object(audit.datetime, "datetime", FixedDateTime), \
+                    patch.object(audit, "_audit_one", side_effect=clean):
+                self.assertTrue(audit.maybe_run(con))
+            self.assertEqual(checked, ["late"])
+
 
 class ReportTests(unittest.TestCase):
     def test_desk_uses_distinct_lifecycle_actions(self):
@@ -88,7 +110,7 @@ class ReportTests(unittest.TestCase):
                                "https://example.com", mode)
             html = report.render(con)
 
-        self.assertEqual(html.count("TAP TO PUBLISH"), 1)
+        self.assertEqual(html.count("AWAITING PUBLICATION"), 1)
         self.assertEqual(html.count("VERIFY ON TYPEFULLY / X"), 1)
         self.assertEqual(html.count("PUBLISH FAILED"), 1)
         self.assertEqual(html.count("TAPE ONLY"), 1)
@@ -97,6 +119,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("1 uncertain", html)
         self.assertIn("1 failed", html)
         self.assertIn("1 tape", html)
+        self.assertIn("5</b><span>outputs created", html)
 
     def test_desk_shows_original_and_selected_source_metadata(self):
         with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):

@@ -13,9 +13,11 @@ Why Typefully over Nuelink/direct X API (researched 2026-08-29):
 Schema verified live 2026-08-29 (the public docs are wrong/stale): threads are an
 explicit array — platforms.x = {"enabled": true, "posts": [{"text": ...}, ...]}.
 """
+import datetime
 import logging
 import time
 from enum import Enum
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -37,6 +39,58 @@ class PublishOutcome(str, Enum):
 
 def _headers():
     return {"Authorization": f"Bearer {config.TYPEFULLY_API_KEY}"}
+
+
+def _timestamp(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
+
+
+def _public_x_url(value) -> str:
+    try:
+        parsed = urlsplit(str(value or ""))
+    except ValueError:
+        return ""
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if (parsed.scheme not in ("http", "https") or parsed.username or parsed.password
+            or not (host in ("x.com", "twitter.com")
+                    or host.endswith((".x.com", ".twitter.com")))):
+        return ""
+    return parsed.geturl()
+
+
+def list_published(limit: int = 50) -> list[dict]:
+    """Return normalized, definitively published Typefully drafts, newest first."""
+    resp = httpx.get(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts",
+        params={"status": "published", "sort": "-published_at", "limit": limit},
+        headers=_headers(), timeout=30,
+    )
+    resp.raise_for_status()
+    out = []
+    for raw in resp.json().get("results", []):
+        ref = str(raw.get("id") or "").strip()
+        published_at = _timestamp(raw.get("published_at"))
+        if raw.get("status") != "published" or not ref or published_at is None:
+            log.warning("ignoring malformed Typefully published record id=%s", ref or "missing")
+            continue
+        out.append({
+            "id": ref,
+            "status": "published",
+            "created_at": _timestamp(raw.get("created_at")),
+            "published_at": published_at,
+            "public_url": _public_x_url(raw.get("x_published_url")),
+            "preview": str(raw.get("preview") or ""),
+            "draft_title": str(raw.get("draft_title") or ""),
+        })
+    return out
 
 
 def upload_media(data: bytes, file_name: str) -> str:

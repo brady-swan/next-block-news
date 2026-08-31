@@ -51,6 +51,7 @@ details[open]>summary::after{content:'\\2013'}
       border-radius:4px;padding:5px 8px;white-space:nowrap}
 .pill.on{color:var(--green);background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.28)}
 .pill.off{color:var(--red);background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.28)}
+.pill.warn{color:var(--amber);background:rgba(210,160,43,.1);border-color:rgba(210,160,43,.28)}
 .clock{font:400 12px/1.4 var(--sans);color:var(--sub);margin-top:9px}
 h2{display:flex;align-items:center;gap:8px;font:600 11px/1 var(--mono);
    letter-spacing:.12em;text-transform:uppercase;color:var(--sub);margin:26px 0 10px}
@@ -63,6 +64,12 @@ h2.needs{color:var(--orange)}
 .emptybox{border:1px dashed var(--line2);border-radius:10px;padding:26px 18px;text-align:center}
 .emptybox b{font:500 15px/1.4 var(--sans);color:var(--txt);display:block}
 .emptybox span{font:400 13.5px/1.5 var(--sans);color:var(--dim);margin-top:3px;display:block}
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);
+      border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:14px}
+.flow div{background:var(--panel);padding:8px 5px;text-align:center}
+.flow b{display:block;font:600 15px/1.2 var(--mono);color:var(--txt)}
+.flow span{display:block;margin-top:3px;font:500 9px/1.2 var(--mono);letter-spacing:.05em;
+           text-transform:uppercase;color:var(--dim)}
 .stack{display:flex;flex-direction:column;gap:12px}
 .need{background:var(--panel);border:1px solid var(--line2);border-radius:10px;overflow:hidden}
 .verb{display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--line);padding:9px 13px}
@@ -177,6 +184,47 @@ def _ed_parts(note):
     return verdict.strip(), reason.strip()
 
 
+def _age(ts: float, now: float) -> str:
+    seconds = max(0, now - ts)
+    if seconds < 90:
+        return "just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    return f"{int(seconds // 3600)}h ago"
+
+
+def _kv_float(con, key: str) -> float:
+    try:
+        return float(store.kv_get(con, key) or 0)
+    except ValueError:
+        return 0
+
+
+def _freshness_pills(con, now_ts: float) -> str:
+    worker = _kv_float(con, "worker:last_success")
+    if worker:
+        worker_class = " off" if now_ts - worker > 600 else ""
+        worker_html = f"<span class='pill{worker_class}'>cycle {_age(worker, now_ts)}</span>"
+    else:
+        worker_html = "<span class='pill warn'>cycle pending</span>"
+
+    if not (config.TYPEFULLY_API_KEY and config.TYPEFULLY_SOCIAL_SET_ID):
+        publisher_html = "<span class=pill>publisher sync off</span>"
+    else:
+        synced = _kv_float(con, "publisher:last_success")
+        error = store.kv_get(con, "publisher:last_error")
+        if error:
+            publisher_html = (f"<span class='pill off' title='{_esc(error)}'>"
+                              "publisher sync error</span>")
+        elif synced:
+            sync_class = " off" if now_ts - synced > 900 else ""
+            publisher_html = (f"<span class='pill{sync_class}'>"
+                              f"publisher sync {_age(synced, now_ts)}</span>")
+        else:
+            publisher_html = "<span class='pill warn'>publisher sync pending</span>"
+    return worker_html + publisher_html
+
+
 def _dismissed(con, kind, ref) -> bool:
     return bool(store.kv_get(con, f"dismissed:{kind}:{ref}"))
 
@@ -188,6 +236,7 @@ def _dismiss_link(kind, ref, day):
 
 def render(con, day: str = None) -> str:
     now = datetime.datetime.now(TZ)
+    now_ts = time.time()
     today = now.strftime("%Y-%m-%d")
     day = day or today
     try:
@@ -196,17 +245,20 @@ def render(con, day: str = None) -> str:
         day, (s, e) = today, store.day_bounds(today)
     is_today = day == today
 
+    effective_ts = store.effective_post_ts_sql("p")
     posts = con.execute(
         "SELECT p.*, r.original_source AS resolution_original_source,"
         " r.original_tier AS resolution_original_tier,"
         " r.selected_source AS resolution_selected_source,"
         " r.selected_tier AS resolution_selected_tier, r.status AS resolution_status,"
         " r.note AS resolution_note,"
+        f" {effective_ts} AS effective_at,"
         " (SELECT COUNT(*) FROM source_evidence ev WHERE ev.item_hash=p.resolution_id"
         "  AND ev.support_verdict=1 AND ev.receipt_eligible=1) AS resolution_evidence_count"
         " FROM posts p"
         " LEFT JOIN source_resolutions r ON r.item_hash=p.resolution_id"
-        " WHERE p.created>=? AND p.created<? ORDER BY p.created DESC", (s, e)).fetchall()
+        f" WHERE {effective_ts}>=? AND {effective_ts}<? ORDER BY effective_at DESC",
+        (s, e)).fetchall()
     held = con.execute(
         "SELECT i.*, r.original_tier AS resolution_original_tier,"
         " r.selected_source AS resolution_selected_source,"
@@ -237,6 +289,7 @@ def render(con, day: str = None) -> str:
         f"<div class=name>Next Block News <span>· Desk</span></div>"
         f"<span class=dot></span></div>"
         f"<div class=pills>{auto}"
+        f"{_freshness_pills(con, now_ts)}"
         f"<span class=pill>source policy: {_esc(config.SOURCE_POLICY_MODE)}</span>"
         f"<span class=pill>fresh {store.current_max_age_hours():g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
@@ -253,7 +306,7 @@ def render(con, day: str = None) -> str:
             continue
         body_html = _esc(p["body"])
         treatments = {
-            "DRAFT": ("amber", "TAP TO PUBLISH",
+            "DRAFT": ("amber", "AWAITING PUBLICATION",
                       [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
                        ("receipt ↗", p["receipt_url"], True)]),
             "UNCERTAIN": ("orange", "VERIFY ON TYPEFULLY / X",
@@ -310,6 +363,15 @@ def render(con, day: str = None) -> str:
     else:
         out.append("<div class=emptybox><b>Nothing.</b>"
                    "<span>The wire is running itself.</span></div>")
+
+    out.append(
+        "<div class=flow>"
+        f"<div><b>{summary['seen']}</b><span>items seen</span></div>"
+        f"<div><b>{summary['evaluated']}</b><span>evaluated</span></div>"
+        f"<div><b>{summary['outputs_created']}</b><span>outputs created</span></div>"
+        f"<div><b>{summary['published']}</b><span>published</span></div>"
+        f"<div><b>{summary['held']}</b><span>currently held</span></div>"
+        "</div>")
 
     # ── Seven days + nav + jump links ────────────────────────────────────────
     out.append("<h2><span class=fill>Seven days</span></h2><div class=days>")
@@ -375,12 +437,13 @@ def render(con, day: str = None) -> str:
             out.append(
                 f"<details class=rec{' open' if idx == 0 else ''}>"
                 f"<summary><div class=gut><span class=cls>{_esc(p['class'])}</span>"
-                f"<span class=t>{_ct(p['created'])}</span>"
+                f"<span class=t>{_ct(p['effective_at'])}</span>"
                 f"<span class=key>{_esc(p['story_key'] or '')}</span></div>"
                 f"<div class=lede>{_esc(lede)}</div></summary>"
                 f"<div class=rest>{f'<p>{_esc(rest)}</p>' if rest else ''}{source_html}{ed_html}"
                 f"<div class=links>{receipt}"
-                f"<a href='{PROFILE_URL}' style='color:var(--sub)'>on X ↗</a></div>"
+                f"<a href='{_esc(p['public_url'] or PROFILE_URL)}' "
+                f"style='color:var(--sub)'>on X ↗</a></div>"
                 f"</div></details>")
         out.append("</div>")
     else:

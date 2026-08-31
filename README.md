@@ -147,7 +147,9 @@ concurrently. Fresh persisted resolutions are reused across worker restarts.
 
 The worker exposes `/health` and `/status`; both return runtime and database state, and
 health becomes HTTP 500 when the last completed cycle is more than ten minutes old. The
-Desk is available at `/report?k=<token>` when `NBN_REPORT_TOKEN` is configured.
+Desk is available at `/report?k=<token>` when `NBN_REPORT_TOKEN` is configured. The worker
+reconciles recent Typefully publication receipts every five minutes, so drafts published
+manually are counted by their confirmed X publication time and leave the action queue.
 
 See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
 publishing behavior.

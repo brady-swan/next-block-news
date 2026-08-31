@@ -55,11 +55,12 @@ Return ONLY JSON:
 def review(post: str, item: dict, con) -> dict:
     """Returns {'verdict', 'post', 'reason'}; fails open to publish-as-is on errors."""
     from . import brain
+    effective_ts = store.effective_post_ts_sql()
     recent = con.execute(
-        "SELECT body, class, created FROM posts"
+        f"SELECT body, class, {effective_ts} AS effective_at FROM posts"
         " WHERE mode IN ('IMMEDIATE','DRAFT','UNCERTAIN')"
-        " ORDER BY created DESC LIMIT 10").fetchall()
-    feed = [{"hours_ago": round((time.time() - r["created"]) / 3600, 1),
+        " ORDER BY effective_at DESC LIMIT 10").fetchall()
+    feed = [{"hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
              "class": r["class"], "post": r["body"][:500]} for r in recent]
     payload = {
         "candidate_post": post,

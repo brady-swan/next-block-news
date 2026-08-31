@@ -192,13 +192,20 @@ CORRECTION draft (never publish). Results in the Desk.
 ## 10. Operating it — the Desk and the switches
 
 **The Desk** (`/report?k=<token>`, bookmark in `DESK-REPORT-URL.txt`): Claude-Design
-"Filed, action-first" UI. Status strip (model seats, freshness window, autopost) →
-**Needs You** (verb-led cards: TAP TO PUBLISH / VERIFY ON TYPEFULLY / X / PUBLISH FAILED /
+"Filed, action-first" UI. Status strip (worker and publisher-sync age, model seats,
+freshness window, autopost) → **Needs You** (verb-led cards: AWAITING PUBLICATION /
+VERIFY ON TYPEFULLY / X / PUBLISH FAILED /
 TAPE ONLY / AGREE OR OVERRULE / AUDIT FLAG, each with a `dismiss ✓` that records
-acknowledgment without deleting history) → 7-day strip (published/held/seen per day,
+acknowledgment without deleting history) → daily lifecycle strip (seen/evaluated/outputs/
+confirmed published/currently held) → 7-day strip (published/held/seen per day,
 stalled-weekday flags, day
 navigation) → Published (lede-only cards + editor verdicts) → Held grouped by reason
 family → Self-audit → Skips.
+
+Before each worker cycle, a rate-limited Typefully read reconciles locally known draft IDs
+against its published feed. Exact confirmed receipts promote manual drafts, uncertain, or
+failed rows to published; Desk dates and every recent-publication consumer use Typefully's
+actual `published_at` timestamp. Unknown Typefully-only posts are not imported.
 
 **Watching the watcher:** every successful cycle pings healthchecks.io
 (`NBN_HEARTBEAT_URL`); ~15 min of silence pages Brady. `/health` returns 500 when the
@@ -219,6 +226,7 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_CYCLE_LEASE_SECONDS` | `900` | expiring mutex across news, briefing, and audit work |
 | `NBN_AUTOPOST_CLASSES` | `primary,corroborated` | autonomy surface (`secondary` ignored even if listed) |
 | `NBN_PUBLISH_DELAY_SECONDS` | `30` | the scheduled-publish fuse |
+| `NBN_PUBLISH_RECONCILE_SECONDS` | `300` | published-receipt reconciliation cadence |
 | `NBN_MAX_AGE_HOURS_ACTIVE/QUIET` | `2.5` / `6` | freshness schedule (fixed `NBN_MAX_AGE_HOURS` overrides) |
 | `NBN_POLL_SECONDS` | `60` | RSS/EDGAR cadence |
 | `NBN_X_POLL_SECONDS` / `NBN_X_LIST_ID` / `NBN_X_LIST_REFRESH_SECONDS` | `180` / set / `3600` | X poller + list roster |

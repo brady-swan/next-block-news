@@ -14,6 +14,29 @@ def response(payload):
 
 
 class TypefullyTests(unittest.TestCase):
+    @patch.object(tf.httpx, "get")
+    def test_published_list_is_normalized_and_malformed_records_are_skipped(self, get):
+        get.return_value = response({"results": [
+            {"id": 42, "status": "published",
+             "created_at": "2026-08-31T12:00:00Z",
+             "published_at": "2026-08-31T12:05:00Z",
+             "x_published_url": "https://x.com/nextblocknews_/status/42",
+             "preview": "NEW: Bitcoin test.", "draft_title": "Bitcoin test"},
+            {"id": 43, "status": "published", "published_at": "not-a-date"},
+            {"id": 44, "status": "draft", "published_at": "2026-08-31T12:05:00Z"},
+        ]})
+        rows = tf.list_published()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "42")
+        self.assertEqual(rows[0]["public_url"], "https://x.com/nextblocknews_/status/42")
+        self.assertEqual(rows[0]["preview"], "NEW: Bitcoin test.")
+        self.assertEqual(get.call_args.kwargs["params"]["status"], "published")
+
+    def test_public_x_url_rejects_credentials_and_unrelated_hosts(self):
+        self.assertEqual(tf._public_x_url("https://user:pass@x.com/status/1"), "")
+        self.assertEqual(tf._public_x_url("https://x.com.evil.example/status/1"), "")
+        self.assertEqual(tf._public_x_url("javascript:alert(1)"), "")
+
     @patch.object(tf.httpx, "post")
     def test_human_draft_is_staged(self, post):
         post.return_value = response({"id": "draft-1"})

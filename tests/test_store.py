@@ -135,8 +135,9 @@ class StoreTests(unittest.TestCase):
                 con = store.connect()
                 try:
                     columns = {row["name"] for row in con.execute("PRAGMA table_info(posts)")}
-                    self.assertIn("editor_note", columns)
-                    self.assertIn("resolution_id", columns)
+                    self.assertTrue(set(store.POST_COLUMNS).issubset(columns))
+                    self.assertIsNotNone(con.execute(
+                        "SELECT name FROM sqlite_master WHERE name='idx_posts_publisher_ref'").fetchone())
                     self.assertIsNotNone(con.execute(
                         "SELECT name FROM sqlite_master WHERE name='source_resolutions'").fetchone())
                 finally:
@@ -186,6 +187,17 @@ class StoreTests(unittest.TestCase):
                                "https://example.com", mode)
             self.assertEqual(set(store.recent_story_keys(con)), {"immediate", "uncertain"})
 
+    def test_recent_story_keys_uses_confirmed_publication_time(self):
+        with temporary_store() as con:
+            store.log_post(con, "published-late", None, "primary", "NEW: Test.",
+                           "https://example.com", "IMMEDIATE")
+            con.execute(
+                "UPDATE posts SET created=?,confirmed_at=? WHERE story_key='published-late'",
+                (time.time() - 10 * 86400, time.time()),
+            )
+            con.commit()
+            self.assertIn("published-late", store.recent_story_keys(con, days=3))
+
     def test_day_summary_exposes_every_output_mode(self):
         with temporary_store() as con:
             for mode in ("IMMEDIATE", "DRAFT", "UNCERTAIN", "FAILED", "TAPE"):
@@ -198,6 +210,7 @@ class StoreTests(unittest.TestCase):
                 {k: summary[k] for k in ("published", "drafts", "uncertain", "failed", "tape")},
                 {"published": 1, "drafts": 1, "uncertain": 1, "failed": 1, "tape": 1},
             )
+            self.assertEqual(summary["outputs_created"], 5)
 
     def test_time_boundaries_are_deterministic(self):
         utc = datetime.timezone.utc

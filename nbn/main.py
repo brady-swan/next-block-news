@@ -53,6 +53,8 @@ def _lease_run(con, scheduled: bool) -> dict:
         log.warning("worker iteration skipped: another process owns the lease")
         return {"skipped_locked": 1}
     try:
+        # Repair human-published Typefully drafts before any coverage/dedup decisions.
+        publisher.reconcile_publications(con)
         result = _cycle_locked(con, owner)
         if scheduled:
             if config.NODE_READ_TOKEN:
@@ -170,9 +172,11 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         # Model labels cannot set evidence class. It derives from the final receipt.
         klass = _evidence_class(resolution)
         effective["class"] = klass
+        effective_ts = store.effective_post_ts_sql()
         covered = [row["body"].split("\n")[0][:200] for row in con.execute(
             "SELECT body FROM posts WHERE story_key=?"
-            " AND mode IN ('IMMEDIATE','UNCERTAIN') ORDER BY created DESC LIMIT 2",
+            " AND mode IN ('IMMEDIATE','UNCERTAIN')"
+            f" ORDER BY {effective_ts} DESC LIMIT 2",
             (story_key,)).fetchall()]
         try:
             draft = brain.draft(effective, article_text, handles, already_covered=covered)
@@ -374,6 +378,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
             raise RuntimeError("cycle lease lost before delivery")
         chart = sources.chart_image(receipt_url)
+        publisher_backend = publisher.backend_name()
         mode, publisher_ref = publisher.publish(post, receipt_url, klass, image=chart)
         lifecycle = {
             "IMMEDIATE": ("posted", "posted"), "DRAFT": ("drafted", "drafted"),
@@ -383,7 +388,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         item_status, counter = lifecycle.get(mode, ("failed", "failed"))
         store.set_status(con, item["url_hash"], item_status, story_key)
         store.log_post(con, story_key, item["url_hash"], klass, post, receipt_url, mode,
-                       publisher_ref, editor_note=editor_note, resolution_id=item["url_hash"])
+                       publisher_ref, editor_note=editor_note, resolution_id=item["url_hash"],
+                       publisher_backend=publisher_backend)
         result[counter] += 1
     return result
 
@@ -459,6 +465,8 @@ def run():
             STATE["cycles"] += 1
             STATE["last_cycle_ts"] = time.time()
             STATE["last_error"] = None
+            if not STATE["last_cycle"].get("skipped_locked"):
+                store.kv_set(con, "worker:last_success", str(STATE["last_cycle_ts"]))
             if config.HEARTBEAT_URL:
                 try:
                     import httpx

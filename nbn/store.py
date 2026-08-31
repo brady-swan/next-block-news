@@ -3,6 +3,7 @@ import hashlib
 import json
 import sqlite3
 import time
+import unicodedata
 
 from . import config, source_policy
 
@@ -18,7 +19,10 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created REAL, story_key TEXT, item_hash TEXT, class TEXT,
-  body TEXT, receipt_url TEXT, mode TEXT, nuelink_id TEXT
+  body TEXT, receipt_url TEXT, mode TEXT, nuelink_id TEXT,
+  editor_note TEXT, resolution_id TEXT,
+  confirmed_at REAL, public_url TEXT, publisher_status TEXT,
+  publisher_synced_at REAL, publisher_backend TEXT
 );
 CREATE TABLE IF NOT EXISTS source_resolutions (
   item_hash TEXT PRIMARY KEY,
@@ -81,10 +85,28 @@ CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
 
-MIGRATIONS = [
-    "ALTER TABLE posts ADD COLUMN editor_note TEXT",
-    "ALTER TABLE posts ADD COLUMN resolution_id TEXT",
-]
+POST_COLUMNS = {
+    "editor_note": "TEXT",
+    "resolution_id": "TEXT",
+    "confirmed_at": "REAL",
+    "public_url": "TEXT",
+    "publisher_status": "TEXT",
+    "publisher_synced_at": "REAL",
+    "publisher_backend": "TEXT",
+}
+
+
+def _ensure_post_columns(con):
+    """Apply additive post migrations without masking unexpected SQLite failures."""
+    existing = {r["name"] for r in con.execute("PRAGMA table_info(posts)").fetchall()}
+    for name, declaration in POST_COLUMNS.items():
+        if name not in existing:
+            con.execute(f"ALTER TABLE posts ADD COLUMN {name} {declaration}")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_posts_publisher_ref"
+        " ON posts(publisher_backend, nuelink_id)"
+    )
+    con.commit()
 
 
 def kv_get(con, k: str) -> str:
@@ -106,11 +128,7 @@ def connect() -> sqlite3.Connection:
     con = sqlite3.connect(config.DB_PATH)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
-    for mig in MIGRATIONS:
-        try:
-            con.execute(mig)
-        except sqlite3.OperationalError:
-            pass  # already applied
+    _ensure_post_columns(con)
     return con
 
 
@@ -221,11 +239,21 @@ def pending_items(con, limit: int) -> list:
     return [dict(r) for r in rows]
 
 
+def effective_post_ts_sql(alias: str = "") -> str:
+    """SQL expression for when a post became reader-visible (or might have)."""
+    prefix = f"{alias}." if alias else ""
+    return (f"CASE WHEN {prefix}mode='IMMEDIATE'"
+            f" THEN COALESCE({prefix}confirmed_at,{prefix}created)"
+            f" ELSE {prefix}created END")
+
+
 def recent_story_keys(con, days: float = 3.0) -> list:
     """Story keys readers saw or may have seen (authorizes UPDATE handling)."""
+    effective = effective_post_ts_sql()
     rows = con.execute(
-        "SELECT DISTINCT story_key FROM posts WHERE created > ?"
-        " AND mode IN ('IMMEDIATE','UNCERTAIN') ORDER BY created DESC LIMIT 100",
+        f"SELECT story_key, MAX({effective}) effective_at FROM posts"
+        " WHERE mode IN ('IMMEDIATE','UNCERTAIN') GROUP BY story_key"
+        f" HAVING MAX({effective}) > ? ORDER BY effective_at DESC LIMIT 100",
         (time.time() - days * 86400,),
     ).fetchall()
     return [r["story_key"] for r in rows if r["story_key"]]
@@ -467,15 +495,110 @@ def set_status(con, url_hash_: str, status: str, story_key: str = None, note: st
 
 
 def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, publisher_ref=None,
-             editor_note=None, resolution_id=None):
+             editor_note=None, resolution_id=None, publisher_backend=None):
     """Record a produced post. nuelink_id is the legacy schema name for any backend ref."""
     con.execute(
         "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
-        " nuelink_id, editor_note, resolution_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        " nuelink_id, editor_note, resolution_id, publisher_backend)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (time.time(), story_key, item_hash, klass, body, receipt_url, mode, publisher_ref,
-         editor_note, resolution_id),
+         editor_note, resolution_id, publisher_backend),
     )
     con.commit()
+
+
+def _publication_text_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    return " ".join("".join(c if c.isalnum() else " " for c in normalized).split())
+
+
+def _legacy_typefully_match(row, record: dict) -> bool:
+    created_at = record.get("created_at")
+    if created_at is None or abs(float(row["created"]) - float(created_at)) > 600:
+        return False
+    local = _publication_text_key(row["body"])
+    if len(local) < 32:
+        return False
+    for field in ("preview", "draft_title"):
+        remote = _publication_text_key(record.get(field, ""))
+        if len(remote) >= 32 and (local.startswith(remote) or remote.startswith(local)):
+            return True
+    return False
+
+
+def reconcile_typefully_publications(con, records: list, synced_at: float = None) -> dict:
+    """Promote locally known Typefully drafts from authoritative published records.
+
+    Unknown Typefully posts are intentionally not ingested: this increment repairs the
+    Desk's lifecycle truth without turning it into a second content-management system.
+    """
+    synced_at = synced_at or time.time()
+    stats = {
+        "fetched": len(records), "matched": 0, "promoted": 0, "enriched": 0,
+        "legacy_backfilled": 0, "unknown": 0, "duplicates": 0,
+        "legacy_guard_failed": 0, "tape_anomaly": 0, "mode_anomaly": 0,
+    }
+    with con:
+        for record in records:
+            ref = str(record["id"])
+            typed = con.execute(
+                "SELECT * FROM posts WHERE publisher_backend='typefully' AND nuelink_id=?",
+                (ref,),
+            ).fetchall()
+            if len(typed) > 1:
+                stats["duplicates"] += 1
+                continue
+            legacy = False
+            if typed:
+                row = typed[0]
+            else:
+                candidates = con.execute(
+                    "SELECT * FROM posts WHERE publisher_backend IS NULL AND nuelink_id=?",
+                    (ref,),
+                ).fetchall()
+                if len(candidates) > 1:
+                    stats["duplicates"] += 1
+                    continue
+                if not candidates:
+                    stats["unknown"] += 1
+                    continue
+                row, legacy = candidates[0], True
+
+            if row["mode"] == "TAPE":
+                stats["tape_anomaly"] += 1
+                continue
+            if legacy and not _legacy_typefully_match(row, record):
+                stats["legacy_guard_failed"] += 1
+                continue
+            if row["mode"] not in ("DRAFT", "UNCERTAIN", "FAILED", "IMMEDIATE"):
+                stats["mode_anomaly"] += 1
+                continue
+
+            was_published = row["mode"] == "IMMEDIATE"
+            con.execute(
+                "UPDATE posts SET mode='IMMEDIATE', confirmed_at=?,"
+                " public_url=COALESCE(NULLIF(?,''),public_url), publisher_status='published',"
+                " publisher_synced_at=?, publisher_backend='typefully' WHERE id=?",
+                (record["published_at"], record.get("public_url", ""), synced_at, row["id"]),
+            )
+            if row["item_hash"]:
+                con.execute("UPDATE items SET status='posted' WHERE url_hash=?",
+                            (row["item_hash"],))
+            stats["matched"] += 1
+            stats["enriched" if was_published else "promoted"] += 1
+            if legacy:
+                stats["legacy_backfilled"] += 1
+
+        con.execute(
+            "INSERT INTO kv(k,v) VALUES ('publisher:last_success',?)"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(synced_at),))
+        con.execute(
+            "INSERT INTO kv(k,v) VALUES ('publisher:last_error','')"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v")
+        con.execute(
+            "INSERT INTO kv(k,v) VALUES ('publisher:last_counts',?)"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(stats, sort_keys=True),))
+    return stats
 
 
 def day_bounds(day_str: str):
@@ -490,8 +613,10 @@ def day_bounds(day_str: str):
 
 def day_summary(con, day_str: str) -> dict:
     s, e = day_bounds(day_str)
+    effective = effective_post_ts_sql()
     posts = con.execute(
-        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='IMMEDIATE'",
+        f"SELECT COUNT(*) n FROM posts WHERE {effective}>=? AND {effective}<?"
+        " AND mode='IMMEDIATE'",
         (s, e)).fetchone()["n"]
     drafts = con.execute(
         "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='DRAFT'",
@@ -510,8 +635,14 @@ def day_summary(con, day_str: str) -> dict:
         (s, e)).fetchone()["n"]
     seen = con.execute(
         "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<?", (s, e)).fetchone()["n"]
+    evaluated = con.execute(
+        "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<?"
+        " AND status!='new'", (s, e)).fetchone()["n"]
+    outputs_created = con.execute(
+        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<?", (s, e)).fetchone()["n"]
     return {"published": posts, "drafts": drafts, "uncertain": uncertain,
-            "failed": failed, "tape": tape, "held": held, "seen": seen}
+            "failed": failed, "tape": tape, "held": held, "seen": seen,
+            "evaluated": evaluated, "outputs_created": outputs_created}
 
 
 def status_summary(con) -> dict:

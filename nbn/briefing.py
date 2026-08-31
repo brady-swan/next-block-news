@@ -166,9 +166,10 @@ def maybe_run(con) -> bool:
             p["text"] if i == 0 or not p.get("receipt") else f"{p['text']}\n\n{p['receipt']}"
             for i, p in enumerate(posts)
         ]
+        publisher_backend = publisher.backend_name()
         mode, ref = publisher.publish_thread(texts, klass="briefing")
         store.log_post(con, key, None, "briefing", "\n\n".join(texts), receipts[0] if receipts else "",
-                       mode, ref)
+                       mode, ref, publisher_backend=publisher_backend)
         log.info("briefing %s window: %s (%s)", title, mode, ref)
         return True
     return False

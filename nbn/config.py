@@ -76,6 +76,7 @@ AUTOPOST_CLASSES = {
 # Autonomous publishes are scheduled this many seconds out (publish_at:"now" rejects
 # drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)
 PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "30"))
+PUBLISH_RECONCILE_SECONDS = int(os.environ.get("NBN_PUBLISH_RECONCILE_SECONDS", "300"))
 
 # Source ladder. Enforcement is the safe code default. Observe mode records the
 # policy's decision but forces every delivery to a human draft/tape.
