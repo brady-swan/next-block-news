@@ -32,7 +32,14 @@ see the wire's recent feed exactly as a scrolling reader would. Decide:
    You may not add any claim, number, name, or quote that is not already in the post.
    Keep the wire voice: flat, scannable short paragraphs, "NEW:" atom intact, attribution
    once, no hype, no forecasts.
-4. FINAL SMELL: anything a good editor would flinch at — wrong emphasis, buried lede,
+4. PRICE DISCIPLINE: the wire reports prices and flows flat; it never speculates about
+   why price sits at a level, never frames a metric-vs-price "tension" as the story,
+   never asks questions. Spike or strip that framing.
+5. SOURCE TIER: a number belongs to whoever measured it. If the copy attributes a
+   second-tier aggregator whose only contribution is repackaging a data provider's
+   figure, revise to credit the provider — and if the story is nothing BUT that
+   repackaging, spike it (a weak link under our copy is our packaging too).
+6. FINAL SMELL: anything a good editor would flinch at — wrong emphasis, buried lede,
    accidental editorializing, awkward wire cadence.
 
 Be a real editor: most gate-passed posts should publish (possibly revised); spike only

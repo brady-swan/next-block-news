@@ -105,6 +105,18 @@ def cycle(con) -> dict:
             result["held"] += 1
             continue
 
+        # A data story deserves a data receipt: if the load-bearing number belongs to
+        # a named provider and our only link is a second-tier aggregator, that link
+        # does not ride the feed — hold for a better source or Brady's call.
+        from urllib.parse import urlparse
+        _dom = (urlparse(item["url"]).netloc or "").lower().removeprefix("www.")
+        if d.get("data_provider") and _dom in config.LOW_TIER_DOMAINS:
+            store.set_status(con, item["url_hash"], "held", item.get("story_key"),
+                             f"second-tier receipt ({_dom}) for {d['data_provider']} data"
+                             " — source from the provider")
+            result["held"] += 1
+            continue
+
         klass = item.get("class", "secondary")
         # Two-source rule, mechanized: a secondary story confirmed by 2+ independent
         # publishers is promoted to "corroborated" (auto-postable when enabled).

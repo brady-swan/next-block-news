@@ -141,8 +141,13 @@ If the only date you can anchor is the article's own, return null — do not sub
 it. Return "event_date" (YYYY-MM-DD or null). The wire covers events, not write-ups;
 a stale event will be dropped by the system regardless of copy.
 
+DATA PROVENANCE: when the article's load-bearing numbers come from a named third-party
+data provider (Coinglass, Glassnode, Farside, SoSoValue...), attribute the PROVIDER in
+the copy and return its name as "data_provider". Never attribute the aggregator that
+repackaged the number.
+
 Return ONLY JSON:
-{{"post": "...", "event_date": "YYYY-MM-DD or null",
+{{"post": "...", "event_date": "YYYY-MM-DD or null", "data_provider": "name or null",
   "needs_second_source": true/false, "mentions_used": [...],
   "numbers_used": ["every numeric figure you wrote, exactly as written"]}}"""
 

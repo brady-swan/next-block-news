@@ -94,3 +94,12 @@ def max_event_age_hours() -> float:
         return float(_fixed_event_age)
     from . import store
     return store.current_max_age_hours()
+
+# Second-tier aggregators: never worthy of a receipt link when the story's substance
+# is another party's data (BeInCrypto/Coinglass lesson, 2026-08-31). Env-extendable.
+LOW_TIER_DOMAINS = {
+    d.strip() for d in os.environ.get(
+        "NBN_LOW_TIER_DOMAINS",
+        "beincrypto.com,cryptopotato.com,u.today,coinpedia.org,ambcrypto.com,"
+        "newsbtc.com,bitcoinist.com,zycrypto.com,coingape.com").split(",") if d.strip()
+}

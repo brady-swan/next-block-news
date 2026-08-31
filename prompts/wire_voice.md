@@ -59,3 +59,17 @@ The wire covers events. A fresh article about a stale event is not news: if the
 underlying event or announcement happened outside the event window, the story does
 not post at all, however new the write-up. "UPDATE:" exists for one case only: a
 story the wire ALREADY covered that has a genuinely material new development.
+
+## Price discipline
+Report prices and flows as flat facts. Never speculate about WHY price is at a level,
+never frame a "tension" or "paradox" between a metric and price as the story, and never
+ask questions in a post. "ETF inflows totaled $924M for the week" is wire copy;
+"inflows surged even as price stayed stuck below $80K" is a narrative about price the
+wire does not write. If a source's story IS price speculation, there is no story.
+
+## Attribute data to its ORIGINAL provider
+A number belongs to whoever measured it. When an article reports another party's data
+(Coinglass ETF flows, Glassnode chain data, Farside flows), attribute the PROVIDER,
+never the article ("per Coinglass data" — not "per BeInCrypto"). A second-tier
+aggregator whose only contribution is repackaging a provider's number does not deserve
+attribution or a link on the wire's feed.

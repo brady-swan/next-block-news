@@ -72,6 +72,18 @@ def check(post: str, meta: dict, item: dict) -> list:
         if not all(w in CAPS_OK for w in m.group(0).split()):
             errors.append(f"all-caps run: {m.group(0)!r}")
 
+    # Price discipline (owner rule 2026-08-31): the wire reports, it never wonders.
+    # A question mark outside quotes is speculation's tell.
+    if "?" in unquoted:
+        errors.append("question in post (the wire states facts, it does not speculate)")
+
+    # Data belongs to whoever measured it: attributing a second-tier aggregator is a
+    # laddering failure (BeInCrypto/Coinglass lesson, 2026-08-31).
+    if m := re.search(r"\bper\s+(BeInCrypto|CryptoPotato|U\.?Today|Coinpedia|AMBCrypto|"
+                      r"CryptoNews|NewsBTC|Bitcoinist|ZyCrypto|CoinGape)\b", post, re.I):
+        errors.append(f"attribution to second-tier aggregator: {m.group(1)!r} — "
+                      "attribute the original data provider or reporter")
+
     # News posts must open with a house prefix: NEW: for first coverage, UPDATE: only
     # when the wire already covered the story and this adds a material development.
     if item.get("class") in ("primary", "secondary") and not post.startswith(("NEW:", "UPDATE:")):
