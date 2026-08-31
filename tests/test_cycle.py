@@ -34,7 +34,8 @@ class CycleTests(unittest.TestCase):
     def run_cycle(self, con, raw_items, verdicts, drafts=None, mode="DRAFT", auto=False,
                   editor_result=None, resolution_factory=None,
                   provider_resolution=None, claim_support=None,
-                  article_text="Bitcoin test source", source_policy_mode="enforce"):
+                  article_text="Bitcoin test source", source_policy_mode="enforce",
+                  article_result=None):
         drafts = drafts or [{"post": "NEW: Bitcoin test.", "event_date": None,
                               "needs_second_source": False}]
 
@@ -61,9 +62,13 @@ class CycleTests(unittest.TestCase):
             stack.enter_context(patch.object(sources, "fetch_edgar", return_value=[]))
             stack.enter_context(patch.object(sources, "fetch_perception", return_value=[]))
             stack.enter_context(patch.object(sources, "fetch_x", return_value=[]))
-            stack.enter_context(patch.object(sources, "fetch_article", return_value={
-                "text": article_text, "final_url": raw_items[0]["url"] if raw_items else "",
-                "canonical_url": raw_items[0]["url"] if raw_items else "", "byline": "Reporter"}))
+            stack.enter_context(patch.object(sources, "fetch_article", return_value=(
+                article_result or {
+                    "text": article_text,
+                    "final_url": raw_items[0]["url"] if raw_items else "",
+                    "canonical_url": raw_items[0]["url"] if raw_items else "",
+                    "byline": "Reporter",
+                })))
             stack.enter_context(patch.object(sources, "chart_image", return_value=None))
             stack.enter_context(patch.object(brain, "triage", side_effect=triage))
             stack.enter_context(patch.object(brain, "draft", draft))
@@ -98,6 +103,29 @@ class CycleTests(unittest.TestCase):
                 row = con.execute("SELECT status FROM items").fetchone()
                 self.assertEqual(row["status"], status)
                 self.assertEqual(result[counter], 1)
+
+    def test_transient_source_fetch_is_durable_research_retry_not_editorial_hold(self):
+        with temporary_store() as con:
+            result, draft, publish, _review, resolve = self.run_cycle(
+                con, [item()],
+                [{"action": "draft", "story_key": "retryable-source",
+                  "class": "secondary", "reason": "material Bitcoin story"}],
+                article_result={
+                    "text": "", "final_url": "https://example.com/story",
+                    "canonical_url": "https://example.com/story", "byline": "",
+                    "outcome": "infrastructure_retryable", "error_kind": "ReadTimeout",
+                    "error_message": "source timed out",
+                },
+            )
+            self.assertEqual(result["held"], 1)
+            saved = con.execute(
+                "SELECT state,attempts,stage FROM research_jobs"
+            ).fetchone()
+            self.assertEqual((saved["state"], saved["attempts"], saved["stage"]),
+                             ("pending", 1, "source_fetch"))
+            draft.assert_not_called()
+            publish.assert_not_called()
+            resolve.assert_not_called()
 
     def test_cycle_records_triage_and_final_decision_for_desk(self):
         with temporary_store() as con:

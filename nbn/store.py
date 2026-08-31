@@ -4,6 +4,7 @@ import json
 import sqlite3
 import time
 import unicodedata
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from . import config, source_policy
 
@@ -14,7 +15,14 @@ CREATE TABLE IF NOT EXISTS items (
   source TEXT, title TEXT, url TEXT, published_at TEXT,
   first_seen REAL, status TEXT DEFAULT 'new',
   -- new|skipped|held|drafted|posted|uncertain|failed|taped|error
-  story_key TEXT, note TEXT
+  story_key TEXT, note TEXT,
+  summary TEXT DEFAULT '',
+  discovery_key TEXT,
+  discovery_origin TEXT DEFAULT 'legacy',
+  discovery_context TEXT DEFAULT '',
+  discovery_candidate_id TEXT,
+  decision_stage TEXT,
+  decision_category TEXT
 );
 CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,7 +104,51 @@ CREATE TABLE IF NOT EXISTS operator_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_operator_actions_item
   ON operator_actions(item_hash, id DESC);
+CREATE TABLE IF NOT EXISTS node_discovery_runs (
+  run_id INTEGER PRIMARY KEY,
+  selected_date TEXT NOT NULL,
+  status TEXT NOT NULL,
+  ingested_at REAL NOT NULL,
+  url_count INTEGER NOT NULL,
+  invalid_count INTEGER NOT NULL DEFAULT 0,
+  context_json TEXT NOT NULL DEFAULT '{}',
+  diagnostics_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS research_jobs (
+  item_hash TEXT PRIMARY KEY,
+  story_key TEXT NOT NULL,
+  triage_action TEXT NOT NULL,
+  triage_class TEXT NOT NULL,
+  triage_reason TEXT,
+  stage TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at REAL,
+  state TEXT NOT NULL,
+  error_kind TEXT,
+  error_message TEXT,
+  manual_draft_only INTEGER NOT NULL DEFAULT 0,
+  context_json TEXT NOT NULL,
+  claim_token TEXT,
+  claimed_at REAL,
+  created_at REAL NOT NULL,
+  updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_research_jobs_due
+  ON research_jobs(state, next_attempt_at);
+CREATE TABLE IF NOT EXISTS pipeline_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  item_hash TEXT NOT NULL,
+  story_key TEXT,
+  event TEXT NOT NULL,
+  category TEXT,
+  at REAL NOT NULL,
+  metadata TEXT,
+  UNIQUE(item_hash, event)
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_events_at ON pipeline_events(at);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
+CREATE INDEX IF NOT EXISTS idx_items_discovery_key ON items(discovery_key);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
 
@@ -110,6 +162,21 @@ POST_COLUMNS = {
     "publisher_backend": "TEXT",
 }
 
+ITEM_COLUMNS = {
+    "summary": "TEXT DEFAULT ''",
+    "discovery_key": "TEXT",
+    "discovery_origin": "TEXT DEFAULT 'legacy'",
+    "discovery_context": "TEXT DEFAULT ''",
+    "discovery_candidate_id": "TEXT",
+    "decision_stage": "TEXT",
+    "decision_category": "TEXT",
+}
+
+NODE_RUN_COLUMNS = {
+    "context_json": "TEXT NOT NULL DEFAULT '{}'",
+    "diagnostics_json": "TEXT NOT NULL DEFAULT '{}'",
+}
+
 
 def _ensure_post_columns(con):
     """Apply additive post migrations without masking unexpected SQLite failures."""
@@ -121,6 +188,35 @@ def _ensure_post_columns(con):
         "CREATE INDEX IF NOT EXISTS idx_posts_publisher_ref"
         " ON posts(publisher_backend, nuelink_id)"
     )
+    con.commit()
+
+
+def _ensure_item_columns(con):
+    """Apply additive item migrations and backfill stable discovery identity."""
+    existing = {r["name"] for r in con.execute("PRAGMA table_info(items)").fetchall()}
+    for name, declaration in ITEM_COLUMNS.items():
+        if name not in existing:
+            con.execute(f"ALTER TABLE items ADD COLUMN {name} {declaration}")
+    rows = con.execute(
+        "SELECT url_hash,url FROM items WHERE discovery_key IS NULL OR discovery_key=''"
+    ).fetchall()
+    for row in rows:
+        con.execute(
+            "UPDATE items SET discovery_key=?,discovery_origin=COALESCE(NULLIF(discovery_origin,''),'legacy')"
+            " WHERE url_hash=?",
+            (canonical_discovery_key(row["url"]), row["url_hash"]),
+        )
+    con.execute("CREATE INDEX IF NOT EXISTS idx_items_discovery_key ON items(discovery_key)")
+    con.commit()
+
+
+def _ensure_node_run_columns(con):
+    existing = {
+        r["name"] for r in con.execute("PRAGMA table_info(node_discovery_runs)").fetchall()
+    }
+    for name, declaration in NODE_RUN_COLUMNS.items():
+        if name not in existing:
+            con.execute(f"ALTER TABLE node_discovery_runs ADD COLUMN {name} {declaration}")
     con.commit()
 
 
@@ -154,7 +250,7 @@ def hold_gate(note: str) -> str:
 
 def request_operator_action(con, item_hash: str, action: str) -> dict:
     """Apply a Desk disposition or queue one guarded, draft-only pipeline retry."""
-    if action not in ("stage", "dismiss"):
+    if action not in ("stage", "retry", "dismiss"):
         return {"ok": False, "reason": "unknown action"}
     try:
         con.execute("BEGIN IMMEDIATE")
@@ -171,24 +267,42 @@ def request_operator_action(con, item_hash: str, action: str) -> dict:
         if action == "stage" and not gate:
             con.rollback()
             return {"ok": False, "reason": "this hold needs more source material"}
+        research = con.execute(
+            "SELECT state,error_kind FROM research_jobs WHERE item_hash=?", (item_hash,)
+        ).fetchone()
+        if action == "retry" and (not research or research["state"] not in {"pending", "exhausted"}):
+            con.rollback()
+            return {"ok": False, "reason": "no retryable infrastructure research job"}
         now = time.time()
-        state = "queued" if action == "stage" else "completed"
+        state = "queued" if action in {"stage", "retry"} else "completed"
         cur = con.execute(
             "INSERT INTO operator_actions(item_hash,story_key,action,gate,requested_at,"
             "completed_at,state,original_status,original_note,result)"
             " VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (item_hash, item["story_key"], action, gate or None, now,
-             None if action == "stage" else now, state, item["status"], item["note"],
-             None if action == "stage" else "owner dismissed"),
+            (item_hash, item["story_key"], action,
+             ("research" if action == "retry" else gate or None), now,
+             None if action in {"stage", "retry"} else now, state,
+             item["status"], item["note"],
+             None if action in {"stage", "retry"} else "owner dismissed"),
         )
         if action == "stage":
             con.execute("UPDATE items SET status='new' WHERE url_hash=?", (item_hash,))
+        elif action == "retry":
+            con.execute(
+                "UPDATE research_jobs SET state='pending',next_attempt_at=?,manual_draft_only=1,"
+                "claim_token=NULL,claimed_at=NULL,updated_at=? WHERE item_hash=?",
+                (now, now, item_hash),
+            )
         else:
             note = "owner dismissed"
             if item["note"]:
                 note += f" · was: {item['note']}"
             con.execute(
                 "UPDATE items SET status='skipped',note=? WHERE url_hash=?", (note[:300], item_hash)
+            )
+            con.execute(
+                "UPDATE research_jobs SET state='dismissed',next_attempt_at=NULL,claim_token=NULL,"
+                "claimed_at=NULL,updated_at=? WHERE item_hash=?", (now, item_hash)
             )
         con.commit()
         return {"ok": True, "id": cur.lastrowid, "state": state, "gate": gate}
@@ -200,6 +314,13 @@ def request_operator_action(con, item_hash: str, action: str) -> dict:
 def pending_stage_action(con, item_hash: str):
     return con.execute(
         "SELECT * FROM operator_actions WHERE item_hash=? AND action='stage'"
+        " AND state IN ('queued','processing') ORDER BY id DESC LIMIT 1", (item_hash,)
+    ).fetchone()
+
+
+def pending_retry_action(con, item_hash: str):
+    return con.execute(
+        "SELECT * FROM operator_actions WHERE item_hash=? AND action='retry'"
         " AND state IN ('queued','processing') ORDER BY id DESC LIMIT 1", (item_hash,)
     ).fetchone()
 
@@ -254,6 +375,7 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "title": str(candidate.get("title") or "")[:300],
             "url": str(candidate.get("url") or "")[:1000],
             "published": str(candidate.get("published") or "")[:100],
+            "discovery_origin": str(candidate.get("discovery_origin") or "legacy")[:40],
             "triage_action": str(verdict.get("action") or "")[:40],
             "triage_reason": str(verdict.get("reason") or "")[:400],
             "story_key": (final["story_key"] if final else None) or verdict.get("story_key"),
@@ -280,12 +402,49 @@ def url_hash(url: str) -> str:
     return hashlib.sha256(url.strip().lower().encode()).hexdigest()[:24]
 
 
+_TRACKING_QUERY_KEYS = {
+    "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid",
+}
+
+
+def canonical_discovery_key(value: str) -> str:
+    """Stable URL identity for cross-feed discovery dedupe."""
+    raw = str(value or "").strip()
+    try:
+        parts = urlsplit(raw)
+        scheme = parts.scheme.lower()
+        if scheme not in {"http", "https"} or not parts.hostname:
+            return raw
+        host = parts.hostname.rstrip(".").lower()
+        try:
+            port = parts.port
+        except ValueError:
+            return raw
+        netloc = f"[{host}]" if ":" in host else host
+        if port is not None and not ((scheme == "http" and port == 80)
+                                    or (scheme == "https" and port == 443)):
+            netloc = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+        query = []
+        for key, val in parse_qsl(parts.query, keep_blank_values=True):
+            lowered = key.lower()
+            if lowered.startswith("utm_") or lowered in _TRACKING_QUERY_KEYS:
+                continue
+            query.append((key, val))
+        query.sort(key=lambda pair: (pair[0], pair[1]))
+        return urlunsplit((scheme, netloc, parts.path or "/",
+                           urlencode(query, doseq=True), ""))
+    except (TypeError, ValueError):
+        return raw
+
+
 def connect() -> sqlite3.Connection:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(config.DB_PATH)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
     _ensure_post_columns(con)
+    _ensure_item_columns(con)
+    _ensure_node_run_columns(con)
     return con
 
 
@@ -293,16 +452,246 @@ def upsert_new_items(con, items) -> list:
     """Insert unseen items; return the newly inserted subset."""
     fresh = []
     for it in items:
-        h = url_hash(it["url"])
+        key = canonical_discovery_key(it["url"])
+        existing = con.execute(
+            "SELECT url_hash FROM items WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
+            (key,),
+        ).fetchone()
+        if existing:
+            continue
+        h = url_hash(key or it["url"])
+        origin = str(it.get("discovery_origin") or "legacy")[:40]
+        context = str(it.get("discovery_context") or "")[:8192]
+        candidate_id = str(it.get("discovery_candidate_id") or "")[:32] or None
         cur = con.execute(
-            "INSERT OR IGNORE INTO items(url_hash, source, title, url, published_at, first_seen)"
-            " VALUES (?,?,?,?,?,?)",
-            (h, it["source"], it["title"], it["url"], it.get("published", ""), time.time()),
+            "INSERT OR IGNORE INTO items(url_hash,source,title,url,published_at,first_seen,"
+            "summary,discovery_key,discovery_origin,discovery_context,discovery_candidate_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (h, it["source"], it["title"], it["url"], it.get("published", ""),
+             time.time(), str(it.get("summary") or "")[:600], key, origin, context,
+             candidate_id),
         )
         if cur.rowcount:
             fresh.append({**it, "url_hash": h})
     con.commit()
     return fresh
+
+
+def node_run_consumed(con, run_id: int) -> bool:
+    return con.execute(
+        "SELECT 1 FROM node_discovery_runs WHERE run_id=?", (run_id,)
+    ).fetchone() is not None
+
+
+def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: str,
+                              context: dict, diagnostics: dict, items: list[dict]) -> dict:
+    """Atomically persist a valid Node run and all of its Node-first candidates."""
+    context_json = json.dumps(context, separators=(",", ":"), ensure_ascii=False)
+    if len(context_json.encode("utf-8")) > 16384:
+        context_json = json.dumps({"context_omitted": "size"}, separators=(",", ":"))
+    diagnostic = dict(diagnostics)
+    inserted = deduped = 0
+    fresh = []
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        if con.execute("SELECT 1 FROM node_discovery_runs WHERE run_id=?", (run_id,)).fetchone():
+            con.rollback()
+            return {"consumed": True, "inserted": 0, "deduped": 0, "items": []}
+        for it in items:
+            key = canonical_discovery_key(it["url"])
+            existing = con.execute(
+                "SELECT url_hash FROM items WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
+                (key,),
+            ).fetchone()
+            if existing:
+                deduped += 1
+                continue
+            h = url_hash(key or it["url"])
+            cur = con.execute(
+                "INSERT OR IGNORE INTO items(url_hash,source,title,url,published_at,first_seen,"
+                "summary,discovery_key,discovery_origin,discovery_context,discovery_candidate_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (h, it["source"], it["title"], it["url"], it.get("published", ""),
+                 time.time(), "", key, "marketing_node",
+                 str(it.get("discovery_context") or "")[:8192],
+                 str(it.get("discovery_candidate_id") or "")[:32] or None),
+            )
+            if cur.rowcount:
+                inserted += 1
+                fresh.append({**it, "url_hash": h})
+            else:
+                deduped += 1
+        diagnostic.update({"inserted": inserted, "deduped": deduped})
+        diagnostics_json = json.dumps(
+            diagnostic, separators=(",", ":"), ensure_ascii=False
+        )
+        if len(diagnostics_json.encode("utf-8")) > 4096:
+            diagnostics_json = json.dumps({"diagnostics_omitted": "size"}, separators=(",", ":"))
+        con.execute(
+            "INSERT INTO node_discovery_runs(run_id,selected_date,status,ingested_at,"
+            "url_count,invalid_count,context_json,diagnostics_json) VALUES (?,?,?,?,?,?,?,?)",
+            (run_id, selected_date, status, time.time(), len(items),
+             int(diagnostic.get("invalid_refs", 0)) + int(diagnostic.get("nbn_rejected", 0)),
+             context_json, diagnostics_json),
+        )
+        con.commit()
+        return {"consumed": False, "inserted": inserted, "deduped": deduped,
+                "items": fresh, "diagnostics": diagnostic}
+    except Exception:
+        con.rollback()
+        raise
+
+
+def record_pipeline_event(con, run_id: str, item_hash: str, event: str,
+                          story_key: str = None, category: str = None,
+                          metadata: dict = None) -> None:
+    con.execute(
+        "INSERT OR IGNORE INTO pipeline_events(run_id,item_hash,story_key,event,category,at,metadata)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (run_id, item_hash, story_key, event, category, time.time(),
+         json.dumps(metadata or {}, separators=(",", ":"))[:2000]),
+    )
+    con.commit()
+
+
+def start_research_job(con, item: dict, run_id: str) -> dict:
+    """Freeze and claim an actionable decision before its first external request."""
+    now = time.time()
+    context = {
+        key: item.get(key) for key in (
+            "url_hash", "source", "title", "url", "published", "summary", "story_key",
+            "action", "class", "reason", "discovery_origin", "discovery_context",
+            "discovery_candidate_id",
+        )
+    }
+    encoded = json.dumps(context, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > 32768:
+        context["discovery_context"] = str(context.get("discovery_context") or "")[:4096]
+        encoded = json.dumps(context, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > 32768:
+        context["discovery_context"] = ""
+        context["summary"] = str(context.get("summary") or "")[:200]
+        encoded = json.dumps(context, separators=(",", ":"), ensure_ascii=False)
+    token = f"{run_id}:{item['url_hash']}:{int(now)}"
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT * FROM research_jobs WHERE item_hash=?", (item["url_hash"],)
+        ).fetchone()
+        if row and row["state"] in {"processing", "pending", "exhausted"}:
+            con.rollback()
+            return dict(row)
+        con.execute(
+            "INSERT INTO research_jobs(item_hash,story_key,triage_action,triage_class,"
+            "triage_reason,stage,attempts,next_attempt_at,state,error_kind,error_message,"
+            "manual_draft_only,context_json,claim_token,claimed_at,created_at,updated_at)"
+            " VALUES (?,?,?,?,?,'source_fetch',1,NULL,'processing',NULL,NULL,0,?,?,?,?,?)"
+            " ON CONFLICT(item_hash) DO UPDATE SET story_key=excluded.story_key,"
+            "triage_action=excluded.triage_action,triage_class=excluded.triage_class,"
+            "triage_reason=excluded.triage_reason,stage='source_fetch',attempts=1,"
+            "next_attempt_at=NULL,state='processing',error_kind=NULL,error_message=NULL,"
+            "manual_draft_only=0,context_json=excluded.context_json,"
+            "claim_token=excluded.claim_token,claimed_at=excluded.claimed_at,"
+            "updated_at=excluded.updated_at",
+            (item["url_hash"], item.get("story_key") or "", item.get("action") or "draft",
+             item.get("class") or "secondary", str(item.get("reason") or "")[:300],
+             encoded, token, now, now, now),
+        )
+        con.execute(
+            "UPDATE items SET status='researching',decision_stage='source_fetch',"
+            "decision_category='infrastructure' WHERE url_hash=?", (item["url_hash"],)
+        )
+        con.commit()
+        return dict(con.execute(
+            "SELECT * FROM research_jobs WHERE item_hash=?", (item["url_hash"],)
+        ).fetchone())
+    except Exception:
+        con.rollback()
+        raise
+
+
+def update_research_stage(con, item_hash: str, stage: str) -> None:
+    con.execute(
+        "UPDATE research_jobs SET stage=?,updated_at=? WHERE item_hash=? AND state='processing'",
+        (stage, time.time(), item_hash),
+    )
+    con.commit()
+
+
+def finish_research_job(con, item_hash: str) -> None:
+    con.execute(
+        "UPDATE research_jobs SET state='completed',claim_token=NULL,claimed_at=NULL,updated_at=?"
+        " WHERE item_hash=?", (time.time(), item_hash)
+    )
+    con.commit()
+
+
+def defer_research_job(con, item_hash: str, stage: str, error_kind: str,
+                       message: str, delay_seconds: int = 300,
+                       consume_attempt: bool = True) -> None:
+    now = time.time()
+    row = con.execute(
+        "SELECT attempts,manual_draft_only FROM research_jobs WHERE item_hash=?", (item_hash,)
+    ).fetchone()
+    if row and not consume_attempt and row["attempts"] > 0:
+        con.execute(
+            "UPDATE research_jobs SET attempts=attempts-1 WHERE item_hash=?", (item_hash,)
+        )
+    effective_attempts = max(0, int(row["attempts"]) - (0 if consume_attempt else 1)) if row else 0
+    exhausted = bool(row and (effective_attempts >= 2 or row["manual_draft_only"]))
+    state = "exhausted" if exhausted else "pending"
+    next_at = None if exhausted else now + max(1, delay_seconds)
+    con.execute(
+        "UPDATE research_jobs SET stage=?,state=?,next_attempt_at=?,error_kind=?,"
+        "error_message=?,claim_token=NULL,claimed_at=NULL,updated_at=? WHERE item_hash=?",
+        (stage, state, next_at, error_kind[:80], message[:300], now, item_hash),
+    )
+    con.execute(
+        "UPDATE items SET status='held',note=?,decision_stage=?,decision_category='infrastructure'"
+        " WHERE url_hash=?", (f"research {state}: {message}"[:300], stage, item_hash)
+    )
+    con.commit()
+
+
+def claim_due_research_jobs(con, limit: int = 2, lease_ttl: int = 900,
+                            now: float = None) -> list[dict]:
+    current = time.time() if now is None else now
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        stale = con.execute(
+            "SELECT item_hash,attempts,manual_draft_only FROM research_jobs"
+            " WHERE state='processing' AND claimed_at<?", (current - lease_ttl,)
+        ).fetchall()
+        for row in stale:
+            state = "exhausted" if row["attempts"] >= 2 or row["manual_draft_only"] else "pending"
+            con.execute(
+                "UPDATE research_jobs SET state=?,next_attempt_at=?,claim_token=NULL,claimed_at=NULL,"
+                "updated_at=? WHERE item_hash=?",
+                (state, current if state == "pending" else None, current, row["item_hash"]),
+            )
+        rows = con.execute(
+            "SELECT * FROM research_jobs WHERE state='pending' AND next_attempt_at<=?"
+            " ORDER BY next_attempt_at,item_hash LIMIT ?", (current, limit)
+        ).fetchall()
+        claimed = []
+        for row in rows:
+            token = f"retry:{row['item_hash']}:{int(current)}"
+            con.execute(
+                "UPDATE research_jobs SET state='processing',attempts=attempts+1,claim_token=?,"
+                "claimed_at=?,updated_at=? WHERE item_hash=? AND state='pending'",
+                (token, current, current, row["item_hash"]),
+            )
+            con.execute(
+                "UPDATE items SET status='researching' WHERE url_hash=?", (row["item_hash"],)
+            )
+            claimed.append(dict(con.execute(
+                "SELECT * FROM research_jobs WHERE item_hash=?", (row["item_hash"],)
+            ).fetchone()))
+        con.commit()
+        return claimed
+    except Exception:
+        con.rollback()
+        raise
 
 
 def current_max_age_hours(now=None) -> float:
@@ -390,7 +779,8 @@ def pending_items(con, limit: int) -> list:
     """Items awaiting triage — includes anything stranded by a crash mid-cycle."""
     rows = con.execute(
         "SELECT url_hash, source, title, url, published_at AS published,"
-        " '' AS summary FROM items WHERE status='new' ORDER BY first_seen LIMIT ?",
+        " summary,discovery_origin,discovery_context,discovery_candidate_id"
+        " FROM items WHERE status='new' ORDER BY first_seen LIMIT ?",
         (limit,),
     ).fetchall()
     return [dict(r) for r in rows]
@@ -643,10 +1033,13 @@ def story_produced(con, story_key: str) -> bool:
     ).fetchone() is not None
 
 
-def set_status(con, url_hash_: str, status: str, story_key: str = None, note: str = None):
+def set_status(con, url_hash_: str, status: str, story_key: str = None, note: str = None,
+               stage: str = None, category: str = None):
     con.execute(
-        "UPDATE items SET status=?, story_key=COALESCE(?, story_key), note=COALESCE(?, note) WHERE url_hash=?",
-        (status, story_key, note, url_hash_),
+        "UPDATE items SET status=?,story_key=COALESCE(?,story_key),note=COALESCE(?,note),"
+        "decision_stage=COALESCE(?,decision_stage),decision_category=COALESCE(?,decision_category)"
+        " WHERE url_hash=?",
+        (status, story_key, note, stage, category, url_hash_),
     )
     con.commit()
 

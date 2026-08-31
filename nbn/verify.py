@@ -54,6 +54,9 @@ class ResolutionResult:
     earliest_coverage_date: str | None
     note: str
     evidence: tuple[EvidenceCandidate, ...]
+    outcome: str = "selected"
+    stage: str = "source_resolution"
+    error_kind: str = ""
 
     @property
     def held(self) -> bool:
@@ -243,7 +246,7 @@ def _candidate(raw: dict, fallback_url: str, fallback_name: str, text: str,
 
 
 def _held(item: dict, original: source_policy.SourceRef, text: str, note: str,
-          evidence=(), earliest=None) -> ResolutionResult:
+          evidence=(), earliest=None, *, outcome="evidence_failed", error_kind="") -> ResolutionResult:
     return ResolutionResult(
         item_hash=item["url_hash"], story_key=item.get("story_key") or "",
         original_source_name=item.get("source", ""), original=original, selected=original,
@@ -252,6 +255,7 @@ def _held(item: dict, original: source_policy.SourceRef, text: str, note: str,
         primary_artifact_url="", primary_artifact_fingerprint="",
         content_fingerprint=source_policy.content_fingerprint(text),
         earliest_coverage_date=earliest, note=note[:300], evidence=tuple(evidence),
+        outcome=outcome, error_kind=error_kind,
     )
 
 
@@ -349,7 +353,9 @@ def resolve_source(item: dict, original_text: str, con=None,
         _story_search_cache[story_key] = (time.time(), verdict)
     except Exception as exc:  # noqa: BLE001
         log.warning("source resolution failed for %s: %s", item.get("title", "")[:60], exc)
-        return _held(item, original, source_text, f"source resolution error: {exc}")
+        return _held(
+            item, original, source_text, f"source resolution error: {exc}",
+            outcome="infrastructure_retryable", error_kind=type(exc).__name__)
 
     evidence: list[EvidenceCandidate] = []
     primary_urls: dict[str, str] = {}
@@ -368,6 +374,7 @@ def resolve_source(item: dict, original_text: str, con=None,
 
     from . import sources
     candidate_text: dict[str, str] = {original_ev.ref.url: source_text or ""}
+    candidate_infrastructure_errors = []
     for raw in list(verdict.get("candidates") or [])[:5]:
         if not isinstance(raw, dict) or not raw.get("url"):
             continue
@@ -379,6 +386,10 @@ def resolve_source(item: dict, original_text: str, con=None,
         if ref.url in candidate_text:
             continue
         fetched = sources.fetch_article(ref.url)
+        if fetched.get("outcome") == "infrastructure_retryable":
+            candidate_infrastructure_errors.append(
+                fetched.get("error_message") or fetched.get("error_kind") or "candidate fetch failed")
+            continue
         normalized_raw = dict(raw)
         normalized_raw.update({
             "url": fetched["final_url"],
@@ -402,6 +413,12 @@ def resolve_source(item: dict, original_text: str, con=None,
                                   0 if ev.originality == "primary_artifact" else 1,
                                   ev.ref.display_name.lower()))
     if not eligible:
+        if candidate_infrastructure_errors:
+            return _held(
+                item, original, source_text,
+                f"candidate source fetch failed: {candidate_infrastructure_errors[0]}",
+                evidence, verdict.get("earliest_coverage_date"),
+                outcome="infrastructure_retryable", error_kind="candidate_fetch")
         return _held(item, original, source_text,
                      str(verdict.get("reason") or "no eligible directly supporting source"),
                      evidence, verdict.get("earliest_coverage_date"))

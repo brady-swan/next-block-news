@@ -242,7 +242,21 @@ def _freshness_pills(con, now_ts: float) -> str:
                               f"publisher sync {_age(synced, now_ts)}</span>")
         else:
             publisher_html = "<span class='pill warn'>publisher sync pending</span>"
-    return worker_html + publisher_html
+    if not config.NODE_READ_TOKEN:
+        node_html = "<span class=pill>Node discovery off</span>"
+    else:
+        node_error = store.kv_get(con, "node:last_error")
+        node_success = _kv_float(con, "node:last_success")
+        if node_error:
+            node_html = (f"<span class='pill off' title='{_esc(node_error)}'>"
+                         "Node discovery error</span>")
+        elif node_success:
+            stale_class = " off" if now_ts - node_success > 18 * 3600 else ""
+            node_html = (f"<span class='pill{stale_class}'>"
+                         f"Node intel {_age(node_success, now_ts)}</span>")
+        else:
+            node_html = "<span class='pill warn'>Node discovery pending</span>"
+    return worker_html + publisher_html + node_html
 
 
 def _dismissed(con, kind, ref) -> bool:
@@ -259,6 +273,8 @@ def _hold_label(note: str) -> str:
     if gate:
         return gate
     value = str(note or "").lower()
+    if value.startswith("research pending:") or value.startswith("research exhausted:"):
+        return "research infrastructure"
     if value.startswith("source policy:") or "source unresolved" in value:
         return "source"
     if "thin source" in value:
@@ -274,8 +290,9 @@ def _item_controls(con, item_hash: str, day: str) -> str:
     ).fetchone()
     action = store.latest_operator_action(con, item_hash)
     if action and action["state"] in ("queued", "processing"):
-        label = "draft requested · awaiting next run" if action["state"] == "queued" \
-            else "draft request processing"
+        noun = "research retry" if action["action"] == "retry" else "draft request"
+        label = f"{noun} · awaiting next run" if action["state"] == "queued" \
+            else f"{noun} processing"
         return f"<div class=itemacts><span class=actionstatus>{_esc(label)}</span></div>"
     if not current or current["status"] != "held":
         if action and action["action"] == "dismiss" and action["state"] == "completed":
@@ -285,6 +302,15 @@ def _item_controls(con, item_hash: str, day: str) -> str:
               f"<input type=hidden name=id value='{_esc(item_hash)}'>"
               f"<input type=hidden name=d value='{_esc(day)}'>")
     buttons = []
+    research = con.execute(
+        "SELECT state FROM research_jobs WHERE item_hash=?", (item_hash,)
+    ).fetchone()
+    if research and research["state"] in {"pending", "exhausted"}:
+        buttons.append(
+            f"<form method=post action='/item-action'>{hidden}"
+            "<input type=hidden name=action value=retry>"
+            "<button type=submit>RETRY RESEARCH → DRAFT</button></form>"
+        )
     if store.hold_gate(current["note"]):
         buttons.append(
             f"<form method=post action='/item-action'>{hidden}"
@@ -485,6 +511,7 @@ def render(con, day: str = None) -> str:
                 f"<span class='chip final'>final · {_esc(final_label)}</span></div>"
                 f"<div class=ttl>{_esc(item.get('title'))}</div>"
                 f"<div class=meta>{_esc(item.get('source'))} · "
+                f"{_esc(item.get('discovery_origin') or 'legacy')} · "
                 f"{_esc(item.get('story_key') or 'no story key')}</div></summary>"
                 f"<div class=body><p>Decision: {_esc(triage_reason)}</p>"
                 f"{downstream}{source_path}<p><a href='{_esc(item.get('url'))}'>"
@@ -589,6 +616,8 @@ def render(con, day: str = None) -> str:
                lambda n: "second source" in n or "unconfirmed" in n),
               ("Editor spiked", lambda n: n.startswith("editor spiked")),
               ("Style gate (lint)", lambda n: n.startswith("lint")),
+              ("Research infrastructure",
+               lambda n: n.startswith("research pending:") or n.startswith("research exhausted:")),
               ("Thin source / unverifiable",
                lambda n: "thin source" in n or "unverifiable" in n)]
     grouped, other = {g: [] for g, _ in groups}, []

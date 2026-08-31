@@ -390,7 +390,8 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
         csv_text = _fred_csv(url)
         if csv_text:
             return {"text": csv_text[:limit], "final_url": url,
-                    "canonical_url": url, "byline": ""}
+                    "canonical_url": url, "byline": "", "outcome": "ok",
+                    "error_kind": "", "error_message": ""}
         with httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=False) as client:
             current_url = url
             for _ in range(6):
@@ -410,7 +411,8 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
             csv_text = _fred_csv(str(resp.url))
             if csv_text:
                 return {"text": csv_text[:limit], "final_url": str(resp.url),
-                        "canonical_url": str(resp.url), "byline": ""}
+                        "canonical_url": str(resp.url), "byline": "", "outcome": "ok",
+                        "error_kind": "", "error_message": ""}
         canonical = ""
         if m := re.search(r'(?is)<link[^>]+rel=["\'][^"\']*canonical[^"\']*["\'][^>]+>', body):
             if href := re.search(r'(?i)href=["\']([^"\']+)', m.group(0)):
@@ -427,10 +429,17 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
         text = html.unescape(_TAG_RE.sub(" ", body))
         return {"text": re.sub(r"\s+", " ", text).strip()[:limit],
                 "final_url": str(resp.url), "canonical_url": canonical or str(resp.url),
-                "byline": byline}
+                "byline": byline, "outcome": "ok", "error_kind": "",
+                "error_message": ""}
     except Exception as exc:  # noqa: BLE001
         log.warning("article fetch failed %s: %s", url, exc)
-        return {"text": "", "final_url": url, "canonical_url": url, "byline": ""}
+        retryable = isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
+        if isinstance(exc, httpx.HTTPStatusError):
+            retryable = exc.response.status_code in {408, 425, 429} or exc.response.status_code >= 500
+        outcome = "infrastructure_retryable" if retryable else "evidence_failed"
+        return {"text": "", "final_url": url, "canonical_url": url, "byline": "",
+                "outcome": outcome, "error_kind": type(exc).__name__,
+                "error_message": str(exc)[:300]}
 
 
 def fetch_article_text(url: str, limit: int = 8000) -> str:

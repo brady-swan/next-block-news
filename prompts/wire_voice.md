@@ -59,6 +59,9 @@ The wire covers events. A fresh article about a stale event is not news: if the
 underlying event or announcement happened outside the event window, the story does
 not post at all, however new the write-up. "UPDATE:" exists for one case only: a
 story the wire ALREADY covered that has a genuinely material new development.
+For a newly released report about an older measurement period, distinguish the fresh
+`disclosure_date` from the `underlying_period_end`. The disclosure can be news; the old
+measurement period must never be presented as though it happened today.
 
 ## Price discipline
 Report prices and flows as flat facts. Never speculate about WHY price is at a level,

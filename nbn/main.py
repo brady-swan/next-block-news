@@ -7,7 +7,7 @@ import uuid
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import brain, briefing, config, lint, publisher, source_policy, sources, store
+from . import brain, briefing, config, lint, node_discovery, publisher, source_policy, sources, store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("nbn.main")
@@ -36,7 +36,23 @@ def _finish_actions(con, item, state: str, result: str) -> None:
 
 def _hold(con, item, result, note):
     store.set_status(con, item["url_hash"], "held", item.get("story_key"), note[:300])
+    store.finish_research_job(con, item["url_hash"])
     _finish_actions(con, item, "blocked", note)
+    result["held"] += 1
+
+
+def _defer_research(con, item, result, stage: str, kind: str, message: str):
+    budget = "hourly call budget exhausted" in str(message).lower()
+    store.defer_research_job(
+        con, item["url_hash"], stage, kind or "infrastructure", message,
+        delay_seconds=300, consume_attempt=not budget,
+    )
+    store.record_pipeline_event(
+        con, item.get("_run_id", ""), item["url_hash"], "research_deferred",
+        item.get("story_key"), "infrastructure", {"stage": stage, "error_kind": kind},
+    )
+    _finish_actions(con, item, "blocked", f"research retry failed: {message}")
+    item["_research_deferred"] = True
     result["held"] += 1
 
 
@@ -102,8 +118,17 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     from . import verify
 
     run_started = time.time()
-    items = (sources.fetch_feeds() + sources.fetch_edgar()
-             + sources.fetch_perception() + sources.fetch_x(con))
+    pipeline_run_id = f"cycle:{int(run_started)}:{lease_owner[:8]}"
+    node_result = node_discovery.ingest(con)
+    item_groups = (
+        ("rss", sources.fetch_feeds()),
+        ("edgar", sources.fetch_edgar()),
+        ("perception", sources.fetch_perception()),
+        ("x", sources.fetch_x(con)),
+    )
+    items = []
+    for origin, group in item_groups:
+        items.extend({**item, "discovery_origin": origin} for item in group)
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
         raise RuntimeError("cycle lease lost after fetch")
     inserted = store.upsert_new_items(con, items)
@@ -130,16 +155,51 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             store.set_status(con, it["url_hash"], "skipped", None, "non-English source")
             continue
         it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
+        it["_run_id"] = pipeline_run_id
         fresh.append(it)
-    result = {"fetched": len(items), "new": len(inserted), "considered": len(pending),
-              "pending": len(fresh),
+    retry_verdicts = []
+    for job in store.claim_due_research_jobs(con, limit=2):
+        try:
+            retry = json.loads(job["context_json"])
+        except (TypeError, ValueError):
+            store.defer_research_job(
+                con, job["item_hash"], "source_fetch", "invalid_context",
+                "saved research context is invalid")
+            continue
+        if not isinstance(retry, dict) or retry.get("url_hash") != job["item_hash"]:
+            store.defer_research_job(
+                con, job["item_hash"], "source_fetch", "invalid_context",
+                "saved research context does not match item")
+            continue
+        retry.update({
+            "_research_retry": True,
+            "_manual_draft_only": bool(job["manual_draft_only"]),
+            "_run_id": pipeline_run_id,
+        })
+        action = store.pending_retry_action(con, retry["url_hash"])
+        if action:
+            store.start_operator_action(con, action["id"])
+            retry["_operator_action_id"] = action["id"]
+            retry["_operator_gate"] = "research"
+        retry_verdicts.append(retry)
+    node_summary = {
+        key: node_result[key] for key in (
+            "attempted", "reason", "run_id", "consumed", "inserted", "deduped", "error"
+        ) if key in node_result
+    }
+    result = {"fetched": len(items) + int(node_result.get("inserted", 0)),
+              "new": len(inserted) + int(node_result.get("inserted", 0)),
+              "node": node_summary, "considered": len(pending) + len(retry_verdicts),
+              "pending": len(fresh) + len(retry_verdicts),
               "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
               "failed": 0, "taped": 0, "policy_held": 0}
-    if not fresh:
+    if not fresh and not retry_verdicts:
         store.record_decision_run(con, pending, [], result, run_started)
         return result
 
-    verdicts = brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
+    verdicts = (brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
+                if fresh else [])
+    verdicts.extend(retry_verdicts)
     for item in verdicts:
         action = overrides.get(item["url_hash"])
         if not action:
@@ -170,7 +230,18 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         if action == "update" and not store.story_reader_covered(con, story_key):
             continue
         item["_coverage_action"] = action
+        if not item.get("_research_retry"):
+            store.start_research_job(con, item, pipeline_run_id)
+        store.record_pipeline_event(
+            con, pipeline_run_id, item["url_hash"], "research_started", story_key,
+            "infrastructure", {"retry": bool(item.get("_research_retry"))},
+        )
         fetched = sources.fetch_article(item["url"])
+        if fetched.get("outcome") == "infrastructure_retryable":
+            _defer_research(
+                con, item, result, "source_fetch", fetched.get("error_kind", ""),
+                fetched.get("error_message") or "source fetch failed")
+            continue
         text = fetched["text"]
         item["_final_url"] = fetched["final_url"]
         item["_canonical_url"] = fetched["canonical_url"]
@@ -179,6 +250,11 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         resolution = verify.resolve_source(
             item, text, con=con, use_persisted=not bool(_action_ids(item)),
             force_refresh=bool(_action_ids(item)))
+        if resolution.outcome == "infrastructure_retryable":
+            _defer_research(
+                con, item, result, "source_resolution", resolution.error_kind,
+                resolution.note)
+            continue
         resolutions[item["url_hash"]] = resolution
         store.persist_resolution(con, resolution, config.SOURCE_POLICY_MODE)
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
@@ -188,6 +264,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     provider_cache = {}
     for item in verdicts:
         action, story_key = item.get("action", "skip"), item.get("story_key")
+        if item.get("_research_deferred"):
+            continue
         if action not in ("draft", "update"):
             status = "skipped" if action == "skip" else "held"
             store.set_status(con, item["url_hash"], status, story_key, item.get("reason"))
@@ -196,6 +274,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             continue
         if action == "draft" and store.story_handled(con, story_key):
             store.set_status(con, item["url_hash"], "skipped", story_key, "story already handled")
+            store.finish_research_job(con, item["url_hash"])
             _finish_actions(con, item, "blocked", "story already handled")
             continue
         if action == "update" and not store.story_reader_covered(con, story_key):
@@ -230,6 +309,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             draft = brain.draft(effective, article_text, handles, already_covered=covered)
         except Exception as exc:  # noqa: BLE001
             store.set_status(con, item["url_hash"], "error", story_key, str(exc)[:200])
+            store.finish_research_job(con, item["url_hash"])
             _finish_actions(con, item, "blocked", f"writer error: {exc}")
             continue
         post = draft.get("post")
@@ -316,9 +396,10 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             item, resolution = candidate["item"], candidate["resolution"]
             effective, article_text = candidate["effective"], candidate["article_text"]
             draft, post = candidate["draft"], candidate["post"]
-            if (store.event_is_stale(draft.get("event_date"), config.max_event_age_hours())
+            freshness_date = draft.get("disclosure_date") or draft.get("event_date")
+            if (store.event_is_stale(freshness_date, config.max_event_age_hours())
                     and not _override_allows(item, "freshness")):
-                _hold(con, item, result, f"stale event: dated {draft['event_date']}, window "
+                _hold(con, item, result, f"stale event: dated {freshness_date}, window "
                       f"{config.max_event_age_hours():g}h")
                 continue
             if (store.event_is_stale(resolution.earliest_coverage_date,
@@ -399,6 +480,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         for superseded in ready[1:]:
             store.set_status(con, superseded["item"]["url_hash"], "skipped", story_key,
                              "stronger final receipt selected")
+            store.finish_research_job(con, superseded["item"]["url_hash"])
         item, resolution = chosen["item"], chosen["resolution"]
         item["_operator_action_ids"] = group_action_ids
         item["_operator_gates"] = group_gates
@@ -453,9 +535,10 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         store.log_post(con, story_key, item["url_hash"], klass, post, receipt_url, mode,
                        publisher_ref, editor_note=editor_note, resolution_id=item["url_hash"],
                        publisher_backend=publisher_backend)
+        store.finish_research_job(con, item["url_hash"])
         _finish_actions(con, item, "completed", f"delivery result: {mode}")
         result[counter] += 1
-    store.record_decision_run(con, pending, verdicts, result, run_started)
+    store.record_decision_run(con, pending + retry_verdicts, verdicts, result, run_started)
     return result
 
 

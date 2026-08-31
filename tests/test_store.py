@@ -20,6 +20,62 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(len(first), 1)
             self.assertEqual(second, [])
 
+    def test_canonical_discovery_key_preserves_global_ipv6_syntax(self):
+        self.assertEqual(
+            store.canonical_discovery_key("https://[2606:4700:4700::1111]:443/a"),
+            "https://[2606:4700:4700::1111]/a",
+        )
+
+    def test_research_job_gets_one_automatic_retry(self):
+        with temporary_store() as con:
+            row = store.upsert_new_items(con, [item()])[0]
+            decision = {**row, "story_key": "research-story", "action": "draft",
+                        "class": "secondary", "reason": "material Bitcoin news"}
+            first = store.start_research_job(con, decision, "run-1")
+            self.assertEqual((first["state"], first["attempts"]), ("processing", 1))
+            store.defer_research_job(
+                con, row["url_hash"], "source_resolution", "timeout", "search timed out",
+                delay_seconds=1)
+            due = store.claim_due_research_jobs(con, now=time.time() + 2)
+            self.assertEqual(len(due), 1)
+            self.assertEqual((due[0]["state"], due[0]["attempts"]), ("processing", 2))
+            store.defer_research_job(
+                con, row["url_hash"], "source_resolution", "timeout", "search timed out")
+            final = con.execute(
+                "SELECT state,attempts FROM research_jobs WHERE item_hash=?", (row["url_hash"],)
+            ).fetchone()
+            self.assertEqual((final["state"], final["attempts"]), ("exhausted", 2))
+
+    def test_budget_deferral_does_not_consume_research_attempt(self):
+        with temporary_store() as con:
+            row = store.upsert_new_items(con, [item()])[0]
+            decision = {**row, "story_key": "budget-story", "action": "draft",
+                        "class": "secondary", "reason": "material Bitcoin news"}
+            store.start_research_job(con, decision, "run-1")
+            store.defer_research_job(
+                con, row["url_hash"], "source_resolution", "budget", "budget exhausted",
+                consume_attempt=False)
+            saved = con.execute(
+                "SELECT state,attempts FROM research_jobs WHERE item_hash=?", (row["url_hash"],)
+            ).fetchone()
+            self.assertEqual((saved["state"], saved["attempts"]), ("pending", 0))
+
+    def test_owner_can_retry_only_infrastructure_job_and_forces_draft(self):
+        with temporary_store() as con:
+            row = store.upsert_new_items(con, [item()])[0]
+            decision = {**row, "story_key": "manual-research", "action": "draft",
+                        "class": "secondary", "reason": "material Bitcoin news"}
+            store.start_research_job(con, decision, "run-1")
+            store.defer_research_job(
+                con, row["url_hash"], "source_fetch", "timeout", "source timed out")
+            outcome = store.request_operator_action(con, row["url_hash"], "retry")
+            self.assertTrue(outcome["ok"])
+            job = con.execute(
+                "SELECT state,manual_draft_only FROM research_jobs WHERE item_hash=?",
+                (row["url_hash"],),
+            ).fetchone()
+            self.assertEqual((job["state"], job["manual_draft_only"]), ("pending", 1))
+
     def test_operator_stage_is_guarded_and_audited(self):
         with temporary_store() as con:
             row = store.upsert_new_items(con, [item()])[0]

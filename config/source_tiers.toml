@@ -227,6 +227,57 @@ domains = ["mempool.space"]
 aliases = ["mempool.space", "mempool"]
 handles = ["mempool"]
 
+# Named official identities that require exact ownership/provenance. These entries are
+# intentionally separate from the broad official watch roster.
+[[sources]]
+id = "strategy"
+display_name = "Strategy"
+tier = "p0"
+category = "authority"
+independence_key = "strategy"
+ownership_key = "strategy"
+receipt_role = "official"
+domains = ["strategy.com"]
+aliases = ["strategy", "microstrategy"]
+handles = ["Strategy"]
+
+[[sources]]
+id = "strive"
+display_name = "Strive"
+tier = "p0"
+category = "authority"
+independence_key = "strive"
+ownership_key = "strive"
+receipt_role = "official"
+domains = ["strive.com"]
+aliases = ["strive"]
+handles = ["Strive"]
+
+[[sources]]
+id = "metaplanet"
+display_name = "Metaplanet"
+tier = "p0"
+category = "authority"
+independence_key = "metaplanet"
+ownership_key = "metaplanet"
+receipt_role = "official"
+domains = ["metaplanet.jp"]
+aliases = ["metaplanet"]
+handles = ["Metaplanet_JP"]
+
+[[sources]]
+id = "core-lightning"
+display_name = "Core Lightning"
+tier = "p0"
+category = "technical"
+independence_key = "core-lightning"
+ownership_key = "core-lightning"
+receipt_role = "official"
+domains = ["corelightning.org"]
+url_prefixes = ["https://github.com/ElementsProject/lightning"]
+aliases = ["core lightning", "c-lightning", "cln"]
+handles = ["Core_LN"]
+
 # Known official X accounts are P0 only for statements about their own actions.
 [[sources]]
 id = "official-x-watch"
@@ -237,8 +288,8 @@ independence_key = "official-x-account"
 receipt_role = "official"
 domains = []
 aliases = []
-handles = ["SenLummis", "RepTomEmmer", "BitGo", "NYDIG", "coinbase", "Strategy", "galaxyhq", "BlackRock", "DigitalAssets", "BitwiseInvest", "Grayscale", "River", "Strike", "unchainedcom", "CasaHODL", "Swan"]
-handle_ownership = { SenLummis = "us-congress", RepTomEmmer = "us-congress", BitGo = "bitgo", NYDIG = "nydig", coinbase = "coinbase", Strategy = "strategy", galaxyhq = "galaxy", BlackRock = "blackrock", DigitalAssets = "fidelity", BitwiseInvest = "bitwise", Grayscale = "grayscale", River = "river", Strike = "strike", unchainedcom = "unchained-company", CasaHODL = "casa", Swan = "swan" }
+handles = ["SenLummis", "RepTomEmmer", "BitGo", "NYDIG", "coinbase", "galaxyhq", "BlackRock", "DigitalAssets", "BitwiseInvest", "Grayscale", "River", "Strike", "unchainedcom", "CasaHODL", "Swan"]
+handle_ownership = { SenLummis = "us-congress", RepTomEmmer = "us-congress", BitGo = "bitgo", NYDIG = "nydig", coinbase = "coinbase", galaxyhq = "galaxy", BlackRock = "blackrock", DigitalAssets = "fidelity", BitwiseInvest = "bitwise", Grayscale = "grayscale", River = "river", Strike = "strike", unchainedcom = "unchained-company", CasaHODL = "casa", Swan = "swan" }
 
 # Tier 1: premier reporting.
 [[sources]]

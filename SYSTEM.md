@@ -47,6 +47,19 @@ yesterday — corporate Bitcoin news before journalists write it. Free, unmetere
 Marketing Node (one key per Perception account) — the interval is a budget decision;
 `/feed` 429s in either system's logs mean widen `NBN_PERCEPTION_POLL_SECONDS` first.
 
+**Marketing Node curated discovery (5 min, UTC-day run):** NBN consumes the Node's
+authenticated `/api/daily-intel/wire-candidates/by-date/{date}` projection. It is a
+bounded, ordered list of source links from `DailyBrief.more_reads`, plus theme/must-know
+context. A valid accepted/partial run is consumed exactly once, including a zero-item
+run; malformed candidates are skipped individually. The two projects remain separate
+codebases and databases. The API is their explicit contract.
+
+Node prose is discovery context, never source evidence. It is stored separately from an
+item summary, labeled `detector_context_untrusted`, and shown only to triage. It never
+reaches source resolution, Writer, claim checks, lint, or Editor. NBN independently
+DNS-checks each public URL and verifies the Node's deterministic candidate ID before
+ingestion.
+
 **X recent-search (3 min), `since_id`-gated** — critical: X bills ~$0.005 per post
 *returned*, and search re-returns matches unless you ask for "only new"; quiet polls
 cost zero. Three tiers:
@@ -65,7 +78,9 @@ and the self-audit.
 
 ## 2. Intake gates (deterministic, pre-model)
 
-- URL-hash dedup — an item is examined once, ever.
+- Canonical URL dedup across RSS, X, Perception, EDGAR, and Node (tracking parameters
+  removed; meaningful query parameters preserved) — first-ingestion provenance is
+  immutable and an item is examined once, ever.
 - **Freshness** tracks the news metabolism: 2.5h during weekday 7am-7pm ET, 6h
   overnight/weekends (`NBN_MAX_AGE_HOURS_*`; a set `NBN_MAX_AGE_HOURS` overrides with
   one fixed value). EDGAR exempt (date-only stamps; its query bounds age instead).
@@ -86,6 +101,18 @@ sentiment or narrative framing. Forecasts, price targets, trading advice, unsupp
 causal stories, and context-free price ticks still skip. A relevant official post linking
 only to a speech, hearing, release, or video advances to source resolution so the wire can
 find prepared remarks or a transcript; missing feed copy is not itself a rejection.
+
+Measured Bitcoin reaction to a named event can qualify when the measurements are
+verifiable and the copy avoids speculative causality. Multi-asset policy or infrastructure
+news qualifies only when Bitcoin is materially affected and can be covered without token
+market reporting.
+
+Treasury-company intake is deliberately narrow: Strategy, Strive, and Metaplanet are the
+only routine candidates, but the allowlist is not approval. Strategy buys generally clear
+the materiality bar because the category leader moves the market; ordinary recurring buys,
+rankings, and stock-price reactions from Strive or Metaplanet skip absent a consequential
+development. Their official identities, plus Core Lightning's, have exact standalone P0
+registry entries rather than relying on a shared social identity.
 
 `update` is a separate machine-readable triage action. It is valid only for a material
 development matching an exact reader-covered story key. Ordinary `draft` on an already
@@ -128,11 +155,21 @@ vetoes `primary` on anything else. Every candidate for one exact story key finis
 and provider resolution before the strongest final receipt is chosen, so feed order cannot
 change the receipt or class and the worker emits at most one post per story group.
 
+Actionable triage decisions are frozen into a durable `research_jobs` record before the
+first external fetch. A timeout, transport error, rate limit, 5xx, or source-search outage
+is an infrastructure outcome—not an editorial rejection—and receives exactly one later
+automatic retry (at most two due jobs per cycle). A crash-held claim is recovered after
+its lease; LLM budget exhaustion delays work without consuming an attempt. Definitive
+unsafe/4xx/no-evidence outcomes remain normal editorial holds. Provider-substitution
+failures remain terminal in this release rather than creating an unbounded retry graph.
+
 ## 4. Writing
 
 Sonnet 5 drafts from the FETCHED article text under the charter
 (`prompts/wire_voice.md`; compiled reference `PROMPTS.md`). The load-bearing seams:
 - Every number must appear verbatim in the fetched source text; no text → no post.
+- Freshness distinguishes a report's fresh `disclosure_date` from its older
+  `underlying_period_end`; the latter must be stated as historical context.
 - The model never writes URLs — the system appends the verified receipt (the
   anti-fabrication seam).
 - If the wire already covered the story, drafting receives `already_covered` — lead
@@ -208,7 +245,7 @@ CORRECTION draft (never publish). Results in the Desk.
 ## 10. Operating it — the Desk and the switches
 
 **The Desk** (`/report?k=<token>`, bookmark in `DESK-REPORT-URL.txt`): Claude-Design
-"Filed, action-first" UI. Status strip (worker and publisher-sync age, model seats,
+"Filed, action-first" UI. Status strip (worker, publisher-sync, and Node-intel age, model seats,
 freshness window, autopost) → **Needs You** (verb-led cards: AWAITING PUBLICATION /
 VERIFY ON TYPEFULLY / X / PUBLISH FAILED /
 TAPE ONLY / AGREE OR OVERRULE / AUDIT FLAG, each with a `dismiss ✓` that records
@@ -229,6 +266,11 @@ still hold it. **Dismiss** moves any held item to skipped with an `owner dismiss
 reason. Both actions are persisted in `operator_actions`; neither deletes the decision
 history. Source-policy and thin-source holds deliberately have no Stage button because
 they do not yet have reliable material to draft from.
+
+Infrastructure research holds instead offer **Retry research → draft**. This control is
+available only for a persisted retryable research job; it reruns the full fetch → source
+resolution → Writer → lint → Editor path and always forces Typefully DRAFT. Dismiss also
+cancels any pending research job.
 
 Desk counters deliberately do not form one equation; they use two units and two date
 axes:
@@ -283,7 +325,8 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_PERCEPTION_API_KEY` / `NBN_PERCEPTION_POLL_SECONDS` | set (shared) / `900` | Perception source |
 | `NBN_MODEL` / `NBN_TRIAGE_MODEL` | `claude-sonnet-5` | writer + triage (effort = API default high) |
 | `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | the editor seat |
-| `NBN_NODE_READ_TOKEN` / `NBN_BRIEFING_UTC` | set / `14:40,Morning;21:15,Afternoon` | the Blocks |
+| `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | curated one-off discovery + Blocks |
+| `NBN_BRIEFING_UTC` | `14:40,Morning;21:15,Afternoon` | Block schedule |
 | `NBN_AUDIT_UTC` | `09:00` | self-audit |
 | `NBN_REPORT_TOKEN` | set | Desk access (rotate to invalidate the bookmark) |
 | `NBN_HEARTBEAT_URL` | set | dead-man's switch |
@@ -302,9 +345,11 @@ Run rate ≈ **$100-180/mo all-in**.
 
 | Failure | Behavior | Where seen |
 |---|---|---|
-| Feed down / fetch blocked / paywall | held "thin source"; other feeds unaffected | Desk holds, logs |
+| Transient fetch/search outage | one durable automatic retry, then infrastructure hold with manual retry control | Desk holds, logs |
+| Definitive fetch block / paywall / no evidence | held as source/thin-source; other feeds unaffected | Desk holds, logs |
 | Typefully confirmation is ambiguous | stored `UNCERTAIN`; no second create | Needs You (VERIFY ON TYPEFULLY / X) |
 | Typefully definitively fails | stored `FAILED`; URL fallback only on the known definitive policy rejection | Needs You (PUBLISH FAILED), logs |
+| Node discovery unavailable | intake continues from all other sources; status pill turns red; throttle prevents hammering | Desk, logs |
 | Node brief unavailable at Block time | Block skipped with a warning | logs |
 | Out-of-charter copy | lint holds after one retry | Desk holds ("Style gate") |
 | Contextual dup / weak value | editor spikes with reasoning | Needs You (AGREE OR OVERRULE) |
