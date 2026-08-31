@@ -51,14 +51,18 @@ def _json_from(response, lenient_draft: bool = False) -> dict:
     if response.stop_reason == "refusal":
         raise RuntimeError(f"model refused: {response.stop_details}")
     text = "".join(b.text for b in response.content if b.type == "text")
-    match = re.search(r"\{.*\}|\[.*\]", text, re.DOTALL)
-    if not match:
-        if lenient_draft:
-            # A prose non-answer from the drafting call = "no post" — degrade to a
-            # clean hold ("thin source") instead of an exception in the retry path.
-            return {"post": None, "needs_second_source": False}
-        raise ValueError(f"no JSON in response: {text[:200]}")
-    return json.loads(match.group(0))
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"[\[{]", text):
+        try:
+            value, _ = decoder.raw_decode(text[match.start():])
+            return value
+        except json.JSONDecodeError:
+            continue
+    if lenient_draft:
+        # A prose non-answer from the drafting call = "no post" — degrade to a
+        # clean hold ("thin source") instead of an exception in the retry path.
+        return {"post": None, "needs_second_source": False}
+    raise ValueError(f"no JSON in response: {text[:200]}")
 
 
 TRIAGE_SYSTEM = f"""You are the intake editor for Next Block News, a Bitcoin news wire on X.
