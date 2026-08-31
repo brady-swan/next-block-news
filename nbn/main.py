@@ -463,16 +463,16 @@ def run():
         try:
             STATE["last_cycle"] = worker_iteration(con)
             STATE["cycles"] += 1
-            STATE["last_cycle_ts"] = time.time()
-            STATE["last_error"] = None
             if not STATE["last_cycle"].get("skipped_locked"):
+                STATE["last_cycle_ts"] = time.time()
+                STATE["last_error"] = None
                 store.kv_set(con, "worker:last_success", str(STATE["last_cycle_ts"]))
-            if config.HEARTBEAT_URL:
-                try:
-                    import httpx
-                    httpx.get(config.HEARTBEAT_URL, timeout=5)
-                except Exception:  # noqa: BLE001 - heartbeat failure never breaks news
-                    pass
+                if config.HEARTBEAT_URL:
+                    try:
+                        import httpx
+                        httpx.get(config.HEARTBEAT_URL, timeout=5)
+                    except Exception:  # noqa: BLE001 - heartbeat failure never breaks news
+                        pass
         except Exception as exc:  # noqa: BLE001 - the loop survives everything
             STATE["last_error"] = str(exc)[:300]
             log.exception("cycle failed")
