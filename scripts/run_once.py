@@ -1,4 +1,4 @@
-"""One full cycle, locally. Safe: with no Nuelink config everything lands in data/tapes/."""
+"""Run one local cycle. With no publishing credentials, output stays in data/tapes/."""
 import logging, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

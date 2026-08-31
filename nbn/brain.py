@@ -67,14 +67,17 @@ TRIAGE_SYSTEM = f"""You are the intake editor for Next Block News, a Bitcoin new
 
 You receive a batch of new feed items (title + summary + source) and the story keys already
 covered recently. For EACH item decide:
-- action: "draft" (in scope, newsworthy, not already covered), "skip" (out of scope, promo,
-  opinion, altcoin-primary, duplicate of a recent story key), or "hold" (in scope but
-  single-source rumor / unverifiable — worth watching, not drafting).
+- action: "draft" (in scope, newsworthy, first coverage), "update" (ONLY a material new
+  development to an exact posted_story_keys story), "skip" (out of scope, promo, opinion,
+  altcoin-primary, duplicate/no-new-development), or "hold" (in scope but single-source
+  rumor / unverifiable — worth watching, not drafting).
 - story_key: a short kebab-case key identifying the underlying STORY (two outlets covering
   the same event must get the same key). You receive two key lists: an item matching a
-  "posted_story_keys" entry is already covered — action skip, reuse that key. An item
-  matching an "open_story_keys" entry is NOT yet covered — do NOT skip for that reason;
-  REUSE that exact key (a second outlet on an open story is what confirms it).
+  "posted_story_keys" entry is already reader-covered: normally action skip, but use
+  action update and REUSE that exact key when the item adds a genuinely material new
+  development. An item matching an "open_story_keys" entry is NOT yet reader-covered —
+  do NOT use update; REUSE that exact key for draft (a second outlet on an open story is
+  what confirms it).
 - class: "primary" (item IS an official source: Fed/SEC/Treasury release, filing, official
   account), "secondary" (press reporting), or "data" (pure market/chain data point).
 - reason: five words max.

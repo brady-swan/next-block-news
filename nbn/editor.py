@@ -56,13 +56,15 @@ def review(post: str, item: dict, con) -> dict:
     """Returns {'verdict', 'post', 'reason'}; fails open to publish-as-is on errors."""
     from . import brain
     recent = con.execute(
-        "SELECT body, class, created FROM posts WHERE mode IN ('IMMEDIATE','DRAFT')"
+        "SELECT body, class, created FROM posts"
+        " WHERE mode IN ('IMMEDIATE','DRAFT','UNCERTAIN')"
         " ORDER BY created DESC LIMIT 10").fetchall()
     feed = [{"hours_ago": round((time.time() - r["created"]) / 3600, 1),
              "class": r["class"], "post": r["body"][:500]} for r in recent]
     payload = {
         "candidate_post": post,
         "class": item.get("class"),
+        "coverage_action": item.get("_coverage_action", "draft"),
         "source": item.get("source"),
         # For X-sourced items the title IS the original post's text — the editor needs
         # it to judge whether our copy merely restates what the reader already sees.

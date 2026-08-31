@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS items (
   url_hash TEXT PRIMARY KEY,
   source TEXT, title TEXT, url TEXT, published_at TEXT,
-  first_seen REAL, status TEXT DEFAULT 'new',   -- new|skipped|held|drafted|posted|error
+  first_seen REAL, status TEXT DEFAULT 'new',
+  -- new|skipped|held|drafted|posted|uncertain|failed|taped|error
   story_key TEXT, note TEXT
 );
 CREATE TABLE IF NOT EXISTS posts (
@@ -69,7 +70,7 @@ def upsert_new_items(con, items) -> list:
     return fresh
 
 
-def current_max_age_hours() -> float:
+def current_max_age_hours(now=None) -> float:
     """Freshness window tracks the news metabolism (Brady 2026-08-30): 2.5h during the
     weekday active cycle (7am-7pm ET), 6h overnight and on weekends. A fixed
     NBN_MAX_AGE_HOURS overrides the schedule entirely if set."""
@@ -82,7 +83,8 @@ def current_max_age_hours() -> float:
     quiet = float(os.environ.get("NBN_MAX_AGE_HOURS_QUIET", "6"))
     try:
         from zoneinfo import ZoneInfo
-        now_et = datetime.datetime.now(ZoneInfo("America/New_York"))
+        now_et = (now.astimezone(ZoneInfo("America/New_York")) if now is not None
+                  else datetime.datetime.now(ZoneInfo("America/New_York")))
     except Exception:  # noqa: BLE001 - missing tzdata must not kill intake
         return quiet
     if now_et.weekday() < 5 and 7 <= now_et.hour < 19:
@@ -90,7 +92,7 @@ def current_max_age_hours() -> float:
     return quiet
 
 
-def is_stale(published: str, max_age_hours: float = None) -> bool:
+def is_stale(published: str, max_age_hours: float = None, now=None) -> bool:
     """Deterministic freshness gate: a wire never posts old news as NEW.
 
     Unparseable dates pass through (triage judges them); parsed-and-old is skipped.
@@ -111,7 +113,10 @@ def is_stale(published: str, max_age_hours: float = None) -> bool:
             return False
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
-    age = datetime.datetime.now(datetime.timezone.utc) - dt
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=datetime.timezone.utc)
+    age = current.astimezone(datetime.timezone.utc) - dt
     return age.total_seconds() > max_age_hours * 3600
 
 
@@ -126,7 +131,7 @@ def is_non_english(title: str) -> bool:
     return non_latin / len(letters) > 0.3
 
 
-def event_is_stale(date_str, max_hours: float) -> bool:
+def event_is_stale(date_str, max_hours: float, now=None) -> bool:
     """True when a model-extracted event/coverage date (YYYY-MM-DD) is older than the
     event window. Unparseable/null passes (the article-date gate already ran)."""
     import datetime
@@ -136,7 +141,10 @@ def event_is_stale(date_str, max_hours: float) -> bool:
         d = datetime.date.fromisoformat(str(date_str)[:10])
     except ValueError:
         return False
-    age = (datetime.datetime.now(datetime.timezone.utc)
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=datetime.timezone.utc)
+    age = (current.astimezone(datetime.timezone.utc)
            - datetime.datetime(d.year, d.month, d.day, tzinfo=datetime.timezone.utc))
     # Date-only precision: measure from end of the event's day so a same-day or
     # yesterday event is never falsely stale.
@@ -154,9 +162,10 @@ def pending_items(con, limit: int) -> list:
 
 
 def recent_story_keys(con, days: float = 3.0) -> list:
-    """Story keys already POSTED (triage skips duplicates of these)."""
+    """Story keys readers saw or may have seen (authorizes UPDATE handling)."""
     rows = con.execute(
-        "SELECT DISTINCT story_key FROM posts WHERE created > ? ORDER BY created DESC LIMIT 100",
+        "SELECT DISTINCT story_key FROM posts WHERE created > ?"
+        " AND mode IN ('IMMEDIATE','UNCERTAIN') ORDER BY created DESC LIMIT 100",
         (time.time() - days * 86400,),
     ).fetchall()
     return [r["story_key"] for r in rows if r["story_key"]]
@@ -201,7 +210,28 @@ def corroboration_count(con, story_key: str) -> int:
     return row["n"]
 
 
-def story_already_posted(con, story_key: str) -> bool:
+def story_reader_covered(con, story_key: str) -> bool:
+    """True only when readers saw, or may have seen, this exact story."""
+    if not story_key:
+        return False
+    return con.execute(
+        "SELECT 1 FROM posts WHERE story_key=? AND mode IN ('IMMEDIATE','UNCERTAIN') LIMIT 1",
+        (story_key,),
+    ).fetchone() is not None
+
+
+def story_handled(con, story_key: str) -> bool:
+    """True when an exact story is already published, uncertain, or queued as a draft."""
+    if not story_key:
+        return False
+    return con.execute(
+        "SELECT 1 FROM posts WHERE story_key=?"
+        " AND mode IN ('IMMEDIATE','DRAFT','UNCERTAIN') LIMIT 1", (story_key,)
+    ).fetchone() is not None
+
+
+def story_produced(con, story_key: str) -> bool:
+    """True for any recorded output; used for one-shot jobs such as briefing windows."""
     if not story_key:
         return False
     return con.execute(
@@ -217,12 +247,13 @@ def set_status(con, url_hash_: str, status: str, story_key: str = None, note: st
     con.commit()
 
 
-def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, nuelink_id=None,
+def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, publisher_ref=None,
              editor_note=None):
+    """Record a produced post. nuelink_id is the legacy schema name for any backend ref."""
     con.execute(
         "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
         " nuelink_id, editor_note) VALUES (?,?,?,?,?,?,?,?,?)",
-        (time.time(), story_key, item_hash, klass, body, receipt_url, mode, nuelink_id,
+        (time.time(), story_key, item_hash, klass, body, receipt_url, mode, publisher_ref,
          editor_note),
     )
     con.commit()
@@ -246,12 +277,22 @@ def day_summary(con, day_str: str) -> dict:
     drafts = con.execute(
         "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='DRAFT'",
         (s, e)).fetchone()["n"]
+    uncertain = con.execute(
+        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='UNCERTAIN'",
+        (s, e)).fetchone()["n"]
+    failed = con.execute(
+        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='FAILED'",
+        (s, e)).fetchone()["n"]
+    tape = con.execute(
+        "SELECT COUNT(*) n FROM posts WHERE created>=? AND created<? AND mode='TAPE'",
+        (s, e)).fetchone()["n"]
     held = con.execute(
         "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<? AND status='held'",
         (s, e)).fetchone()["n"]
     seen = con.execute(
         "SELECT COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<?", (s, e)).fetchone()["n"]
-    return {"published": posts, "drafts": drafts, "held": held, "seen": seen}
+    return {"published": posts, "drafts": drafts, "uncertain": uncertain,
+            "failed": failed, "tape": tape, "held": held, "seen": seen}
 
 
 def status_summary(con) -> dict:

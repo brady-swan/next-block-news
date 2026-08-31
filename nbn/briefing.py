@@ -147,7 +147,7 @@ def maybe_run(con) -> bool:
         if not (fire <= now < fire + datetime.timedelta(minutes=30)):
             continue
         key = f"briefing:{now:%Y-%m-%d}:{title.lower()}"
-        if store.story_already_posted(con, key):
+        if store.story_produced(con, key):
             continue
         payload = fetch_brief()
         if not payload:

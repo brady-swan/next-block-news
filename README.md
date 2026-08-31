@@ -1,52 +1,91 @@
 # Next Block News
 
-Always-on Bitcoin news wire worker. Watches primary sources and Bitcoin/finance feeds, classifies new items, drafts wire-format posts with Claude, runs deterministic gates, and stages them to Nuelink (DRAFT by default; class-based autopost when enabled).
+Autonomous Bitcoin news wire for X at `@nextblocknews_`. A single Python worker watches
+primary sources, press feeds, Perception, and selected X accounts; classifies new items;
+drafts wire-format posts with Claude; applies deterministic and editorial gates; and
+publishes eligible stories through Typefully.
 
-**Charter:** `prompts/wire_voice.md`. Full project plan: `~/claude/bitcoin-news-handle-plan.md` (private).
+This project is independent and is not Swan-affiliated. The wire's editorial source of
+truth is `prompts/wire_voice.md`; the complete owner's manual is `SYSTEM.md`.
 
-## Architecture
+## Pipeline
 
+```text
+poll sources -> intake gates -> triage -> corroborate -> draft -> lint -> editor -> publish
 ```
-sources.py   RSS pollers (Fed, SEC, CoinDesk, The Block, Bloomberg, ...) + optional X recent-search
-store.py     SQLite state: seen items, story-level dedup, post log
-brain.py     Claude: triage (draft/hold/skip + story key + class) then wire-format drafting
-lint.py      Deterministic gates: banned patterns, mention whitelist, receipt-URL integrity
-publisher.py Nuelink REST (DRAFT default / IMMEDIATE per class policy) + daily tape file
-main.py      Poll loop + healthcheck server
-```
 
-**Affiliation note:** this project is NOT Swan-affiliated content. Swan's brand rulebook
-and compliance posture do not bind the wire; do not port Swan rules in. The gates below
-exist because they ARE the wire's product (accuracy, neutrality, receipts), not as
-compliance inheritance.
+| Module | Responsibility |
+|---|---|
+| `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
+| `nbn/store.py` | SQLite URL/story deduplication, item state, post log, runtime key/value state |
+| `nbn/brain.py` | Claude triage and single-post drafting |
+| `nbn/verify.py` | Independent web corroboration with deterministic domain checks |
+| `nbn/lint.py` | Scope, style, mention, URL, attribution, and number-integrity vetoes |
+| `nbn/editor.py` | Last-mile reader-value and feed-context judgment for autonomous posts |
+| `nbn/publisher.py` | Typefully-first output routing plus the daily tape |
+| `nbn/briefing.py` | Weekday Morning and Afternoon Block threads |
+| `nbn/audit.py` | Daily receipt and class audit; stages material correction drafts |
+| `nbn/report.py` | Token-protected Desk report |
+| `nbn/main.py` | Poll loop, orchestration, health/status HTTP server |
 
-Safety invariants (do not weaken):
-- The model never supplies a URL. Receipts come from the feed item's own link.
-- Mentions only from `handles.json` (every handle manually verified against the live profile).
-- Numbers in a draft must appear in the fetched source text or the draft is held.
-- `AUTOPOST_ENABLED=false` means nothing ever publishes; everything stages as Nuelink DRAFT and lands in the tape file.
-- Corrections are posted, never deleted (the Nuelink API cannot delete anyway).
+## Safety invariants
+
+- `NBN_AUTOPOST_ENABLED=false` means nothing publishes automatically.
+- The default autopost classes are `primary` and `corroborated`; `secondary` is removed
+  from the allowed set in code even if supplied through the environment.
+- The model never supplies a receipt URL. The system attaches the source item's URL.
+- Every number in a post must appear in fetched source text.
+- Mentions are limited to the manually verified entries in `handles.json`.
+- Corrections are always staged for human review and never autopublish.
+- Every regular pipeline post is appended to a daily tape and recorded in SQLite.
+
+## Output modes
+
+Typefully is the deployed publishing rail. Autonomous posts are scheduled shortly ahead
+instead of using `publish_at: "now"`, because Typefully rejects immediate drafts that
+contain URLs. Posts that are not eligible for autonomy become Typefully drafts. With no
+publishing credentials, output is tape-only.
+
+Publishing outcomes are explicit: `IMMEDIATE` means Typefully confirmed publication;
+`DRAFT` means a human draft exists; `UNCERTAIN` means creation may have succeeded but
+confirmation was inconclusive; `FAILED` is a definite backend failure; and `TAPE` means
+no publishing backend was configured. An uncertain result is never retried automatically,
+because retrying a possibly accepted create could duplicate a live post.
+
+Nuelink remains as a legacy fallback for single posts, but it is not the preferred rail
+and cannot publish threads.
 
 ## Run locally
 
-```
-cp .env.example .env   # fill in keys
-python3 scripts/run_once.py          # one full cycle, dry
-python3 -m nbn.main                  # the loop
-```
-
-## Deploy (Railway)
-
-```
-railway login
-railway init            # new project: next-block-news
-railway volume add --mount-path /data
-railway up
+```bash
+cp .env.example .env
+python3 scripts/run_once.py
+python3 -m nbn.main
+python3 -m unittest discover -v
 ```
 
-Then set the `.env.example` variables in the Railway service settings. Healthcheck path: `/health`.
+Configuration is read from environment variables; the code does not automatically load
+`.env`. Defaults keep autopost disabled. Be careful when using `railway run`, which injects
+the production service environment.
 
-## Autopost policy
+The test package removes inherited credentials, forces autopost off, uses temporary data
+paths, and blocks real socket connections. HTTP, model, and publisher boundaries must be
+mocked in tests.
 
-`AUTOPOST_ENABLED=false` (default): everything is a Nuelink DRAFT + tape entry.
-`AUTOPOST_ENABLED=true`: items classified `primary` (official-source: Fed/SEC/Treasury/filings) and `data` posts publish IMMEDIATE with the receipt as delayed first comment; `secondary` (press reports) always stay DRAFT for human review. Flipping this on is governed by the standing rule in `~/claude/CLAUDE.md` — requires Brady's written, handle-scoped authorization.
+## Deploy
+
+The repository is linked to the Railway project and service `next-block-news` in the
+`production` environment. Deployment is manual:
+
+```bash
+railway status
+railway up --detach
+railway logs
+```
+
+The worker exposes `/health` and `/status`; both return runtime and database state, and
+health becomes HTTP 500 when the last completed cycle is more than ten minutes old. The
+Desk is available at `/report?k=<token>` when `NBN_REPORT_TOKEN` is configured.
+
+See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
+publishing behavior.

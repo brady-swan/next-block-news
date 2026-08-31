@@ -31,7 +31,8 @@ def cycle(con) -> dict:
         it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
         fresh.append(it)
     result = {"fetched": len(items), "new": len(inserted), "pending": len(fresh),
-              "drafted": 0, "held": 0, "posted": 0}
+              "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
+              "failed": 0, "taped": 0}
     if not fresh:
         return result
 
@@ -45,15 +46,25 @@ def cycle(con) -> dict:
 
     for item in verdicts:
         action = item.get("action", "skip")
-        if action == "draft" and store.story_already_posted(con, item.get("story_key")):
+        story_key = item.get("story_key")
+        if action == "draft" and store.story_handled(con, story_key):
             store.set_status(con, item["url_hash"], "skipped", item.get("story_key"),
-                             "story already posted")
+                             "story already handled")
             continue
-        if action != "draft":
-            store.set_status(con, item["url_hash"], "skipped" if action == "skip" else "held",
+        if action == "update" and not store.story_reader_covered(con, story_key):
+            store.set_status(con, item["url_hash"], "held", story_key,
+                             "update lacks exact reader-covered story")
+            result["held"] += 1
+            continue
+        if action not in ("draft", "update"):
+            status = "skipped" if action == "skip" else "held"
+            store.set_status(con, item["url_hash"], status,
                              item.get("story_key"), item.get("reason"))
-            result["held" if action == "hold" else "drafted"] += 0
+            if status == "held":
+                result["held"] += 1
             continue
+
+        item["_coverage_action"] = action
 
         # Detector tips (aggregator accounts) are never our source: hunt the primary
         # first, then draft from IT. The detector + confirming outlet = 2 distinct
@@ -75,12 +86,12 @@ def cycle(con) -> dict:
             item["source"] = v.get("confirming_outlet", "confirmed source")
 
         article_text = sources.fetch_article_text(item["url"])
-        # If the wire already published related coverage, the draft must lead with the
-        # NEW development, never re-announce (first seen live 2026-08-30: OCEAN follow-up
-        # re-broke the Dashjr exit 8h after our own debut post).
+        # Exact prior reader coverage authorizes UPDATE. Prefix-key matching is unsafe:
+        # unrelated keys can collide and drafts/tape output are not reader coverage.
         covered = [r["body"].split("\n")[0][:200] for r in con.execute(
-            "SELECT body FROM posts WHERE story_key=? OR story_key LIKE ? ORDER BY created DESC LIMIT 2",
-            (item.get("story_key"), "%" + (item.get("story_key") or "")[:12] + "%")).fetchall()]
+            "SELECT body FROM posts WHERE story_key=?"
+            " AND mode IN ('IMMEDIATE','UNCERTAIN') ORDER BY created DESC LIMIT 2",
+            (story_key,)).fetchall()]
         try:
             d = brain.draft(item, article_text, handles, already_covered=covered)
         except Exception as exc:  # noqa: BLE001
@@ -162,7 +173,8 @@ def cycle(con) -> dict:
             try:
                 d = brain.draft(item, src + "\n\n[Your previous draft was rejected by the "
                                 f"style gate for: {'; '.join(errors)}. Rewrite avoiding "
-                                "exactly those violations.]", handles)
+                                "exactly those violations.]", handles,
+                                already_covered=covered)
                 post = d.get("post")
                 errors = lint.check(post, {**d, "_source_text": src}, item) if post else ["empty retry"]
             except Exception as exc:  # noqa: BLE001
@@ -179,6 +191,7 @@ def cycle(con) -> dict:
         editor_note = None
         if config.AUTOPOST_ENABLED and klass in config.AUTOPOST_CLASSES:
             from . import editor
+            item["class"] = klass
             ed = editor.review(post, item, con)
             editor_note = f"{ed['verdict']}: {ed['reason']}"[:300]
             if ed["verdict"] == "spike":
@@ -195,12 +208,19 @@ def cycle(con) -> dict:
                     log.warning("editor revision failed lint; original published")
 
         chart = sources.chart_image(item["url"])
-        mode, nuelink_id = publisher.publish(post, item["url"], klass, image=chart)
-        store.set_status(con, item["url_hash"], "posted" if mode == "IMMEDIATE" else "drafted",
-                         item.get("story_key"))
+        mode, publisher_ref = publisher.publish(post, item["url"], klass, image=chart)
+        lifecycle = {
+            "IMMEDIATE": ("posted", "posted"),
+            "DRAFT": ("drafted", "drafted"),
+            "UNCERTAIN": ("uncertain", "uncertain"),
+            "FAILED": ("failed", "failed"),
+            "TAPE": ("taped", "taped"),
+        }
+        item_status, counter = lifecycle.get(mode, ("failed", "failed"))
+        store.set_status(con, item["url_hash"], item_status, item.get("story_key"))
         store.log_post(con, item.get("story_key"), item["url_hash"], klass, post,
-                       item["url"], mode, nuelink_id, editor_note=editor_note)
-        result["posted" if mode == "IMMEDIATE" else "drafted"] += 1
+                       item["url"], mode, publisher_ref, editor_note=editor_note)
+        result[counter] += 1
     return result
 
 

@@ -1,12 +1,13 @@
-"""Output: Nuelink REST staging/publishing + the daily tape file (always written).
+"""Output router: Typefully preferred, legacy Nuelink fallback, tape always written.
 
 Policy:
-- No Nuelink config      -> tape only ("TAPE" mode).
-- Nuelink configured     -> stage as DRAFT.
+- No publishing backend -> tape only ("TAPE" mode).
+- Backend configured    -> stage as DRAFT.
 - AUTOPOST_ENABLED and class in AUTOPOST_CLASSES -> publish IMMEDIATE with the
-  receipt URL as the delayed first comment. Secondary class NEVER auto-publishes.
-The Nuelink API has no update/delete: a published mistake is corrected with a
-follow-up post, never removed. That is charter, not just API limitation.
+  receipt URL attached by the system. Secondary class NEVER auto-publishes.
+Typefully is the deployed backend. Nuelink remains as a compatibility fallback for
+single posts, but cannot publish threads. UNCERTAIN is never retried automatically;
+FAILED is distinct from tape-only operation. Corrections are staged for human review.
 """
 import datetime
 import logging
@@ -38,18 +39,25 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None) -> tup
     """Returns (mode, post_id_or_None). image: optional (bytes, file_name) chart from
     the source page, attached to the lead post (FRED links preview poorly on X)."""
     mode = _mode_for(klass)
-    tape(post, receipt_url, klass, mode)
     if mode == "TAPE":
+        tape(post, receipt_url, klass, mode)
         return mode, None
 
     if _backend() == "typefully":
         from . import publisher_typefully
         media_id = publisher_typefully.upload_media(*image) if image else ""
         # Link ON the post so the card renders and readers click through (Brady 2026-08-29).
-        ok, ref = publisher_typefully.publish_thread(
+        outcome, ref = publisher_typefully.publish_thread(
             [f"{post}\n\n{receipt_url}"], immediate=(mode == "IMMEDIATE"),
             lead_media_ids=[media_id] if media_id else None)
-        return (mode, ref) if ok else ("TAPE", None)
+        actual = {
+            publisher_typefully.PublishOutcome.CONFIRMED: "IMMEDIATE",
+            publisher_typefully.PublishOutcome.STAGED: "DRAFT",
+            publisher_typefully.PublishOutcome.FAILED: "FAILED",
+            publisher_typefully.PublishOutcome.UNCERTAIN: "UNCERTAIN",
+        }[outcome]
+        tape(post, receipt_url, klass, actual)
+        return actual, ref
     body = {
         "publishMode": mode,
         "caption": post,
@@ -65,23 +73,34 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None) -> tup
         resp.raise_for_status()
         post_id = str(resp.json().get("data", {}).get("id", ""))
         log.info("nuelink %s created id=%s", mode, post_id)
+        tape(post, receipt_url, klass, mode)
         return mode, post_id
     except Exception as exc:  # noqa: BLE001 - a posting failure must not kill the loop
         log.error("nuelink publish failed (%s): %s", mode, exc)
-        return "TAPE", None
+        tape(post, receipt_url, klass, "FAILED")
+        return "FAILED", str(exc)[:200]
 
 
 def publish_thread(texts: list, klass: str) -> tuple:
     """Publish/stage an N-post thread (briefing threads). Returns (mode, ref)."""
     mode = _mode_for(klass)
-    tape("\n\n---\n\n".join(texts), "(thread)", klass, mode)
     if mode == "TAPE":
+        tape("\n\n---\n\n".join(texts), "(thread)", klass, mode)
         return mode, None
     if _backend() == "typefully":
         from . import publisher_typefully
-        ok, ref = publisher_typefully.publish_thread(texts, immediate=(mode == "IMMEDIATE"))
-        return (mode, ref) if ok else ("TAPE", None)
-    return "TAPE", None  # nuelink cannot thread
+        outcome, ref = publisher_typefully.publish_thread(
+            texts, immediate=(mode == "IMMEDIATE"))
+        actual = {
+            publisher_typefully.PublishOutcome.CONFIRMED: "IMMEDIATE",
+            publisher_typefully.PublishOutcome.STAGED: "DRAFT",
+            publisher_typefully.PublishOutcome.FAILED: "FAILED",
+            publisher_typefully.PublishOutcome.UNCERTAIN: "UNCERTAIN",
+        }[outcome]
+        tape("\n\n---\n\n".join(texts), "(thread)", klass, actual)
+        return actual, ref
+    tape("\n\n---\n\n".join(texts), "(thread)", klass, "FAILED")
+    return "FAILED", "nuelink cannot publish threads"
 
 
 def tape(post: str, receipt_url: str, klass: str, mode: str):

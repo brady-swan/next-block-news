@@ -232,16 +232,29 @@ def render(con, day: str = None) -> str:
     # ── Needs you ────────────────────────────────────────────────────────────
     needs = []
     for p in posts:
-        if p["mode"] not in ("DRAFT", "TAPE") or _dismissed(con, "post", p["id"]):
+        if p["mode"] not in ("DRAFT", "UNCERTAIN", "FAILED", "TAPE") \
+                or _dismissed(con, "post", p["id"]):
             continue
         body_html = _esc(p["body"])
-        color, verb = (("amber", "TAP TO PUBLISH") if p["mode"] == "DRAFT"
-                       else ("red", "POST FAILED"))
+        treatments = {
+            "DRAFT": ("amber", "TAP TO PUBLISH",
+                      [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
+                       ("receipt ↗", p["receipt_url"], True)]),
+            "UNCERTAIN": ("orange", "VERIFY ON TYPEFULLY / X",
+                          [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
+                           ("CHECK X ↗", PROFILE_URL, True),
+                           ("receipt ↗", p["receipt_url"], True)]),
+            "FAILED": ("red", "PUBLISH FAILED",
+                       [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
+                        ("receipt ↗", p["receipt_url"], True)]),
+            "TAPE": ("amber", "TAPE ONLY",
+                     [("receipt ↗", p["receipt_url"], True)]),
+        }
+        color, verb, actions = treatments[p["mode"]]
         needs.append(_need_card(color, verb,
                                 f"{_ct(p['created'])} · {_esc(p['class'])}",
                                 f"<p>{body_html}</p>",
-                                [("OPEN TYPEFULLY ↗", TYPEFULLY_URL, False),
-                                 ("receipt ↗", p["receipt_url"], True)],
+                                actions,
                                 extra=_dismiss_link("post", p["id"], day)))
     for h in held:
         note = h["note"] or ""
@@ -287,7 +300,9 @@ def render(con, day: str = None) -> str:
         if d != today and d_dt.weekday() < 5 and sm["seen"] == 0:
             classes.append("stall")
         label = "Today" if d == today else d_dt.strftime("%a")
-        out.append(f"<a class='{' '.join(classes)}' href='{_u(d)}'>"
+        detail = (f"published {sm['published']} · drafts {sm['drafts']} · "
+                  f"uncertain {sm['uncertain']} · failed {sm['failed']} · tape {sm['tape']}")
+        out.append(f"<a class='{' '.join(classes)}' href='{_u(d)}' title='{detail}'>"
                    f"<div class=lbl>{label}</div><div class=pub>{sm['published']}</div>"
                    f"<div class=h>{sm['held']}</div><div class=s>{sm['seen']}</div></a>")
     out.append("</div>")
@@ -300,6 +315,10 @@ def render(con, day: str = None) -> str:
     n_skip = sum(r["n"] for r in skipped)
     out.append(f"<div class=jumps>"
                f"<a href='#published' style='color:var(--green)'>{summary['published']} published</a>"
+               f"<span style='color:var(--amber)'>{summary['drafts']} drafts</span>"
+               f"<span style='color:var(--orange)'>{summary['uncertain']} uncertain</span>"
+               f"<span style='color:var(--red)'>{summary['failed']} failed</span>"
+               f"<span style='color:var(--dim)'>{summary['tape']} tape</span>"
                f"<a href='#held' style='color:var(--red)'>{summary['held']} held</a>"
                f"<a href='#skipped' style='color:var(--sub)'>{n_skip} skipped</a>"
                f"<span style='color:var(--dim)'>= {summary['seen']} seen</span></div>")

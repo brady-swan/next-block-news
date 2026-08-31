@@ -4,6 +4,10 @@
 Everything here is current as of this morning. The deeper owner's manual is `SYSTEM.md`;
 this file is your orientation and the rules you must not break.*
 
+**Operational update, later 2026-08-31:** a read-only Railway check found
+`NBN_AUTOPOST_ENABLED=false`. The worker remains reachable, but autonomous publishing is
+currently paused. No Railway setting was changed during the check.
+
 ## What this is
 
 **Next Block News** (@nextblocknews_) is an autonomous Bitcoin news wire on X, running as
@@ -37,7 +41,9 @@ poll sources → intake gates → triage (Sonnet 5) → verify/corroborate → d
 - **Publishing** (`nbn/publisher_typefully.py`): Typefully v2. `publish_at:"now"` REJECTS
   drafts containing URLs (X policy, draft-wide) — so "immediate" = scheduled +30s
   (`NBN_PUBLISH_DELAY_SECONDS`). Media: upload → presigned S3 PUT → poll ready →
-  `media_ids` on the lead post. No delete API — deletions are manual by Brady.
+  `media_ids` on the lead post. Only confirmed publication records as `IMMEDIATE`;
+  ambiguous confirmation records as `UNCERTAIN` and never triggers a duplicate create.
+  No delete API — deletions are manual by Brady.
 
 ## Editorial doctrine (each rule was bought with a live mistake — do not relax)
 

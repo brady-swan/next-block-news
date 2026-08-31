@@ -5,12 +5,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # LLM
-ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-opus-5")
+ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-sonnet-5")
 TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
-# The Editor: last-mile judgment seat — few calls/day, so the model bill is irrelevant;
-# Fable 5 at low effort is the one-env-flip upgrade if verdicts feel shallow.
-EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-opus-5")
-EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "high")
+# The Editor: last-mile judgment seat. It runs only on autonomous candidates, so the
+# higher-judgment Fable seat remains a small share of the model budget.
+EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-fable-5")
+EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "low")
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
 # Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
@@ -20,7 +20,7 @@ REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")
 AUDIT_UTC = os.environ.get("NBN_AUDIT_UTC", "09:00")
 
 # Loop
-POLL_SECONDS = int(os.environ.get("NBN_POLL_SECONDS", "120"))
+POLL_SECONDS = int(os.environ.get("NBN_POLL_SECONDS", "60"))
 MAX_ITEMS_PER_TRIAGE = int(os.environ.get("NBN_MAX_ITEMS_PER_TRIAGE", "25"))
 PORT = int(os.environ.get("PORT", "8080"))
 
@@ -36,7 +36,7 @@ NUELINK_BRAND_ID = os.environ.get("NUELINK_BRAND_ID", "")
 NUELINK_COLLECTION_ID = os.environ.get("NUELINK_COLLECTION_ID", "")
 NUELINK_BASE = "https://nuelink.com/api/public/v1"
 
-# Typefully (preferred posting rail; long posts + threads + publish-now via API)
+# Typefully (preferred posting rail; long posts, threads, scheduled publishing)
 TYPEFULLY_API_KEY = os.environ.get("TYPEFULLY_API_KEY", "")
 TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
 
@@ -50,10 +50,10 @@ BRIEFING_SCHEDULE = [
     os.environ.get("NBN_BRIEFING_UTC", "14:40,Morning;21:15,Afternoon").split(";") if x
 ] if os.environ.get("NBN_BRIEFING_ENABLED", "true").lower() == "true" else []
 
-# Perception (api.perception.to) — the wire's OWN key, never the Marketing Node's
-# (their /feed rate budget is shared per key). Activates when set.
+# Perception (api.perception.to). The deployed key is shared with the Marketing Node,
+# so /feed polling in either service consumes the same account budget. Activates when set.
 PERCEPTION_API_KEY = os.environ.get("NBN_PERCEPTION_API_KEY", "")
-PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "600"))
+PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "900"))
 
 # X read access — SHARED with the Marketing Node's bearer (Brady's call 2026-08-30);
 # recent-search rate limits are per app, Node's 2x/day pulse + our throttled poll fit easily.
@@ -65,15 +65,17 @@ X_POLL_SECONDS = int(os.environ.get("NBN_X_POLL_SECONDS", "180"))
 X_LIST_ID = os.environ.get("NBN_X_LIST_ID", "")
 X_LIST_REFRESH_SECONDS = int(os.environ.get("NBN_X_LIST_REFRESH_SECONDS", "3600"))
 
-# Classes allowed to auto-publish when AUTOPOST_ENABLED (secondary never auto-publishes;
-# env-tunable so the rollout can start with official sources only)
+# Classes allowed to auto-publish when AUTOPOST_ENABLED. Secondary never auto-publishes,
+# even if an environment variable includes it.
 AUTOPOST_CLASSES = {
-    c.strip() for c in os.environ.get("NBN_AUTOPOST_CLASSES", "primary,data").split(",") if c.strip()
+    c.strip() for c in os.environ.get(
+        "NBN_AUTOPOST_CLASSES", "primary,corroborated"
+    ).split(",") if c.strip()
 } - {"secondary"}
 
 # Autonomous publishes are scheduled this many seconds out (publish_at:"now" rejects
 # drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)
-PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "90"))
+PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "30"))
 
 # Dead-man's switch: ping this URL after every successful cycle (healthchecks.io);
 # alerts fire on SILENCE, catching crash and stall alike. Empty = disabled.

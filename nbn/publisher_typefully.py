@@ -5,7 +5,7 @@ Why Typefully over Nuelink/direct X API (researched 2026-08-29):
   documented history of 403s on long posts even for Premium accounts.
 - Threads work via API (Nuelink's API cannot thread), so the receipt rides as
   the second post of a thread instead of a delayed comment.
-- publish_at:"now" gives immediate publishing with a poll-to-confirm read-back
+- Scheduled publishing supports receipt URLs and a poll-to-confirm read-back
   (Nuelink has no single-post read-back at all).
 - Direct X API is pay-per-use since Feb 2026 and charges $0.20 per post
   containing a link — our receipt replies would eat ~$100/mo at target cadence.
@@ -15,6 +15,7 @@ explicit array — platforms.x = {"enabled": true, "posts": [{"text": ...}, ...]
 """
 import logging
 import time
+from enum import Enum
 
 import httpx
 
@@ -23,6 +24,15 @@ from . import config
 log = logging.getLogger("nbn.typefully")
 
 BASE = "https://api.typefully.com/v2"
+
+
+class PublishOutcome(str, Enum):
+    """What is known after a Typefully create/publish attempt."""
+
+    CONFIRMED = "confirmed"
+    STAGED = "staged"
+    FAILED = "failed"
+    UNCERTAIN = "uncertain"
 
 
 def _headers():
@@ -60,7 +70,7 @@ def upload_media(data: bytes, file_name: str) -> str:
 
 
 def publish(post: str, receipt_url: str, immediate: bool, image: tuple = None) -> tuple:
-    """Create a 2-post X thread (post, receipt). Returns (ok, draft_id_or_error).
+    """Create a 2-post X thread. Returns (PublishOutcome, draft_id_or_error).
     image: optional (bytes, file_name) attached to the lead post (chart from the
     source page — FRED links preview poorly on X; Brady 2026-08-30)."""
     media_id = upload_media(*image) if image else ""
@@ -72,28 +82,30 @@ URL_RE = None  # set below
 
 
 def publish_thread(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
-    """Create an N-post X thread. Returns (ok, draft_id_or_error).
+    """Create an N-post X thread. Returns (PublishOutcome, draft_id_or_error).
 
     Typefully blocks publish-now for drafts containing URLs (X policy, learned live
-    2026-08-30). Ladder: try as-is -> retry with links isolated in a trailing receipt
-    post -> retry linkless -> stage as DRAFT with links intact for a human tap.
+    2026-08-30). A definitive URL-policy rejection permits a linkless retry and then a
+    linked human draft. An uncertain create/confirmation never permits another create.
     """
     # Probed 2026-08-30: publish_at:"now" rejects any draft containing a URL (X policy,
     # draft-wide), but a SCHEDULED post carries links fine. So autonomous publishing is
-    # "scheduled ~90s out" — links intact, autonomy intact, latency negligible.
+    # scheduled shortly ahead — links intact, autonomy intact, latency negligible.
     import re
-    ok, ref = _create(texts, immediate, lead_media_ids)
-    if ok or not immediate or "URLs is blocked" not in str(ref):
-        return ok, ref
-    # Policy changed on us? Last resorts: linkless now, then a staged linked draft.
+    outcome, ref = _create(texts, immediate, lead_media_ids)
+    if outcome is not PublishOutcome.FAILED or not immediate \
+            or "URLs is blocked" not in str(ref):
+        return outcome, ref
+    # A definitive URL-policy rejection means no draft was created. Only then is a
+    # second create safe. Ambiguous results never enter this fallback ladder.
     stripped = [t for t in (re.sub(r"\s*https?://\S+", "", t).rstrip() for t in texts) if t]
-    ok, ref = _create(stripped, immediate, lead_media_ids)
-    if ok:
+    outcome, ref = _create(stripped, immediate, lead_media_ids)
+    if outcome in (PublishOutcome.CONFIRMED, PublishOutcome.UNCERTAIN):
         log.warning("published LINKLESS (URL policy hit even when scheduled)")
-        return ok, ref
-    ok, ref = _create(texts, immediate=False, lead_media_ids=lead_media_ids)
+        return outcome, ref
+    outcome, ref = _create(texts, immediate=False, lead_media_ids=lead_media_ids)
     log.warning("publishing blocked; staged linked DRAFT %s", ref)
-    return ok, ref
+    return outcome, ref
 
 
 def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
@@ -119,20 +131,28 @@ def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
         resp.raise_for_status()
         draft = resp.json()
         draft_id = str(draft.get("id", ""))
-        if immediate:
-            _confirm(draft_id)
-        return True, draft_id
+        if not draft_id:
+            log.error("typefully create succeeded without a draft id")
+            return PublishOutcome.UNCERTAIN, "missing draft id"
+        if not immediate:
+            return PublishOutcome.STAGED, draft_id
+        return _confirm(draft_id), draft_id
     except httpx.HTTPStatusError as exc:
         body = exc.response.text[:300]
         log.error("typefully publish failed: %s | body: %s", exc, body)
-        return False, f"{exc.response.status_code}: {body}"[:200]
+        if exc.response.status_code >= 500:
+            # A server-side error can still arrive after the create was accepted.
+            return PublishOutcome.UNCERTAIN, f"{exc.response.status_code}: {body}"[:200]
+        return PublishOutcome.FAILED, f"{exc.response.status_code}: {body}"[:200]
     except Exception as exc:  # noqa: BLE001
-        log.error("typefully publish failed: %s", exc)
-        return False, str(exc)[:200]
+        # A transport failure during POST may happen after Typefully accepted the draft.
+        # Retrying could duplicate a live scheduled post, so the outcome is uncertain.
+        log.error("typefully create outcome uncertain: %s", exc)
+        return PublishOutcome.UNCERTAIN, str(exc)[:200]
 
 
 def _confirm(draft_id: str, attempts: int = 50):
-    """Poll until publish_state is finished; log (never raise) on anything else."""
+    """Return a definitive or uncertain outcome without creating another draft."""
     for _ in range(attempts):
         try:
             resp = httpx.get(
@@ -144,11 +164,12 @@ def _confirm(draft_id: str, attempts: int = 50):
             state = data.get("publish_state")
             if state == "finished" or data.get("published_at"):
                 log.info("typefully draft %s published", draft_id)
-                return
+                return PublishOutcome.CONFIRMED
             if state not in ("in_progress", "scheduled", None):
                 log.error("typefully draft %s unexpected state: %s", draft_id, state)
-                return
+                return PublishOutcome.FAILED
         except Exception as exc:  # noqa: BLE001
             log.warning("typefully confirm poll failed: %s", exc)
         time.sleep(3)
     log.error("typefully draft %s publish not confirmed after polling", draft_id)
+    return PublishOutcome.UNCERTAIN

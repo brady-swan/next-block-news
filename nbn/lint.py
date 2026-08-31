@@ -84,9 +84,19 @@ def check(post: str, meta: dict, item: dict) -> list:
         errors.append(f"attribution to second-tier aggregator: {m.group(1)!r} — "
                       "attribute the original data provider or reporter")
 
-    # News posts must open with a house prefix: NEW: for first coverage, UPDATE: only
-    # when the wire already covered the story and this adds a material development.
-    if item.get("class") in ("primary", "secondary") and not post.startswith(("NEW:", "UPDATE:")):
+    # Prefix semantics are deterministic, not a model judgment: first coverage is NEW;
+    # only an explicit, exact-key update may use UPDATE.
+    coverage_action = item.get("_coverage_action")
+    if coverage_action == "update" and not post.startswith("UPDATE:"):
+        errors.append("covered-story update must start with 'UPDATE:'")
+    elif coverage_action == "draft" \
+            and item.get("class") in ("primary", "secondary", "corroborated") \
+            and not post.startswith("NEW:"):
+        errors.append("first-coverage news post must start with 'NEW:'")
+    elif coverage_action is None \
+            and item.get("class") in ("primary", "secondary", "corroborated") \
+            and not post.startswith(("NEW:", "UPDATE:")):
+        # Compatibility for non-pipeline callers that do not carry coverage metadata.
         errors.append("news post must start with 'NEW:' (or 'UPDATE:' on covered stories)")
 
     # Mentions: only verified handles, max 2

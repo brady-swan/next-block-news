@@ -72,10 +72,15 @@ and the self-audit.
 
 ## 3. Judgment (triage → verification)
 
-**Triage** (Sonnet 5, batch): action draft/hold/skip, a `story_key` naming the
+**Triage** (Sonnet 5, batch): action draft/update/hold/skip, a `story_key` naming the
 underlying story, and a class. It receives both **posted** story keys (skip duplicates)
 and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
 corroboration promotion).
+
+`update` is a separate machine-readable triage action. It is valid only for a material
+development matching an exact reader-covered story key. Ordinary `draft` on an already
+handled key still skips. Deterministic lint requires `NEW:` for first coverage and
+`UPDATE:` for an authorized update.
 
 **Classes decide autonomy:**
 
@@ -134,7 +139,11 @@ containing a URL (X policy, draft-wide, undocumented — the 403 body is the onl
 written rule), but **scheduled posts carry links fine**. So "immediate" = scheduled
 `NBN_PUBLISH_DELAY_SECONDS` (30) out; Typefully fires on minute boundaries → real
 latency 30-90s. Fallback ladder if policy shifts: linkless → staged linked DRAFT.
-Publishes are confirm-polled. No delete exists anywhere in the chain — **corrections
+Publishes are confirm-polled. Only a confirmed publish is recorded as `IMMEDIATE`.
+Confirmation ambiguity becomes `UNCERTAIN`, is surfaced for manual verification, and is
+never retried automatically because a second create could duplicate a live post. Definite
+backend failures become `FAILED`; no configured backend is the distinct `TAPE` mode.
+No delete exists anywhere in the chain — **corrections
 are posted, never scrubbed** (`CORRECTIONS.md`: severity ladder, templates, corrections
 never auto-publish, nothing new posts over an uncorrected material error).
 
@@ -160,9 +169,10 @@ CORRECTION draft (never publish). Results in the Desk.
 
 **The Desk** (`/report?k=<token>`, bookmark in `DESK-REPORT-URL.txt`): Claude-Design
 "Filed, action-first" UI. Status strip (model seats, freshness window, autopost) →
-**Needs You** (verb-led cards: TAP TO PUBLISH / POST FAILED / AGREE OR OVERRULE /
-AUDIT FLAG, each with a `dismiss ✓` that records acknowledgment without deleting
-history) → 7-day strip (published/held/seen per day, stalled-weekday flags, day
+**Needs You** (verb-led cards: TAP TO PUBLISH / VERIFY ON TYPEFULLY / X / PUBLISH FAILED /
+TAPE ONLY / AGREE OR OVERRULE / AUDIT FLAG, each with a `dismiss ✓` that records
+acknowledgment without deleting history) → 7-day strip (published/held/seen per day,
+stalled-weekday flags, day
 navigation) → Published (lede-only cards + editor verdicts) → Held grouped by reason
 family → Self-audit → Skips.
 
@@ -176,9 +186,9 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 
 ## 11. The knobs (Railway service variables)
 
-| Variable | Current | Purpose |
+| Variable | Observed 2026-08-31 | Purpose |
 |---|---|---|
-| `NBN_AUTOPOST_ENABLED` | `true` | master kill switch |
+| `NBN_AUTOPOST_ENABLED` | `false` | master kill switch; autonomy currently paused |
 | `NBN_AUTOPOST_CLASSES` | `primary,corroborated` | autonomy surface (`secondary` ignored even if listed) |
 | `NBN_PUBLISH_DELAY_SECONDS` | `30` | the scheduled-publish fuse |
 | `NBN_MAX_AGE_HOURS_ACTIVE/QUIET` | `2.5` / `6` | freshness schedule (fixed `NBN_MAX_AGE_HOURS` overrides) |
@@ -207,7 +217,8 @@ Run rate ≈ **$100-180/mo all-in**.
 | Failure | Behavior | Where seen |
 |---|---|---|
 | Feed down / fetch blocked / paywall | held "thin source"; other feeds unaffected | Desk holds, logs |
-| Typefully publish fails | fallback ladder → worst case staged linked DRAFT | Needs You (POST FAILED), logs w/ response body |
+| Typefully confirmation is ambiguous | stored `UNCERTAIN`; no second create | Needs You (VERIFY ON TYPEFULLY / X) |
+| Typefully definitively fails | stored `FAILED`; URL fallback only on the known definitive policy rejection | Needs You (PUBLISH FAILED), logs |
 | Node brief unavailable at Block time | Block skipped with a warning | logs |
 | Out-of-charter copy | lint holds after one retry | Desk holds ("Style gate") |
 | Contextual dup / weak value | editor spikes with reasoning | Needs You (AGREE OR OVERRULE) |

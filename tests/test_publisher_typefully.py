@@ -1,0 +1,84 @@
+import unittest
+from unittest.mock import Mock, patch
+
+import httpx
+
+from nbn import publisher_typefully as tf
+
+
+def response(payload):
+    result = Mock()
+    result.raise_for_status.return_value = None
+    result.json.return_value = payload
+    return result
+
+
+class TypefullyTests(unittest.TestCase):
+    @patch.object(tf.httpx, "post")
+    def test_human_draft_is_staged(self, post):
+        post.return_value = response({"id": "draft-1"})
+        outcome, ref = tf._create(["copy"], immediate=False)
+        self.assertIs(outcome, tf.PublishOutcome.STAGED)
+        self.assertEqual(ref, "draft-1")
+
+    @patch.object(tf, "_confirm", return_value=tf.PublishOutcome.CONFIRMED)
+    @patch.object(tf.httpx, "post")
+    def test_scheduled_post_requires_confirmation(self, post, confirm):
+        post.return_value = response({"id": "draft-2"})
+        outcome, ref = tf._create(["copy"], immediate=True)
+        self.assertIs(outcome, tf.PublishOutcome.CONFIRMED)
+        self.assertEqual(ref, "draft-2")
+        confirm.assert_called_once_with("draft-2")
+
+    @patch.object(tf.time, "sleep", return_value=None)
+    @patch.object(tf.httpx, "get")
+    def test_confirmation_timeout_is_uncertain(self, get, _sleep):
+        get.return_value = response({"publish_state": "scheduled"})
+        self.assertIs(tf._confirm("draft-3", attempts=2), tf.PublishOutcome.UNCERTAIN)
+        self.assertEqual(get.call_count, 2)
+
+    @patch.object(tf.time, "sleep", return_value=None)
+    @patch.object(tf.httpx, "get")
+    def test_explicit_terminal_state_is_failed(self, get, _sleep):
+        get.return_value = response({"publish_state": "failed"})
+        self.assertIs(tf._confirm("draft-4", attempts=2), tf.PublishOutcome.FAILED)
+        self.assertEqual(get.call_count, 1)
+
+    @patch.object(tf, "_create", return_value=(tf.PublishOutcome.UNCERTAIN, "draft-5"))
+    def test_uncertain_create_never_retries(self, create):
+        outcome, ref = tf.publish_thread(["copy https://example.com"], immediate=True)
+        self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
+        self.assertEqual(ref, "draft-5")
+        self.assertEqual(create.call_count, 1)
+
+    @patch.object(tf, "_create")
+    def test_url_policy_fallback_requires_definitive_rejection(self, create):
+        create.side_effect = [
+            (tf.PublishOutcome.FAILED, "403: Adding URLs is blocked"),
+            (tf.PublishOutcome.CONFIRMED, "draft-6"),
+        ]
+        outcome, ref = tf.publish_thread(["copy https://example.com"], immediate=True)
+        self.assertIs(outcome, tf.PublishOutcome.CONFIRMED)
+        self.assertEqual(ref, "draft-6")
+        self.assertEqual(create.call_count, 2)
+        self.assertNotIn("https://", create.call_args_list[1].args[0][0])
+
+    @patch.object(tf.httpx, "post", side_effect=TimeoutError("response lost"))
+    def test_transport_failure_during_create_is_uncertain(self, post):
+        outcome, ref = tf._create(["copy"], immediate=True)
+        self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
+        self.assertIn("response lost", ref)
+        self.assertEqual(post.call_count, 1)
+
+    @patch.object(tf.httpx, "post")
+    def test_server_error_during_create_is_uncertain(self, post):
+        request = httpx.Request("POST", "https://api.typefully.com/v2/drafts")
+        response_ = httpx.Response(503, request=request, text="temporary failure")
+        post.return_value = response_
+        outcome, ref = tf._create(["copy"], immediate=True)
+        self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
+        self.assertIn("503", ref)
+
+
+if __name__ == "__main__":
+    unittest.main()

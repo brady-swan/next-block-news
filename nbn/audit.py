@@ -69,7 +69,8 @@ def maybe_run(con) -> bool:
     store.kv_set(con, key, str(time.time()))
 
     posts = con.execute(
-        "SELECT * FROM posts WHERE created > ? AND class != 'briefing' ORDER BY created",
+        "SELECT * FROM posts WHERE created > ? AND class != 'briefing'"
+        " AND mode IN ('IMMEDIATE','UNCERTAIN') ORDER BY created",
         (time.time() - 26 * 3600,)).fetchall()
     results = []
     for p in posts:
@@ -99,7 +100,7 @@ def maybe_run(con) -> bool:
 def _stage_correction(post_row, correction_text: str):
     """Material finding -> staged CORRECTION draft (NEVER published; Brady taps)."""
     from . import publisher_typefully
-    ok, ref = publisher_typefully.publish_thread(
+    outcome, ref = publisher_typefully.publish_thread(
         [correction_text], immediate=False)
-    log.warning("MATERIAL audit finding on post %s -> correction draft staged: %s",
-                post_row["id"], ref)
+    log.warning("MATERIAL audit finding on post %s -> correction %s: %s",
+                post_row["id"], outcome.value, ref)
