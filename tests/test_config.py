@@ -30,6 +30,7 @@ print(json.dumps({
     'classes': sorted(config.AUTOPOST_CLASSES),
     'delay': config.PUBLISH_DELAY_SECONDS,
     'autopost': config.AUTOPOST_ENABLED,
+    'source_policy_mode': config.SOURCE_POLICY_MODE,
 }))
 """
     result = subprocess.run(
@@ -52,6 +53,7 @@ class ConfigTests(unittest.TestCase):
             "classes": ["corroborated", "primary"],
             "delay": 30,
             "autopost": False,
+            "source_policy_mode": "enforce",
         })
 
     def test_secondary_is_removed_from_autopost_classes(self):

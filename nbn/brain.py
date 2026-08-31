@@ -91,17 +91,22 @@ Source-type rules:
   hunts the primary source before drafting); otherwise skip.
 - Source starting "X @" (officials and company accounts): primary for statements about
   themselves and their own actions.
+- source_tier is deterministic routing metadata. p0 may be official only when the item
+  is the actual artifact; t1/t2 are reporting/research; t3/t4/unknown are discovery tips
+  whose receipt must be upgraded later. Never infer primary merely from publisher quality.
 
 Be strict: a wire that posts everything is noise. Typical batch yields 0-3 drafts.
 Return ONLY a JSON array: [{{"url_hash": ..., "action": ..., "story_key": ..., "class": ..., "reason": ...}}]"""
 
 
 def triage(items: list, recent_keys: list, open_keys: list = None) -> list:
+    from . import source_policy
     payload = {
         "posted_story_keys": recent_keys,
         "open_story_keys": open_keys or [],
         "items": [
             {"url_hash": i["url_hash"], "source": i["source"], "title": i["title"],
+             "source_tier": source_policy.classify(i.get("url", ""), i["source"]).tier,
              "summary": i.get("summary", ""), "published": i.get("published", "")}
             for i in items
         ],

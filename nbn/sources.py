@@ -6,15 +6,45 @@ Bitcoin Magazine's feed has returned 403 for months upstream; kept here so a fix
 shows up on its own, failures are per-feed and non-fatal.
 """
 import html
+import ipaddress
 import logging
 import re
+import socket
 import xml.etree.ElementTree as ET
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
 from . import config
 
 log = logging.getLogger("nbn.sources")
+
+
+class UnsafeSourceURL(ValueError):
+    """Raised before a source fetch can reach a local or non-HTTP destination."""
+
+
+def _assert_public_http_url(url: str) -> None:
+    parts = urlsplit((url or "").strip())
+    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username:
+        raise UnsafeSourceURL("source URL must be public HTTP(S) without credentials")
+    host = parts.hostname.rstrip(".").lower()
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+        raise UnsafeSourceURL("local source host rejected")
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            addresses = {
+                ipaddress.ip_address(row[4][0])
+                for row in socket.getaddrinfo(
+                    host, parts.port or (443 if parts.scheme == "https" else 80),
+                    type=socket.SOCK_STREAM)
+            }
+        except (OSError, ValueError) as exc:
+            raise UnsafeSourceURL(f"source host did not resolve safely: {host}") from exc
+    if not addresses or any(not address.is_global for address in addresses):
+        raise UnsafeSourceURL("private, loopback, link-local, or reserved source host rejected")
 
 FEEDS = {
     # Primary sources (an item here is presumptively class=primary)
@@ -190,7 +220,7 @@ X_STATIC_QUERIES = [
     ' OR from:River OR from:Strike OR from:unchainedcom OR from:CasaHODL OR from:Swan)'
     ' -is:retweet',
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
-    # web-corroboration hunt that finds the primary.
+    # source-resolution hunt that finds an eligible receipt.
     '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:BitcoinMagazine'
     ' OR from:BitcoinNewsCom OR from:TFTC21 OR from:BitcoinArchive) -is:retweet',
 ]
@@ -349,26 +379,58 @@ def _fred_csv(url: str) -> str:
         return ""
 
 
-def fetch_article_text(url: str, limit: int = 8000) -> str:
-    """Best-effort article body fetch for the drafting step (numbers must come from here)."""
+def fetch_article(url: str, limit: int = 8000) -> dict:
+    """Best-effort article fetch with redirect/canonical/byline metadata."""
     try:
         # FRED graph pages are JS shells that reset non-browser connections, but every
         # graph has a CSV twin carrying the full data series — the actual primary source
         # behind Fed stat tweets. Go straight to the CSV, never the page.
         csv_text = _fred_csv(url)
         if csv_text:
-            return csv_text[:limit]
-        with httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=True) as client:
-            resp = client.get(url)
+            return {"text": csv_text[:limit], "final_url": url,
+                    "canonical_url": url, "byline": ""}
+        with httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=False) as client:
+            current_url = url
+            for _ in range(6):
+                _assert_public_http_url(current_url)
+                resp = client.get(current_url)
+                if not resp.is_redirect:
+                    break
+                location = resp.headers.get("location", "")
+                if not location:
+                    raise UnsafeSourceURL("redirect response omitted Location")
+                current_url = urljoin(current_url, location)
+            else:
+                raise UnsafeSourceURL("too many source redirects")
             resp.raise_for_status()
             body = resp.text
             # Shortlinks (bit.ly) unwrap here — re-check the final URL for a FRED graph.
             csv_text = _fred_csv(str(resp.url))
             if csv_text:
-                return csv_text[:limit]
+                return {"text": csv_text[:limit], "final_url": str(resp.url),
+                        "canonical_url": str(resp.url), "byline": ""}
+        canonical = ""
+        if m := re.search(r'(?is)<link[^>]+rel=["\'][^"\']*canonical[^"\']*["\'][^>]+>', body):
+            if href := re.search(r'(?i)href=["\']([^"\']+)', m.group(0)):
+                canonical = html.unescape(href.group(1)).strip()
+        byline = ""
+        for pattern in (
+            r'(?is)<meta[^>]+(?:name|property)=["\'](?:author|article:author)["\'][^>]+content=["\']([^"\']+)',
+            r'(?is)<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:name|property)=["\'](?:author|article:author)["\']',
+        ):
+            if m := re.search(pattern, body):
+                byline = html.unescape(m.group(1)).strip()
+                break
         body = re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", body)
         text = html.unescape(_TAG_RE.sub(" ", body))
-        return re.sub(r"\s+", " ", text).strip()[:limit]
+        return {"text": re.sub(r"\s+", " ", text).strip()[:limit],
+                "final_url": str(resp.url), "canonical_url": canonical or str(resp.url),
+                "byline": byline}
     except Exception as exc:  # noqa: BLE001
         log.warning("article fetch failed %s: %s", url, exc)
-        return ""
+        return {"text": "", "final_url": url, "canonical_url": url, "byline": ""}
+
+
+def fetch_article_text(url: str, limit: int = 8000) -> str:
+    """Compatibility wrapper for callers that only need source text."""
+    return fetch_article(url, limit)["text"]

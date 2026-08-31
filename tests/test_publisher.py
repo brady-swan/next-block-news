@@ -43,7 +43,18 @@ class PublisherRouterTests(unittest.TestCase):
                              return_value=(tf.PublishOutcome.STAGED, "draft")) as publish:
             mode, _ = publisher.publish(
                 "NEW: Test.", "https://example.com", "secondary")
-        self.assertEqual(mode, "DRAFT")
+            self.assertEqual(mode, "DRAFT")
+
+    def test_observe_mode_forces_draft_even_for_primary_autopost(self):
+        with patch.object(config, "SOURCE_POLICY_MODE", "observe"), \
+                patch.object(config, "AUTOPOST_ENABLED", True), \
+                patch.object(config, "AUTOPOST_CLASSES", {"primary"}), \
+                patch.object(publisher, "_backend", return_value="typefully"), \
+                patch.object(tf, "publish_thread", return_value=(
+                    tf.PublishOutcome.STAGED, "draft-observe")) as publish:
+            mode, _ = publisher.publish("NEW: Test.", "https://example.com", "primary")
+            self.assertEqual(mode, "DRAFT")
+            self.assertFalse(publish.call_args.kwargs["immediate"])
         self.assertFalse(publish.call_args.kwargs["immediate"])
 
 

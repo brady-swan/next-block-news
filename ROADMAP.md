@@ -111,6 +111,8 @@ except what shipped.)*
   when the quality record earns it.
 
 **Engineering**
+- Evidence-component refinement: replace greedy owner/artifact/near-copy collapse with
+  connected components if live observe data shows bridge-chain false corroboration.
 - Editor casebook (precedent-quoting from Brady's gradings) — week 2 queue.
 - Block number cross-check → `briefing` autopost — week 2 queue.
 - Data-posts generator — week 2 queue.

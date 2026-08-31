@@ -4,7 +4,7 @@ import json
 import sqlite3
 import time
 
-from . import config
+from . import config, source_policy
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
@@ -20,11 +20,71 @@ CREATE TABLE IF NOT EXISTS posts (
   created REAL, story_key TEXT, item_hash TEXT, class TEXT,
   body TEXT, receipt_url TEXT, mode TEXT, nuelink_id TEXT
 );
+CREATE TABLE IF NOT EXISTS source_resolutions (
+  item_hash TEXT PRIMARY KEY,
+  story_key TEXT NOT NULL,
+  resolved_at REAL NOT NULL,
+  mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  original_url TEXT NOT NULL,
+  original_source TEXT NOT NULL,
+  original_source_id TEXT NOT NULL,
+  original_tier TEXT NOT NULL,
+  selected_url TEXT NOT NULL,
+  selected_source TEXT NOT NULL,
+  selected_source_id TEXT NOT NULL,
+  selected_tier TEXT NOT NULL,
+  selected_category TEXT NOT NULL,
+  selected_independence_key TEXT NOT NULL,
+  selected_ownership_key TEXT NOT NULL,
+  originality TEXT NOT NULL,
+  support_verdict INTEGER NOT NULL,
+  receipt_eligible INTEGER NOT NULL,
+  corroboration_eligible INTEGER NOT NULL,
+  primary_artifact_url TEXT,
+  primary_artifact_fingerprint TEXT,
+  content_fingerprint TEXT,
+  selected_text TEXT,
+  earliest_coverage_date TEXT,
+  note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_resolutions_story
+  ON source_resolutions(story_key, resolved_at);
+CREATE TABLE IF NOT EXISTS source_evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_hash TEXT NOT NULL,
+  story_key TEXT NOT NULL,
+  observed_at REAL NOT NULL,
+  url TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  category TEXT NOT NULL,
+  independence_key TEXT NOT NULL,
+  ownership_key TEXT NOT NULL,
+  originality TEXT NOT NULL,
+  support_verdict INTEGER NOT NULL,
+  receipt_eligible INTEGER NOT NULL,
+  corroboration_eligible INTEGER NOT NULL,
+  primary_artifact_fingerprint TEXT,
+  content_fingerprint TEXT,
+  UNIQUE(item_hash, url)
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_story
+  ON source_evidence(story_key, observed_at);
+CREATE TABLE IF NOT EXISTS cycle_leases (
+  name TEXT PRIMARY KEY,
+  owner TEXT NOT NULL,
+  expires_at REAL NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
 
-MIGRATIONS = ["ALTER TABLE posts ADD COLUMN editor_note TEXT"]
+MIGRATIONS = [
+    "ALTER TABLE posts ADD COLUMN editor_note TEXT",
+    "ALTER TABLE posts ADD COLUMN resolution_id TEXT",
+]
 
 
 def kv_get(con, k: str) -> str:
@@ -200,14 +260,173 @@ def last_briefing_ts(con) -> float:
     return row["t"] or 0.0
 
 
-def corroboration_count(con, story_key: str) -> int:
-    """Distinct publishers whose items map to this story."""
-    if not story_key:
-        return 0
-    row = con.execute(
-        "SELECT COUNT(DISTINCT source) n FROM items WHERE story_key=?", (story_key,)
+def persist_resolution(con, result, mode: str):
+    """Persist one immutable resolver result and its eligible evidence candidates."""
+    now = time.time()
+    original, selected = result.original, result.selected
+    con.execute("SAVEPOINT persist_resolution")
+    try:
+        con.execute(
+            "INSERT INTO source_resolutions("
+        " item_hash, story_key, resolved_at, mode, status, original_url, original_source,"
+        " original_source_id, original_tier, selected_url, selected_source,"
+        " selected_source_id, selected_tier, selected_category,"
+        " selected_independence_key, selected_ownership_key, originality,"
+        " support_verdict, receipt_eligible, corroboration_eligible,"
+        " primary_artifact_url, primary_artifact_fingerprint, content_fingerprint,"
+        " selected_text, earliest_coverage_date, note)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        " ON CONFLICT(item_hash) DO UPDATE SET"
+        " story_key=excluded.story_key, resolved_at=excluded.resolved_at, mode=excluded.mode,"
+        " status=excluded.status, original_url=excluded.original_url,"
+        " original_source=excluded.original_source, original_source_id=excluded.original_source_id,"
+        " original_tier=excluded.original_tier, selected_url=excluded.selected_url,"
+        " selected_source=excluded.selected_source, selected_source_id=excluded.selected_source_id,"
+        " selected_tier=excluded.selected_tier, selected_category=excluded.selected_category,"
+        " selected_independence_key=excluded.selected_independence_key,"
+        " selected_ownership_key=excluded.selected_ownership_key, originality=excluded.originality,"
+        " support_verdict=excluded.support_verdict, receipt_eligible=excluded.receipt_eligible,"
+        " corroboration_eligible=excluded.corroboration_eligible,"
+        " primary_artifact_url=excluded.primary_artifact_url,"
+        " primary_artifact_fingerprint=excluded.primary_artifact_fingerprint,"
+        " content_fingerprint=excluded.content_fingerprint, selected_text=excluded.selected_text,"
+        " earliest_coverage_date=excluded.earliest_coverage_date, note=excluded.note",
+            (result.item_hash, result.story_key, now, mode, result.status,
+             original.url, result.original_source_name, original.source_id, original.tier,
+             selected.url, selected.display_name, selected.source_id, selected.tier,
+             selected.category, selected.independence_key, selected.ownership_key,
+             result.originality, int(result.supported), int(result.receipt_eligible),
+             int(result.corroboration_eligible), result.primary_artifact_url,
+             result.primary_artifact_fingerprint, result.content_fingerprint,
+             result.selected_text, result.earliest_coverage_date, result.note),
+        )
+        con.execute("DELETE FROM source_evidence WHERE item_hash=?", (result.item_hash,))
+        for ev in result.evidence:
+            con.execute(
+                "INSERT INTO source_evidence("
+                " item_hash, story_key, observed_at, url, source_id, source_name, tier, category,"
+                " independence_key, ownership_key, originality, support_verdict, receipt_eligible,"
+                " corroboration_eligible, primary_artifact_fingerprint, content_fingerprint)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (result.item_hash, result.story_key, now, ev.ref.url, ev.ref.source_id,
+                 ev.ref.display_name, ev.ref.tier, ev.ref.category, ev.ref.independence_key,
+                 ev.ref.ownership_key, ev.originality, int(ev.supported),
+                 int(ev.receipt_eligible), int(ev.corroboration_eligible),
+                 ev.primary_artifact_fingerprint, ev.content_fingerprint),
+            )
+        con.execute("RELEASE SAVEPOINT persist_resolution")
+    except Exception:
+        con.execute("ROLLBACK TO SAVEPOINT persist_resolution")
+        con.execute("RELEASE SAVEPOINT persist_resolution")
+        raise
+
+
+def resolution_for_item(con, item_hash: str):
+    return con.execute(
+        "SELECT * FROM source_resolutions WHERE item_hash=?", (item_hash,)
     ).fetchone()
-    return row["n"]
+
+
+def evidence_for_item(con, item_hash: str) -> list:
+    return con.execute(
+        "SELECT * FROM source_evidence WHERE item_hash=? ORDER BY id", (item_hash,)
+    ).fetchall()
+
+
+def move_resolution_story_key(con, item_hash: str, story_key: str) -> None:
+    """Move an existing resolution and all its evidence to one corrected exact key."""
+    if not item_hash or not story_key:
+        return
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        con.execute(
+            "UPDATE source_resolutions SET story_key=? WHERE item_hash=?",
+            (story_key, item_hash),
+        )
+        con.execute(
+            "UPDATE source_evidence SET story_key=? WHERE item_hash=?",
+            (story_key, item_hash),
+        )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+
+
+def qualified_evidence(con, story_key: str, lookback_hours: float = 24.0) -> list:
+    """Fresh, independent evidence chains for an exact story key.
+
+    Same-owner publications, syndication copies, and evidence resolving to the same
+    primary artifact or normalized content collapse to one chain.
+    """
+    if not story_key:
+        return []
+    rows = con.execute(
+        "SELECT * FROM source_evidence WHERE story_key=? AND observed_at>=?"
+        " AND support_verdict=1 AND corroboration_eligible=1"
+        " ORDER BY observed_at, id",
+        (story_key, time.time() - lookback_hours * 3600),
+    ).fetchall()
+    accepted, owners, artifacts, contents = [], set(), set(), set()
+    for row in rows:
+        owner = row["ownership_key"] or row["independence_key"]
+        artifact = row["primary_artifact_fingerprint"] or ""
+        content = row["content_fingerprint"] or ""
+        near_copy = content and any(
+            source_policy.content_fingerprints_match(content, prior) for prior in contents
+        )
+        if owner in owners or (artifact and artifact in artifacts) or near_copy:
+            continue
+        accepted.append(row)
+        owners.add(owner)
+        if artifact:
+            artifacts.add(artifact)
+        if content:
+            contents.add(content)
+    return accepted
+
+
+def qualified_evidence_count(con, story_key: str, lookback_hours: float = 24.0) -> int:
+    return len(qualified_evidence(con, story_key, lookback_hours))
+
+
+def acquire_cycle_lease(con, owner: str, name: str = "worker", ttl_seconds: int = 900,
+                        now: float = None) -> bool:
+    """Acquire the cross-process cycle lease atomically; expired owners are recoverable."""
+    current = time.time() if now is None else now
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute("SELECT owner, expires_at FROM cycle_leases WHERE name=?", (name,)).fetchone()
+        if row and row["owner"] != owner and row["expires_at"] > current:
+            con.rollback()
+            return False
+        con.execute(
+            "INSERT INTO cycle_leases(name, owner, expires_at) VALUES (?,?,?)"
+            " ON CONFLICT(name) DO UPDATE SET owner=excluded.owner, expires_at=excluded.expires_at",
+            (name, owner, current + ttl_seconds),
+        )
+        con.commit()
+        return True
+    except Exception:
+        con.rollback()
+        raise
+
+
+def renew_cycle_lease(con, owner: str, name: str = "worker", ttl_seconds: int = 900,
+                      now: float = None) -> bool:
+    current = time.time() if now is None else now
+    cur = con.execute(
+        "UPDATE cycle_leases SET expires_at=? WHERE name=? AND owner=?",
+        (current + ttl_seconds, name, owner),
+    )
+    con.commit()
+    return bool(cur.rowcount)
+
+
+def release_cycle_lease(con, owner: str, name: str = "worker") -> bool:
+    cur = con.execute("DELETE FROM cycle_leases WHERE name=? AND owner=?", (name, owner))
+    con.commit()
+    return bool(cur.rowcount)
 
 
 def story_reader_covered(con, story_key: str) -> bool:
@@ -248,13 +467,13 @@ def set_status(con, url_hash_: str, status: str, story_key: str = None, note: st
 
 
 def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, publisher_ref=None,
-             editor_note=None):
+             editor_note=None, resolution_id=None):
     """Record a produced post. nuelink_id is the legacy schema name for any backend ref."""
     con.execute(
         "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
-        " nuelink_id, editor_note) VALUES (?,?,?,?,?,?,?,?,?)",
+        " nuelink_id, editor_note, resolution_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
         (time.time(), story_key, item_hash, klass, body, receipt_url, mode, publisher_ref,
-         editor_note),
+         editor_note, resolution_id),
     )
     con.commit()
 

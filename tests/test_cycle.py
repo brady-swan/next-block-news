@@ -2,13 +2,38 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
-from nbn import brain, config, editor, main, publisher, sources, store, verify
+from nbn import brain, config, editor, main, publisher, source_policy, sources, store, verify
 from tests.support import item, temporary_store
+
+
+def make_resolution(row, text, source_name=None, tier=None, role=None):
+    primary = row.get("class") == "primary" and source_name is None
+    name = source_name or row.get("source", "Example")
+    slug = name.lower().replace(" ", "-")
+    selected_tier = tier or ("p0" if primary else "t2")
+    selected_role = role or ("official" if primary else "reporting")
+    selected_url = ("https://glassnode.com/report" if name == "Glassnode" else row["url"])
+    ref = source_policy.SourceRef(
+        slug, name, selected_tier, "authority" if primary else "reporting", slug, slug,
+        selected_role, selected_url, selected_url.split("/")[2], "", "test")
+    originality = "primary_artifact" if primary else (
+        "original_research" if selected_role == "research" else "original_reporting")
+    ev = verify.EvidenceCandidate(
+        ref, originality, True, True, True,
+        source_policy.artifact_fingerprint(selected_url) if primary else "",
+        source_policy.content_fingerprint(text + " " + slug))
+    return verify.ResolutionResult(
+        row["url_hash"], row.get("story_key") or "", row["source"], ref, ref, text,
+        "selected", True, ev.originality, True, True,
+        selected_url if primary else "", ev.primary_artifact_fingerprint,
+        ev.content_fingerprint, None, "test resolution", (ev,))
 
 
 class CycleTests(unittest.TestCase):
     def run_cycle(self, con, raw_items, verdicts, drafts=None, mode="DRAFT", auto=False,
-                  editor_result=None, verify_result=None, article_text="Bitcoin test source"):
+                  editor_result=None, resolution_factory=None,
+                  provider_resolution=None, claim_support=None,
+                  article_text="Bitcoin test source", source_policy_mode="enforce"):
         drafts = drafts or [{"post": "NEW: Bitcoin test.", "event_date": None,
                               "needs_second_source": False}]
 
@@ -20,27 +45,39 @@ class CycleTests(unittest.TestCase):
         review = Mock(return_value=editor_result or {
             "verdict": "publish", "post": drafts[-1].get("post"), "reason": "clean",
         })
-        corroborate = Mock(return_value=verify_result or {
-            "confirmed": False, "reason": "not confirmed", "earliest_coverage_date": None,
-        })
+        def default_resolution(row, text):
+            return make_resolution(row, text)
+
+        resolution_effect = resolution_factory or default_resolution
+        provider_effect = provider_resolution or (
+            lambda row, _provider: make_resolution(
+                row, "Glassnode Bitcoin source", "Glassnode", "t2", "research"))
+        resolve = Mock(side_effect=lambda row, text, **_kwargs: resolution_effect(row, text))
+        provider_resolve = Mock(
+            side_effect=lambda row, provider, **_kwargs: provider_effect(row, provider))
         with ExitStack() as stack:
             stack.enter_context(patch.object(sources, "fetch_feeds", return_value=raw_items))
             stack.enter_context(patch.object(sources, "fetch_edgar", return_value=[]))
             stack.enter_context(patch.object(sources, "fetch_perception", return_value=[]))
             stack.enter_context(patch.object(sources, "fetch_x", return_value=[]))
-            stack.enter_context(patch.object(sources, "fetch_article_text",
-                                             return_value=article_text))
+            stack.enter_context(patch.object(sources, "fetch_article", return_value={
+                "text": article_text, "final_url": raw_items[0]["url"] if raw_items else "",
+                "canonical_url": raw_items[0]["url"] if raw_items else "", "byline": "Reporter"}))
             stack.enter_context(patch.object(sources, "chart_image", return_value=None))
             stack.enter_context(patch.object(brain, "triage", side_effect=triage))
             stack.enter_context(patch.object(brain, "draft", draft))
             stack.enter_context(patch.object(publisher, "publish", publish))
             stack.enter_context(patch.object(editor, "review", review))
-            stack.enter_context(patch.object(verify, "web_corroborate", corroborate))
+            stack.enter_context(patch.object(verify, "resolve_source", resolve))
+            stack.enter_context(patch.object(verify, "resolve_data_provider", provider_resolve))
+            stack.enter_context(patch.object(verify, "claims_supported", return_value=(
+                claim_support or {"supported": True, "reason": "supported"})))
             stack.enter_context(patch.object(config, "AUTOPOST_ENABLED", auto))
+            stack.enter_context(patch.object(config, "SOURCE_POLICY_MODE", source_policy_mode))
             stack.enter_context(patch.object(config, "AUTOPOST_CLASSES",
                                              {"primary", "corroborated"}))
             result = main.cycle(con)
-        return result, draft, publish, review, corroborate
+        return result, draft, publish, review, resolve
 
     def test_each_publisher_mode_gets_explicit_status_and_counter(self):
         expected = {
@@ -72,20 +109,79 @@ class CycleTests(unittest.TestCase):
             self.assertEqual(result["drafted"], 1)
             review.assert_not_called()
 
+    def test_nonofficial_source_cannot_keep_model_primary_class(self):
+        def nonofficial(row, text):
+            return make_resolution({**row, "class": "secondary"}, text)
+
+        with temporary_store() as con:
+            _result, _draft, publish, review, _resolve = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "bad-primary", "class": "primary"}],
+                auto=True, resolution_factory=nonofficial)
+            self.assertEqual(publish.call_args.args[2], "secondary")
+            review.assert_not_called()
+
+    def test_hostile_host_labeled_sec_cannot_reach_autopost(self):
+        def hostile(row, text):
+            ref = source_policy.classify(row["url"], row["source"])
+            return verify._held(row, ref, text, "untrusted source identity")
+
+        with temporary_store() as con:
+            result, _draft, publish, review, _resolve = self.run_cycle(
+                con, [item(url="https://untrusted.example/story", source="SEC")],
+                [{"action": "draft", "story_key": "spoof", "class": "primary"}],
+                auto=True, resolution_factory=hostile)
+            self.assertEqual(result["policy_held"], 1)
+            publish.assert_not_called()
+            review.assert_not_called()
+
+    def test_directly_supporting_official_artifact_can_promote_primary(self):
+        def official(row, text):
+            return make_resolution({**row, "class": "primary"}, text)
+
+        with temporary_store() as con:
+            _result, _draft, publish, _review, _resolve = self.run_cycle(
+                con, [item(source="CryptoSlate")],
+                [{"action": "draft", "story_key": "official-upgrade", "class": "secondary"}],
+                resolution_factory=official)
+            self.assertEqual(publish.call_args.args[2], "primary")
+
     def test_ordinary_draft_for_handled_exact_key_is_skipped(self):
         with temporary_store() as con:
             store.log_post(con, "same-story", None, "secondary", "NEW: Earlier.",
                            "https://example.com/earlier", "DRAFT")
-            result, draft, publish, *_ = self.run_cycle(
+            result, draft, publish, _review, resolve = self.run_cycle(
                 con, [item(url="https://example.com/new-source")],
                 [{"action": "draft", "story_key": "same-story", "class": "secondary"}],
             )
             self.assertEqual(result["posted"], 0)
             draft.assert_not_called()
             publish.assert_not_called()
+            resolve.assert_not_called()
             row = con.execute("SELECT status, note FROM items").fetchone()
             self.assertEqual(row["status"], "skipped")
             self.assertEqual(row["note"], "story already handled")
+
+    def test_corrected_handled_key_moves_persisted_evidence_before_skip(self):
+        with temporary_store() as con:
+            raw = item(url="https://coindesk.com/retried", source="CoinDesk")
+            inserted = store.upsert_new_items(con, [raw])[0]
+            prior = {**inserted, "story_key": "old-wrong-key", "class": "secondary"}
+            store.persist_resolution(con, make_resolution(prior, "Bitcoin retry source"), "enforce")
+            store.log_post(con, "correct-key", None, "secondary", "NEW: Earlier.",
+                           "https://example.com/earlier", "DRAFT")
+            result, draft, publish, _review, resolve = self.run_cycle(
+                con, [raw],
+                [{"action": "draft", "story_key": "correct-key", "class": "secondary"}],
+            )
+            self.assertEqual(result["posted"], 0)
+            draft.assert_not_called()
+            publish.assert_not_called()
+            resolve.assert_not_called()
+            self.assertEqual(store.qualified_evidence_count(con, "old-wrong-key"), 0)
+            self.assertEqual(store.qualified_evidence_count(con, "correct-key"), 1)
+            row = con.execute("SELECT story_key FROM source_resolutions").fetchone()
+            self.assertEqual(row["story_key"], "correct-key")
 
     def test_update_without_exact_reader_coverage_is_held(self):
         with temporary_store() as con:
@@ -134,14 +230,14 @@ class CycleTests(unittest.TestCase):
 
     def test_secondary_needing_verification_is_held_on_failure(self):
         with temporary_store() as con:
-            result, _draft, publish, _review, corroborate = self.run_cycle(
+            result, _draft, publish, _review, resolve = self.run_cycle(
                 con, [item()],
                 [{"action": "draft", "story_key": "verify-me", "class": "secondary"}],
                 drafts=[{"post": "NEW: Bitcoin test.", "event_date": None,
                          "needs_second_source": True}],
             )
             self.assertEqual(result["held"], 1)
-            corroborate.assert_called_once()
+            resolve.assert_called_once()
             publish.assert_not_called()
 
     def test_stale_event_is_held(self):
@@ -175,14 +271,74 @@ class CycleTests(unittest.TestCase):
                 {"action": "draft", "story_key": "two-source", "class": "secondary"},
                 {"action": "draft", "story_key": "two-source", "class": "secondary"},
             ]
-            result, _draft, publish, review, corroborate = self.run_cycle(
-                con, raw, verdicts, mode="IMMEDIATE", auto=True,
-                verify_result={"confirmed": False, "reason": "", "earliest_coverage_date": None},
-            )
+            result, _draft, publish, review, resolve = self.run_cycle(
+                con, raw, verdicts, mode="IMMEDIATE", auto=True)
             self.assertEqual(result["posted"], 1)
             self.assertEqual(publish.call_args.args[2], "corroborated")
             review.assert_called_once()
-            corroborate.assert_called_once()
+            self.assertEqual(resolve.call_count, 2)
+
+    def test_story_receipt_selection_is_permutation_invariant(self):
+        def ranked(row, text):
+            if row["source"] == "SEC":
+                return make_resolution({**row, "class": "primary"}, text)
+            return make_resolution({**row, "class": "secondary"}, text)
+
+        t2 = item("https://coindesk.com/report", source="CoinDesk")
+        p0 = item("https://sec.gov/newsroom/press-releases/order", source="SEC")
+        selected = []
+        for rows in ([t2, p0], [p0, t2]):
+            with temporary_store() as con:
+                verdicts = [
+                    {"action": "draft", "story_key": "same-ranked-story",
+                     "class": "primary" if row["source"] == "SEC" else "secondary"}
+                    for row in rows
+                ]
+                result, draft, publish, _review, _resolve = self.run_cycle(
+                    con, rows, verdicts,
+                    drafts=[{"post": "NEW: Bitcoin test.", "event_date": None,
+                             "needs_second_source": False} for _ in rows],
+                    resolution_factory=ranked)
+                self.assertEqual(result["drafted"], 1)
+                self.assertEqual(draft.call_count, 2)
+                selected.append((publish.call_args.args[1], publish.call_args.args[2]))
+        self.assertEqual(selected, [
+            ("https://sec.gov/newsroom/press-releases/order", "primary"),
+            ("https://sec.gov/newsroom/press-releases/order", "primary"),
+        ])
+
+    def test_provider_substitutions_finalize_before_corroboration(self):
+        drafts = [
+            {"post": "NEW: Bitcoin test.", "event_date": None,
+             "needs_second_source": False, "data_provider": "Glassnode"}
+            for _ in range(4)
+        ]
+        with temporary_store() as con:
+            rows = [item("https://coindesk.com/one", source="CoinDesk"),
+                    item("https://theblock.co/two", source="The Block")]
+            verdicts = [{"action": "draft", "story_key": "provider-collapse",
+                         "class": "secondary"} for _ in rows]
+            result, draft, publish, _review, _resolve = self.run_cycle(
+                con, rows, verdicts, drafts=drafts)
+            self.assertEqual(result["drafted"], 1)
+            self.assertEqual(draft.call_count, 4)
+            self.assertEqual(publish.call_args.args[2], "secondary")
+            self.assertEqual(store.qualified_evidence_count(con, "provider-collapse"), 1)
+
+    def test_later_cycle_eligible_source_completes_corroboration(self):
+        with temporary_store() as con:
+            first_result, *_ = self.run_cycle(
+                con, [item("https://one.example/story", source="Outlet One")],
+                [{"action": "draft", "story_key": "later-source", "class": "secondary"}],
+                drafts=[{"post": "NEW: Bitcoin test.", "event_date": None,
+                         "needs_second_source": True}])
+            self.assertEqual(first_result["held"], 1)
+            second_result, _draft, publish, *_ = self.run_cycle(
+                con, [item("https://two.example/story", source="Outlet Two")],
+                [{"action": "draft", "story_key": "later-source", "class": "secondary"}],
+                mode="IMMEDIATE", auto=True)
+            self.assertEqual(second_result["posted"], 1)
+            self.assertEqual(publish.call_args.args[2], "corroborated")
 
     def test_lint_failure_after_retry_is_held(self):
         with temporary_store() as con:
@@ -196,6 +352,138 @@ class CycleTests(unittest.TestCase):
             self.assertEqual(result["held"], 1)
             self.assertEqual(draft.call_count, 2)
             publish.assert_not_called()
+
+    def test_data_provider_resolution_redrafts_from_provider_receipt(self):
+        with temporary_store() as con:
+            drafts = [
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+            ]
+            result, draft, publish, *_ = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "provider", "class": "secondary"}],
+                drafts=drafts)
+            self.assertEqual(result["drafted"], 1)
+            self.assertEqual(draft.call_count, 2)
+            self.assertEqual(publish.call_args.args[1], "https://glassnode.com/report")
+            self.assertEqual(publish.call_args.args[2], "secondary")
+            resolution = con.execute(
+                "SELECT original_source, selected_source FROM source_resolutions"
+            ).fetchone()
+            self.assertEqual(dict(resolution), {
+                "original_source": "CoinDesk", "selected_source": "Glassnode"})
+
+    def test_provider_replacement_removes_primary_class_from_final_receipt(self):
+        def official(row, text):
+            return make_resolution({**row, "class": "primary"}, text)
+
+        with temporary_store() as con:
+            drafts = [
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+            ]
+            result, _draft, publish, review, _resolve = self.run_cycle(
+                con, [item(source="SEC")],
+                [{"action": "draft", "story_key": "provider-demotion", "class": "primary"}],
+                drafts=drafts, auto=True, resolution_factory=official)
+            self.assertEqual(result["drafted"], 1)
+            self.assertEqual(publish.call_args.args[2], "secondary")
+            review.assert_not_called()
+
+    def test_data_provider_second_mismatch_holds_without_loop(self):
+        with temporary_store() as con:
+            drafts = [
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Coin Metrics"},
+            ]
+            result, draft, publish, *_ = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "provider-mismatch",
+                  "class": "secondary"}], drafts=drafts)
+            self.assertEqual(result["held"], 1)
+            self.assertEqual(draft.call_count, 2)
+            publish.assert_not_called()
+
+    def test_observe_mode_records_provider_failure_but_stages_draft(self):
+        def provider_failure(row, _provider):
+            ref = source_policy.classify(row["url"], row["source"])
+            return verify._held(row, ref, "", "provider lookup offline")
+
+        with temporary_store() as con:
+            drafts = [{"post": "NEW: Bitcoin test.", "event_date": None,
+                       "needs_second_source": False, "data_provider": "Glassnode"}]
+            result, draft, publish, _review, _resolve = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "provider-observe", "class": "secondary"}],
+                drafts=drafts, provider_resolution=provider_failure,
+                source_policy_mode="observe")
+            self.assertEqual(result["drafted"], 1)
+            self.assertEqual(draft.call_count, 1)
+            publish.assert_called_once()
+            row = con.execute("SELECT status, note FROM source_resolutions").fetchone()
+            self.assertEqual(row["status"], "held")
+            self.assertIn("observe would hold", row["note"])
+
+    def test_observe_stages_pre_provider_draft_when_claim_support_fails(self):
+        with temporary_store() as con:
+            drafts = [
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+            ]
+            result, draft, publish, _review, _resolve = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "provider-claim-observe",
+                  "class": "secondary"}],
+                drafts=drafts, claim_support={"supported": False, "reason": "ambiguous"},
+                source_policy_mode="observe")
+            self.assertEqual(result["drafted"], 1)
+            self.assertEqual(draft.call_count, 2)
+            self.assertEqual(publish.call_args.args[1], "https://example.com/story")
+            row = con.execute("SELECT status, selected_source, note FROM source_resolutions").fetchone()
+            self.assertEqual((row["status"], row["selected_source"]), ("held", "CoinDesk"))
+            self.assertIn("provider terminal gate", row["note"])
+
+    def test_observe_stages_pre_provider_draft_when_provider_lint_fails(self):
+        with temporary_store() as con:
+            drafts = [
+                {"post": "NEW: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+                {"post": "UPDATE: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+                {"post": "UPDATE: Bitcoin test.", "event_date": None,
+                 "needs_second_source": False, "data_provider": "Glassnode"},
+            ]
+            result, draft, publish, _review, _resolve = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "provider-lint-observe",
+                  "class": "secondary"}],
+                drafts=drafts, source_policy_mode="observe")
+            self.assertEqual(result["drafted"], 1)
+            self.assertEqual(draft.call_count, 3)
+            self.assertEqual(publish.call_args.args[0], "NEW: Bitcoin test.")
+            row = con.execute("SELECT status, note FROM source_resolutions").fetchone()
+            self.assertEqual(row["status"], "held")
+            self.assertIn("provider terminal gate", row["note"])
+
+    def test_locked_worker_skips_news_briefing_and_audit(self):
+        with temporary_store() as con, \
+                patch.object(store, "acquire_cycle_lease", return_value=False), \
+                patch.object(main, "_cycle_locked") as news, \
+                patch.object(main.briefing, "maybe_run") as briefing_run, \
+                patch("nbn.audit.maybe_run") as audit_run:
+            result = main.worker_iteration(con)
+        self.assertEqual(result, {"skipped_locked": 1})
+        news.assert_not_called()
+        briefing_run.assert_not_called()
+        audit_run.assert_not_called()
 
     def test_editor_revision_is_relinted_and_published(self):
         with temporary_store() as con:

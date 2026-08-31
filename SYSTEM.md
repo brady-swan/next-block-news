@@ -70,7 +70,7 @@ and the self-audit.
   one fixed value). EDGAR exempt (date-only stamps; its query bounds age instead).
 - **Non-English** (>30% non-Latin letters in the title) — skipped before any model call.
 
-## 3. Judgment (triage → verification)
+## 3. Judgment (triage → source resolution)
 
 **Triage** (Sonnet 5, batch): action draft/update/hold/skip, a `story_key` naming the
 underlying story, and a class. It receives both **posted** story keys (skip duplicates)
@@ -82,22 +82,41 @@ development matching an exact reader-covered story key. Ordinary `draft` on an a
 handled key still skips. Deterministic lint requires `NEW:` for first coverage and
 `UPDATE:` for an authorized update.
 
+**Source tier and evidence class are separate:** `config/source_tiers.toml` is the
+validated canonical registry. P0 is an official artifact; Tier 1 premier reporting;
+Tier 2 reliable specialist reporting/research; Tier 3 discovery only; Tier 4 a wrapper,
+aggregator, or syndicator. Unknown sources fail closed. Tier never proves that a page
+supports the story, is original, or is independent.
+
 **Classes decide autonomy:**
 
 | Class | Meaning | Autopost |
 |---|---|---|
 | `primary` | The item IS the official artifact (regulator release, filing, company's own statement) | yes |
-| `corroborated` | 2+ independent publishers on one story_key, **or** web-verification found independent confirmation | yes |
+| `corroborated` | 2+ eligible independent evidence chains on one exact story_key | yes |
 | `secondary` | Single-outlet press report | never (code-hardened) → Typefully DRAFT |
 | `data` | Pure market/chain data | in the allowed set; dormant until the wire computes its own numbers |
 | `briefing` | The Blocks | DRAFT until Brady promotes the class |
 
-**Active verification:** a single-source story doesn't wait passively — the worker
-web-searches for INDEPENDENT confirmation (adversarial prompt: "find reasons it is NOT
-confirmed"; deterministic vetoes: confirming domain must differ, aggregators never
-count). Confirmed → `corroborated` → publishes in minutes. **Detector tips invert the
-order**: verify FIRST, then draft from the primary the hunt found — the tip is never
-the source; tip + confirmation = two sources on the key.
+**Active source resolution:** all actionable items receive a typed, persisted resolution
+before any item in the batch can promote. Official and research identities never prove
+artifact scope: broad-domain pages require a directly-supporting role verdict, fetched
+canonical/byline metadata wins over model metadata, and official-X is primary only for the
+account's own action or statement. Tier 1 is an acceptable receipt; Tier 2 reporting gets
+a bounded primary/Tier 1 upgrade search and may fall back only when original reporting is
+established. Tier 3, Tier 4, and unknown sources must be replaced by a directly supporting
+P0/Tier 1/Tier 2 page or they hold.
+
+The original tip and final receipt are stored separately. A detector plus the artifact it
+located is one evidence chain, not two. Eligible evidence persists across cycles for the
+exact story key and expires after the configured lookback. Same-owner publications,
+aggregators, syndication/content copies, and reports resolving to the same primary artifact
+collapse, including lightly boilerplate-modified copies and an entity's website plus its
+official X account. Ambiguous originality is never corroboration-eligible. A directly
+supporting, artifact-scoped P0 official page may justify `primary`; deterministic code
+vetoes `primary` on anything else. Every candidate for one exact story key finishes source
+and provider resolution before the strongest final receipt is chosen, so feed order cannot
+change the receipt or class and the worker emits at most one post per story group.
 
 ## 4. Writing
 
@@ -121,6 +140,11 @@ patterns, number-integrity vs source text, repeated-attribution ban, mention whi
 no model URLs, length caps. Block-specific: any "swan" mention rejected; receipts must
 be URLs present in the Node's brief. These gates are the wire's identity — NOT Swan
 compliance; the wire is not Swan-affiliated content.
+
+If a draft names a data provider different from its selected receipt, the worker performs
+one targeted provider lookup and one redraft from the replacement text. A second mismatch,
+empty source, unsupported number/quote, or ambiguous adversarial claim-support verdict
+holds. It never swaps a receipt beneath already-written copy or loops back to the old one.
 
 ## 6. The Editor (last mile, autonomous posts only)
 
@@ -189,6 +213,10 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | Variable | Observed 2026-08-31 | Purpose |
 |---|---|---|
 | `NBN_AUTOPOST_ENABLED` | `false` | master kill switch; autonomy currently paused |
+| `NBN_SOURCE_POLICY_MODE` | `enforce` (code default) | `observe` records decisions but forces DRAFT/TAPE |
+| `NBN_SOURCE_EVIDENCE_LOOKBACK_HOURS` | `24` | freshness bound for cross-cycle evidence |
+| `NBN_SOURCE_RESOLUTION_CACHE_SECONDS` | `3600` | persisted per-item resolution cache across restarts |
+| `NBN_CYCLE_LEASE_SECONDS` | `900` | expiring mutex across news, briefing, and audit work |
 | `NBN_AUTOPOST_CLASSES` | `primary,corroborated` | autonomy surface (`secondary` ignored even if listed) |
 | `NBN_PUBLISH_DELAY_SECONDS` | `30` | the scheduled-publish fuse |
 | `NBN_MAX_AGE_HOURS_ACTIVE/QUIET` | `2.5` / `6` | freshness schedule (fixed `NBN_MAX_AGE_HOURS` overrides) |

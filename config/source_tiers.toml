@@ -1,0 +1,955 @@
+version = 1
+
+# This is a routing policy, not a general judgment about an outlet. Tier measures
+# receipt quality; receipt_role describes what an item from the source may prove.
+
+[[sources]]
+id = "sec"
+display_name = "U.S. Securities and Exchange Commission"
+tier = "p0"
+category = "authority"
+independence_key = "us-sec"
+receipt_role = "official"
+domains = ["sec.gov"]
+aliases = ["sec", "sec press releases", "sec edgar", "edgar"]
+handles = ["SECGov"]
+
+[[sources]]
+id = "federal-reserve"
+display_name = "Federal Reserve"
+tier = "p0"
+category = "authority"
+independence_key = "federal-reserve"
+receipt_role = "official"
+domains = ["federalreserve.gov", "stlouisfed.org"]
+url_prefixes = ["https://fred.stlouisfed.org/graph/"]
+aliases = ["federal reserve", "fomc", "fred", "federal reserve economic data"]
+handles = ["federalreserve", "stlouisfed"]
+
+[[sources]]
+id = "us-treasury"
+display_name = "U.S. Treasury"
+tier = "p0"
+category = "authority"
+independence_key = "us-treasury"
+receipt_role = "official"
+domains = ["treasury.gov"]
+aliases = ["u.s. treasury", "us treasury", "treasury"]
+handles = ["USTreasury"]
+
+[[sources]]
+id = "us-financial-crime-authorities"
+display_name = "U.S. Treasury Financial-Crime Authorities"
+tier = "p0"
+category = "authority"
+independence_key = "us-treasury"
+ownership_key = "us-treasury"
+receipt_role = "official"
+domains = ["fincen.gov", "ofac.treasury.gov"]
+aliases = ["fincen", "ofac"]
+handles = []
+
+[[sources]]
+id = "irs"
+display_name = "Internal Revenue Service"
+tier = "p0"
+category = "authority"
+independence_key = "irs"
+receipt_role = "official"
+domains = ["irs.gov"]
+aliases = ["irs", "internal revenue service"]
+handles = ["IRSnews"]
+
+[[sources]]
+id = "cftc"
+display_name = "Commodity Futures Trading Commission"
+tier = "p0"
+category = "authority"
+independence_key = "cftc"
+receipt_role = "official"
+domains = ["cftc.gov"]
+aliases = ["cftc"]
+handles = ["CFTC"]
+
+[[sources]]
+id = "doj"
+display_name = "U.S. Department of Justice"
+tier = "p0"
+category = "authority"
+independence_key = "us-doj"
+receipt_role = "official"
+domains = ["justice.gov"]
+aliases = ["doj", "department of justice"]
+handles = ["TheJusticeDept"]
+
+[[sources]]
+id = "us-legislative-record"
+display_name = "U.S. Legislative Record"
+tier = "p0"
+category = "authority"
+independence_key = "us-congress"
+receipt_role = "official"
+domains = ["congress.gov", "house.gov", "senate.gov"]
+aliases = ["congress.gov", "congressional record", "u.s. congress"]
+handles = []
+
+[[sources]]
+id = "federal-register"
+display_name = "Federal Register"
+tier = "p0"
+category = "authority"
+independence_key = "federal-register"
+receipt_role = "official"
+domains = ["federalregister.gov"]
+aliases = ["federal register"]
+handles = []
+
+[[sources]]
+id = "us-banking-regulators"
+display_name = "U.S. Banking Regulators"
+tier = "p0"
+category = "authority"
+independence_key = "us-banking-regulators"
+receipt_role = "official"
+domains = ["occ.treas.gov", "occ.gov", "fdic.gov", "consumerfinance.gov", "ncua.gov"]
+aliases = ["occ", "fdic", "cfpb", "ncua"]
+handles = []
+
+[[sources]]
+id = "us-macro-data"
+display_name = "U.S. Official Macro Data"
+tier = "p0"
+category = "authority"
+independence_key = "us-macro-data"
+receipt_role = "official"
+domains = ["bls.gov", "bea.gov"]
+aliases = ["bureau of labor statistics", "bls", "bureau of economic analysis", "bea"]
+handles = []
+
+[[sources]]
+id = "us-courts"
+display_name = "U.S. Courts"
+tier = "p0"
+category = "authority"
+independence_key = "us-courts"
+receipt_role = "official"
+domains = ["uscourts.gov", "pacer.uscourts.gov"]
+aliases = ["pacer", "federal court filing", "court filing"]
+handles = []
+
+[[sources]]
+id = "market-infrastructure"
+display_name = "Official Market Infrastructure"
+tier = "p0"
+category = "market_infrastructure"
+independence_key = "official-market-infrastructure"
+receipt_role = "technical"
+domains = ["dtcc.com", "cmegroup.com", "cboe.com", "nasdaq.com", "nyse.com"]
+aliases = ["dtcc", "cme", "cboe", "nasdaq", "nyse"]
+handles = []
+
+[[sources]]
+id = "bis"
+display_name = "Bank for International Settlements"
+tier = "p0"
+category = "authority"
+independence_key = "bis"
+receipt_role = "official"
+domains = ["bis.org"]
+aliases = ["bis", "bank for international settlements", "basel committee"]
+handles = []
+
+[[sources]]
+id = "global-financial-standards"
+display_name = "Global Financial Standards Bodies"
+tier = "p0"
+category = "authority"
+independence_key = "global-financial-standards"
+receipt_role = "official"
+domains = ["fsb.org", "fatf-gafi.org", "iosco.org", "imf.org"]
+aliases = ["financial stability board", "fsb", "fatf", "iosco", "imf"]
+handles = []
+
+[[sources]]
+id = "eu-authorities"
+display_name = "European Union Authorities"
+tier = "p0"
+category = "authority"
+independence_key = "eu-authorities"
+receipt_role = "official"
+domains = ["europa.eu", "esma.europa.eu", "eba.europa.eu", "ecb.europa.eu"]
+aliases = ["european commission", "esma", "eba", "ecb"]
+handles = []
+
+[[sources]]
+id = "uk-authorities"
+display_name = "United Kingdom Financial Authorities"
+tier = "p0"
+category = "authority"
+independence_key = "uk-authorities"
+receipt_role = "official"
+domains = ["bankofengland.co.uk", "fca.org.uk"]
+aliases = ["bank of england", "fca", "financial conduct authority"]
+handles = []
+
+[[sources]]
+id = "bitcoin-core"
+display_name = "Bitcoin Core"
+tier = "p0"
+category = "technical"
+independence_key = "bitcoin-core"
+receipt_role = "official"
+domains = []
+url_prefixes = ["https://github.com/bitcoin/bitcoin", "https://bitcoincore.org/"]
+aliases = ["bitcoin core", "bitcoin core repository", "bips"]
+handles = ["bitcoincoreorg"]
+
+[[sources]]
+id = "lightning-specifications"
+display_name = "Lightning Specifications"
+tier = "p0"
+category = "technical"
+independence_key = "lightning-specifications"
+receipt_role = "official"
+domains = []
+url_prefixes = ["https://github.com/lightning/bolts"]
+aliases = ["lightning specifications", "lightning specs", "bolts"]
+handles = []
+
+[[sources]]
+id = "mempool-space"
+display_name = "Mempool.space"
+tier = "p0"
+category = "technical"
+independence_key = "mempool-space"
+receipt_role = "technical"
+domains = ["mempool.space"]
+aliases = ["mempool.space", "mempool"]
+handles = ["mempool"]
+
+# Known official X accounts are P0 only for statements about their own actions.
+[[sources]]
+id = "official-x-watch"
+display_name = "Known Official X Accounts"
+tier = "p0"
+category = "social"
+independence_key = "official-x-account"
+receipt_role = "official"
+domains = []
+aliases = []
+handles = ["SenLummis", "RepTomEmmer", "BitGo", "NYDIG", "coinbase", "Strategy", "galaxyhq", "BlackRock", "DigitalAssets", "BitwiseInvest", "Grayscale", "River", "Strike", "unchainedcom", "CasaHODL", "Swan"]
+handle_ownership = { SenLummis = "us-congress", RepTomEmmer = "us-congress", BitGo = "bitgo", NYDIG = "nydig", coinbase = "coinbase", Strategy = "strategy", galaxyhq = "galaxy", BlackRock = "blackrock", DigitalAssets = "fidelity", BitwiseInvest = "bitwise", Grayscale = "grayscale", River = "river", Strike = "strike", unchainedcom = "unchained-company", CasaHODL = "casa", Swan = "swan" }
+
+# Tier 1: premier reporting.
+[[sources]]
+id = "reuters"
+display_name = "Reuters"
+tier = "t1"
+category = "reporting"
+independence_key = "reuters"
+receipt_role = "reporting"
+domains = ["reuters.com"]
+aliases = ["reuters", "reuters business"]
+handles = ["Reuters"]
+
+[[sources]]
+id = "bloomberg"
+display_name = "Bloomberg"
+tier = "t1"
+category = "reporting"
+independence_key = "bloomberg"
+receipt_role = "reporting"
+domains = ["bloomberg.com"]
+aliases = ["bloomberg", "bloomberg markets"]
+handles = ["business"]
+
+[[sources]]
+id = "associated-press"
+display_name = "Associated Press"
+tier = "t1"
+category = "reporting"
+independence_key = "associated-press"
+receipt_role = "reporting"
+domains = ["apnews.com"]
+aliases = ["associated press", "ap"]
+handles = ["AP"]
+
+[[sources]]
+id = "financial-times"
+display_name = "Financial Times"
+tier = "t1"
+category = "reporting"
+independence_key = "financial-times"
+receipt_role = "reporting"
+domains = ["ft.com"]
+aliases = ["financial times", "ft"]
+handles = ["FinancialTimes"]
+
+[[sources]]
+id = "wall-street-journal"
+display_name = "The Wall Street Journal"
+tier = "t1"
+category = "reporting"
+independence_key = "dow-jones"
+ownership_key = "dow-jones"
+receipt_role = "reporting"
+domains = ["wsj.com"]
+aliases = ["wall street journal", "wsj"]
+handles = ["WSJ"]
+
+[[sources]]
+id = "dow-jones-newswires"
+display_name = "Dow Jones Newswires"
+tier = "t1"
+category = "reporting"
+independence_key = "dow-jones"
+ownership_key = "dow-jones"
+receipt_role = "reporting"
+domains = ["dowjones.com"]
+aliases = ["dow jones", "dow jones newswires"]
+handles = []
+
+[[sources]]
+id = "economist"
+display_name = "The Economist"
+tier = "t1"
+category = "reporting"
+independence_key = "economist"
+receipt_role = "reporting"
+domains = ["economist.com"]
+aliases = ["the economist", "economist"]
+handles = ["TheEconomist"]
+
+[[sources]]
+id = "new-york-times"
+display_name = "The New York Times"
+tier = "t1"
+category = "reporting"
+independence_key = "new-york-times"
+receipt_role = "reporting"
+domains = ["nytimes.com"]
+aliases = ["new york times", "the new york times", "nyt"]
+handles = ["nytimes"]
+
+[[sources]]
+id = "the-information"
+display_name = "The Information"
+tier = "t1"
+category = "reporting"
+independence_key = "the-information"
+receipt_role = "reporting"
+domains = ["theinformation.com"]
+aliases = ["the information"]
+handles = ["theinformation"]
+
+[[sources]]
+id = "cnbc"
+display_name = "CNBC"
+tier = "t1"
+category = "reporting"
+independence_key = "nbcuniversal-news"
+receipt_role = "reporting"
+domains = ["cnbc.com"]
+aliases = ["cnbc"]
+handles = ["CNBC"]
+
+[[sources]]
+id = "barrons"
+display_name = "Barron's"
+tier = "t1"
+category = "reporting"
+independence_key = "dow-jones"
+ownership_key = "dow-jones"
+receipt_role = "reporting"
+domains = ["barrons.com"]
+aliases = ["barron's", "barrons"]
+handles = ["barronsonline"]
+
+[[sources]]
+id = "sp-global"
+display_name = "S&P Global"
+tier = "t1"
+category = "reporting"
+independence_key = "sp-global"
+receipt_role = "reporting"
+domains = ["spglobal.com"]
+aliases = ["s&p global", "sp global"]
+handles = ["SPGlobal"]
+
+[[sources]]
+id = "nikkei-asia"
+display_name = "Nikkei Asia"
+tier = "t1"
+category = "reporting"
+independence_key = "nikkei"
+receipt_role = "reporting"
+domains = ["asia.nikkei.com"]
+aliases = ["nikkei asia"]
+handles = ["NikkeiAsia"]
+
+[[sources]]
+id = "bbc"
+display_name = "BBC"
+tier = "t1"
+category = "reporting"
+independence_key = "bbc"
+receipt_role = "reporting"
+domains = ["bbc.com", "bbc.co.uk"]
+aliases = ["bbc", "bbc news"]
+handles = ["BBCWorld"]
+
+# Tier 2: reliable specialist/original reporting.
+[[sources]]
+id = "coindesk"
+display_name = "CoinDesk"
+tier = "t2"
+category = "reporting"
+independence_key = "coindesk"
+receipt_role = "reporting"
+domains = ["coindesk.com"]
+aliases = ["coindesk"]
+handles = ["coindesk"]
+
+[[sources]]
+id = "the-block"
+display_name = "The Block"
+tier = "t2"
+category = "reporting"
+independence_key = "the-block"
+receipt_role = "reporting"
+domains = ["theblock.co"]
+aliases = ["the block"]
+handles = ["TheBlockCo"]
+
+[[sources]]
+id = "blockworks"
+display_name = "Blockworks"
+tier = "t2"
+category = "reporting"
+independence_key = "blockworks"
+receipt_role = "reporting"
+domains = ["blockworks.co"]
+aliases = ["blockworks"]
+handles = ["Blockworks_"]
+
+[[sources]]
+id = "bitcoin-magazine"
+display_name = "Bitcoin Magazine"
+tier = "t2"
+category = "reporting"
+independence_key = "bitcoin-magazine"
+receipt_role = "reporting"
+domains = ["bitcoinmagazine.com"]
+aliases = ["bitcoin magazine"]
+handles = ["BitcoinMagazine"]
+
+[[sources]]
+id = "dl-news"
+display_name = "DL News"
+tier = "t2"
+category = "reporting"
+independence_key = "dl-news"
+receipt_role = "reporting"
+domains = ["dlnews.com"]
+aliases = ["dl news"]
+handles = ["DLNewsInfo"]
+
+[[sources]]
+id = "unchained"
+display_name = "Unchained"
+tier = "t2"
+category = "reporting"
+independence_key = "unchained-news"
+receipt_role = "reporting"
+domains = ["unchainedcrypto.com"]
+aliases = ["unchained crypto", "unchained"]
+handles = ["Unchained_pod"]
+
+[[sources]]
+id = "fortune"
+display_name = "Fortune"
+tier = "t2"
+category = "reporting"
+independence_key = "fortune"
+receipt_role = "reporting"
+domains = ["fortune.com"]
+aliases = ["fortune"]
+handles = ["FortuneMagazine"]
+
+[[sources]]
+id = "forbes"
+display_name = "Forbes"
+tier = "t2"
+category = "reporting"
+independence_key = "forbes"
+receipt_role = "reporting"
+domains = ["forbes.com"]
+aliases = ["forbes"]
+handles = ["Forbes"]
+
+[[sources]]
+id = "wired"
+display_name = "Wired"
+tier = "t2"
+category = "reporting"
+independence_key = "conde-nast"
+receipt_role = "reporting"
+domains = ["wired.com"]
+aliases = ["wired"]
+handles = ["WIRED"]
+
+[[sources]]
+id = "ars-technica"
+display_name = "Ars Technica"
+tier = "t2"
+category = "reporting"
+independence_key = "ars-technica"
+receipt_role = "reporting"
+domains = ["arstechnica.com"]
+aliases = ["ars technica"]
+handles = ["arstechnica"]
+
+[[sources]]
+id = "american-banker"
+display_name = "American Banker"
+tier = "t2"
+category = "reporting"
+independence_key = "american-banker"
+receipt_role = "reporting"
+domains = ["americanbanker.com"]
+aliases = ["american banker"]
+handles = ["AmerBanker"]
+
+[[sources]]
+id = "protos"
+display_name = "Protos"
+tier = "t2"
+category = "reporting"
+independence_key = "protos"
+receipt_role = "reporting"
+domains = ["protos.com"]
+aliases = ["protos"]
+handles = ["Protos"]
+
+[[sources]]
+id = "axios"
+display_name = "Axios"
+tier = "t2"
+category = "reporting"
+independence_key = "axios"
+receipt_role = "reporting"
+domains = ["axios.com"]
+aliases = ["axios"]
+handles = []
+
+[[sources]]
+id = "politico"
+display_name = "Politico"
+tier = "t2"
+category = "reporting"
+independence_key = "politico"
+receipt_role = "reporting"
+domains = ["politico.com"]
+aliases = ["politico"]
+handles = []
+
+[[sources]]
+id = "law360"
+display_name = "Law360"
+tier = "t2"
+category = "reporting"
+independence_key = "law360"
+receipt_role = "reporting"
+domains = ["law360.com"]
+aliases = ["law360"]
+handles = []
+
+[[sources]]
+id = "techcrunch"
+display_name = "TechCrunch"
+tier = "t2"
+category = "reporting"
+independence_key = "techcrunch"
+receipt_role = "reporting"
+domains = ["techcrunch.com"]
+aliases = ["techcrunch"]
+handles = []
+
+[[sources]]
+id = "marketwatch"
+display_name = "MarketWatch"
+tier = "t2"
+category = "reporting"
+independence_key = "dow-jones"
+ownership_key = "dow-jones"
+receipt_role = "reporting"
+domains = ["marketwatch.com"]
+aliases = ["marketwatch"]
+handles = []
+
+[[sources]]
+id = "blockspace"
+display_name = "Blockspace"
+tier = "t2"
+category = "reporting"
+independence_key = "blockspace"
+receipt_role = "reporting"
+domains = ["blockspace.media"]
+aliases = ["blockspace"]
+handles = []
+
+[[sources]]
+id = "the-miner-mag"
+display_name = "The Miner Mag"
+tier = "t2"
+category = "reporting"
+independence_key = "the-miner-mag"
+receipt_role = "reporting"
+domains = ["theminermag.com"]
+aliases = ["the miner mag"]
+handles = []
+
+[[sources]]
+id = "bitcoin-optech"
+display_name = "Bitcoin Optech"
+tier = "t2"
+category = "technical"
+independence_key = "bitcoin-optech"
+receipt_role = "technical"
+domains = ["bitcoinops.org"]
+aliases = ["bitcoin optech"]
+handles = ["bitcoinoptech"]
+
+[[sources]]
+id = "bitcoin-stackexchange"
+display_name = "Bitcoin Stack Exchange"
+tier = "t2"
+category = "technical"
+independence_key = "bitcoin-stackexchange"
+receipt_role = "technical"
+domains = ["bitcoin.stackexchange.com"]
+aliases = ["bitcoin stack exchange"]
+handles = []
+
+[[sources]]
+id = "delving-bitcoin"
+display_name = "Delving Bitcoin"
+tier = "t2"
+category = "technical"
+independence_key = "delving-bitcoin"
+receipt_role = "technical"
+domains = ["delvingbitcoin.org"]
+aliases = ["delving bitcoin"]
+handles = []
+
+# Tier 2 research and data. These are primary for their own disclosed analysis,
+# but never official-primary or autopostable merely because of tier.
+[[sources]]
+id = "bitcoin-policy-institute"
+display_name = "Bitcoin Policy Institute"
+tier = "t2"
+category = "research_data"
+independence_key = "bitcoin-policy-institute"
+receipt_role = "research"
+domains = ["btcpolicy.org"]
+aliases = ["bitcoin policy institute", "bpi"]
+handles = ["btcpolicyorg"]
+
+[[sources]]
+id = "galaxy-research"
+display_name = "Galaxy Research"
+tier = "t2"
+category = "research_data"
+independence_key = "galaxy"
+receipt_role = "research"
+domains = ["galaxy.com"]
+aliases = ["galaxy research"]
+handles = []
+
+[[sources]]
+id = "coin-metrics"
+display_name = "Coin Metrics"
+tier = "t2"
+category = "research_data"
+independence_key = "coin-metrics"
+receipt_role = "research"
+domains = ["coinmetrics.io"]
+aliases = ["coin metrics"]
+handles = ["coinmetrics"]
+
+[[sources]]
+id = "glassnode"
+display_name = "Glassnode"
+tier = "t2"
+category = "research_data"
+independence_key = "glassnode"
+receipt_role = "research"
+domains = ["glassnode.com"]
+aliases = ["glassnode"]
+handles = ["glassnode"]
+
+[[sources]]
+id = "chainalysis"
+display_name = "Chainalysis"
+tier = "t2"
+category = "research_data"
+independence_key = "chainalysis"
+receipt_role = "research"
+domains = ["chainalysis.com"]
+aliases = ["chainalysis"]
+handles = ["chainalysis"]
+
+[[sources]]
+id = "nydig-research"
+display_name = "NYDIG Research"
+tier = "t2"
+category = "research_data"
+independence_key = "nydig"
+receipt_role = "research"
+domains = ["nydig.com"]
+aliases = ["nydig research"]
+handles = []
+
+[[sources]]
+id = "fidelity-digital-assets"
+display_name = "Fidelity Digital Assets"
+tier = "t2"
+category = "research_data"
+independence_key = "fidelity"
+receipt_role = "research"
+domains = ["fidelitydigitalassets.com"]
+aliases = ["fidelity digital assets"]
+handles = []
+
+[[sources]]
+id = "bitwise-research"
+display_name = "Bitwise Research"
+tier = "t2"
+category = "research_data"
+independence_key = "bitwise"
+receipt_role = "research"
+domains = ["bitwiseinvestments.com"]
+aliases = ["bitwise research"]
+handles = []
+
+[[sources]]
+id = "coinshares-research"
+display_name = "CoinShares Research"
+tier = "t2"
+category = "research_data"
+independence_key = "coinshares"
+receipt_role = "research"
+domains = ["coinshares.com"]
+aliases = ["coinshares", "coinshares research"]
+handles = []
+
+[[sources]]
+id = "k33-research"
+display_name = "K33 Research"
+tier = "t2"
+category = "research_data"
+independence_key = "k33"
+receipt_role = "research"
+domains = ["k33.com"]
+aliases = ["k33", "k33 research"]
+handles = []
+
+[[sources]]
+id = "grayscale-research"
+display_name = "Grayscale Research"
+tier = "t2"
+category = "research_data"
+independence_key = "grayscale"
+receipt_role = "research"
+domains = ["grayscale.com"]
+aliases = ["grayscale research"]
+handles = []
+
+[[sources]]
+id = "coinbase-institutional"
+display_name = "Coinbase Institutional Research"
+tier = "t2"
+category = "research_data"
+independence_key = "coinbase"
+receipt_role = "research"
+domains = ["coinbase.com"]
+aliases = ["coinbase institutional research"]
+handles = []
+
+[[sources]]
+id = "kaiko"
+display_name = "Kaiko"
+tier = "t2"
+category = "research_data"
+independence_key = "kaiko"
+receipt_role = "research"
+domains = ["kaiko.com"]
+aliases = ["kaiko", "kaiko research"]
+handles = []
+
+[[sources]]
+id = "cryptoquant"
+display_name = "CryptoQuant"
+tier = "t2"
+category = "research_data"
+independence_key = "cryptoquant"
+receipt_role = "research"
+domains = ["cryptoquant.com"]
+aliases = ["cryptoquant"]
+handles = []
+
+[[sources]]
+id = "coinglass"
+display_name = "CoinGlass"
+tier = "t2"
+category = "research_data"
+independence_key = "coinglass"
+receipt_role = "research"
+domains = ["coinglass.com"]
+aliases = ["coinglass"]
+handles = []
+
+[[sources]]
+id = "sosovalue"
+display_name = "SoSoValue"
+tier = "t2"
+category = "research_data"
+independence_key = "sosovalue"
+receipt_role = "research"
+domains = ["sosovalue.com"]
+aliases = ["sosovalue", "soso value"]
+handles = []
+
+[[sources]]
+id = "farside-investors"
+display_name = "Farside Investors"
+tier = "t2"
+category = "research_data"
+independence_key = "farside-investors"
+receipt_role = "research"
+domains = ["farside.co.uk"]
+aliases = ["farside", "farside investors"]
+handles = []
+
+[[sources]]
+id = "cambridge-alternative-finance"
+display_name = "Cambridge Centre for Alternative Finance"
+tier = "t2"
+category = "research_data"
+independence_key = "cambridge-alternative-finance"
+receipt_role = "research"
+domains = ["jbs.cam.ac.uk", "ccaf.io"]
+aliases = ["cambridge centre for alternative finance", "ccaf"]
+handles = []
+
+[[sources]]
+id = "hashrate-index"
+display_name = "Hashrate Index"
+tier = "t2"
+category = "research_data"
+independence_key = "luxor"
+receipt_role = "research"
+domains = ["hashrateindex.com"]
+aliases = ["hashrate index"]
+handles = ["hashrateindex"]
+
+# Tier 3: discovery/corroboration leads only; never autonomous receipts.
+[[sources]]
+id = "cryptoslate"
+display_name = "CryptoSlate"
+tier = "t3"
+category = "discovery"
+independence_key = "cryptoslate"
+receipt_role = "discovery"
+domains = ["cryptoslate.com"]
+aliases = ["cryptoslate"]
+handles = ["CryptoSlate"]
+
+[[sources]]
+id = "cointelegraph"
+display_name = "Cointelegraph"
+tier = "t3"
+category = "discovery"
+independence_key = "cointelegraph"
+receipt_role = "discovery"
+domains = ["cointelegraph.com"]
+aliases = ["cointelegraph"]
+handles = ["Cointelegraph"]
+
+[[sources]]
+id = "decrypt"
+display_name = "Decrypt"
+tier = "t3"
+category = "discovery"
+independence_key = "decrypt"
+receipt_role = "discovery"
+domains = ["decrypt.co"]
+aliases = ["decrypt"]
+handles = ["decryptmedia"]
+
+[[sources]]
+id = "bitcoin-news-com"
+display_name = "Bitcoin.com News"
+tier = "t3"
+category = "discovery"
+independence_key = "bitcoin-com-news"
+receipt_role = "discovery"
+domains = ["news.bitcoin.com", "bitcoin.com"]
+aliases = ["bitcoin.com news", "bitcoin news"]
+handles = ["BitcoinNewsCom"]
+
+[[sources]]
+id = "bitcoin-archive"
+display_name = "Bitcoin Archive"
+tier = "t3"
+category = "discovery"
+independence_key = "bitcoin-archive"
+receipt_role = "discovery"
+domains = []
+aliases = ["bitcoin archive"]
+handles = ["BitcoinArchive"]
+
+[[sources]]
+id = "secondary-crypto-press"
+display_name = "Secondary Crypto Press"
+tier = "t3"
+category = "discovery"
+independence_key = "secondary-crypto-press"
+receipt_role = "discovery"
+domains = ["beincrypto.com", "newsbtc.com", "btctimes.com", "u.today", "cryptopotato.com", "thedailyhodl.com", "watcher.guru", "benzinga.com", "coingape.com", "ambcrypto.com", "bitcoinist.com", "cryptobriefing.com", "crypto.news", "coinpedia.org", "ccn.com", "fxstreet.com", "zerohedge.com"]
+aliases = ["beincrypto", "newsbtc", "btc times", "u.today", "cryptopotato", "the daily hodl", "watcher.guru", "benzinga", "coingape", "ambcrypto", "bitcoinist", "crypto briefing", "crypto.news", "coinpedia", "ccn", "fxstreet crypto", "zerohedge"]
+handles = ["WatcherGuru"]
+
+[[sources]]
+id = "unofficial-social"
+display_name = "Unofficial Social and Community Sources"
+tier = "t3"
+category = "social"
+independence_key = "unofficial-social"
+receipt_role = "discovery"
+domains = ["reddit.com", "substack.com", "nostr.com", "t.me", "discord.com", "youtube.com", "youtu.be"]
+aliases = ["reddit", "substack", "nostr", "telegram", "discord", "youtube"]
+handles = []
+
+# Tier 4: never a receipt or independent evidence.
+[[sources]]
+id = "news-aggregators"
+display_name = "News Aggregators and Wrappers"
+tier = "t4"
+category = "aggregator"
+independence_key = "news-aggregator"
+receipt_role = "aggregator"
+domains = ["news.google.com", "msn.com", "finance.yahoo.com", "yahoo.com", "flipboard.com", "feedly.com", "newsbreak.com", "smartnews.com", "ground.news", "tradingview.com", "investing.com", "marketscreener.com"]
+aliases = ["google news", "msn", "yahoo finance", "flipboard", "feedly", "newsbreak", "smartnews", "ground news", "tradingview", "investing.com", "marketscreener"]
+handles = []
+
+[[sources]]
+id = "press-release-syndication"
+display_name = "Press Release Syndication"
+tier = "t4"
+category = "syndication"
+independence_key = "press-release-syndication"
+receipt_role = "syndication"
+domains = ["prnewswire.com", "businesswire.com", "globenewswire.com"]
+aliases = ["pr newswire", "business wire", "globenewswire", "pr newswire financial"]
+handles = []

@@ -30,6 +30,10 @@ def _backend() -> str:
 def _mode_for(klass: str) -> str:
     if _backend() == "tape":
         return "TAPE"
+    # Observe mode is an operational safety rail: even a stale Railway autopost env
+    # cannot publish while source-policy decisions are being inspected.
+    if config.SOURCE_POLICY_MODE == "observe":
+        return "DRAFT"
     if config.AUTOPOST_ENABLED and klass in config.AUTOPOST_CLASSES:
         return "IMMEDIATE"
     return "DRAFT"

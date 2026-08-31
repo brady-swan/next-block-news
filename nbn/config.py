@@ -77,6 +77,19 @@ AUTOPOST_CLASSES = {
 # drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)
 PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "30"))
 
+# Source ladder. Enforcement is the safe code default. Observe mode records the
+# policy's decision but forces every delivery to a human draft/tape.
+SOURCE_POLICY_MODE = os.environ.get("NBN_SOURCE_POLICY_MODE", "enforce").strip().lower()
+if SOURCE_POLICY_MODE not in {"observe", "enforce"}:
+    raise RuntimeError("NBN_SOURCE_POLICY_MODE must be 'observe' or 'enforce'")
+SOURCE_EVIDENCE_LOOKBACK_HOURS = float(
+    os.environ.get("NBN_SOURCE_EVIDENCE_LOOKBACK_HOURS", "24")
+)
+SOURCE_RESOLUTION_CACHE_SECONDS = int(
+    os.environ.get("NBN_SOURCE_RESOLUTION_CACHE_SECONDS", "3600")
+)
+CYCLE_LEASE_SECONDS = int(os.environ.get("NBN_CYCLE_LEASE_SECONDS", "900"))
+
 # Dead-man's switch: ping this URL after every successful cycle (healthchecks.io);
 # alerts fire on SILENCE, catching crash and stall alike. Empty = disabled.
 HEARTBEAT_URL = os.environ.get("NBN_HEARTBEAT_URL", "")
@@ -96,12 +109,3 @@ def max_event_age_hours() -> float:
         return float(_fixed_event_age)
     from . import store
     return store.current_max_age_hours()
-
-# Second-tier aggregators: never worthy of a receipt link when the story's substance
-# is another party's data (BeInCrypto/Coinglass lesson, 2026-08-31). Env-extendable.
-LOW_TIER_DOMAINS = {
-    d.strip() for d in os.environ.get(
-        "NBN_LOW_TIER_DOMAINS",
-        "beincrypto.com,cryptopotato.com,u.today,coinpedia.org,ambcrypto.com,"
-        "newsbtc.com,bitcoinist.com,zycrypto.com,coingape.com").split(",") if d.strip()
-}

@@ -98,6 +98,33 @@ class ReportTests(unittest.TestCase):
         self.assertIn("1 failed", html)
         self.assertIn("1 tape", html)
 
+    def test_desk_shows_original_and_selected_source_metadata(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            con.execute(
+                "INSERT INTO source_resolutions(item_hash,story_key,resolved_at,mode,status,"
+                "original_url,original_source,original_source_id,original_tier,selected_url,"
+                "selected_source,selected_source_id,selected_tier,selected_category,"
+                "selected_independence_key,selected_ownership_key,originality,support_verdict,"
+                "receipt_eligible,corroboration_eligible,primary_artifact_url,"
+                "primary_artifact_fingerprint,content_fingerprint,selected_text,"
+                "earliest_coverage_date,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("item-1", "story", 1, "enforce", "selected",
+                 "https://cryptoslate.com/a", "CryptoSlate", "cryptoslate", "t3",
+                 "https://reuters.com/a", "Reuters", "reuters", "t1", "reporting",
+                 "reuters", "reuters", "original_reporting", 1, 1, 1, "", "", "fp",
+                 "Bitcoin source", None, "Reuters directly supports the story"))
+            con.commit()
+            store.log_post(con, "story", "item-1", "secondary", "NEW: Bitcoin source.",
+                           "https://reuters.com/a", "DRAFT", resolution_id="item-1")
+            html = report.render(con)
+        self.assertIn("CryptoSlate", html)
+        self.assertIn("Reuters", html)
+        self.assertIn("t3", html)
+        self.assertIn("t1", html)
+        self.assertIn("selected", html)
+        self.assertIn("Reuters directly supports the story", html)
+        self.assertIn("eligible evidence: 0", html)
+
 
 if __name__ == "__main__":
     unittest.main()

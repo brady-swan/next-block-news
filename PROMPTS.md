@@ -8,7 +8,8 @@ snapshot and repeatedly drifted from runtime. Read and edit the sources of truth
 | Wire voice charter | `prompts/wire_voice.md` | Injected into triage and drafting | — |
 | Triage | `nbn/brain.py` (`TRIAGE_SYSTEM`) | Each pending-item batch | `NBN_TRIAGE_MODEL` |
 | Single-post drafting | `nbn/brain.py` (`DRAFT_SYSTEM`) | Each item selected for drafting and one lint retry | `NBN_MODEL` |
-| Corroboration | `nbn/verify.py` (`VERIFY_PROMPT`) | Secondary stories and detector tips | `NBN_MODEL` |
+| Source resolution | `nbn/verify.py` (`RESOLVE_PROMPT`) | Actionable non-primary receipts | `NBN_MODEL` |
+| Provider claim support | `nbn/verify.py` (`CLAIM_SUPPORT_PROMPT`) | One provider-specific redraft | `NBN_MODEL` |
 | Publishing editor | `nbn/editor.py` (`EDITOR_PROMPT`) | Gate-passed autonomous candidates | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
 | Block thread | `nbn/briefing.py` (`BRIEFING_PROMPT`) | Weekday Morning/Afternoon Blocks | `NBN_MODEL` |
 | Daily audit | `nbn/audit.py` (`AUDIT_PROMPT`) | Receipt and class verification | `NBN_MODEL` |
@@ -18,7 +19,9 @@ live in:
 
 - `nbn/main.py`: freshness, event age, source tier, corroboration, class routing.
 - `nbn/lint.py`: scope, copy, URLs, mentions, attribution, and numeric integrity.
-- `nbn/verify.py`: confirming-domain independence and aggregator exclusions.
+- `config/source_tiers.toml` + `nbn/source_policy.py`: canonical tiers, aliases, ownership,
+  domain/handle normalization, and receipt eligibility.
+- `nbn/verify.py`: candidate support, originality, independent evidence, and provider claims.
 - `nbn/briefing.py`: receipt allowlist and Swan-reference exclusion for Blocks.
 - `nbn/config.py`: master autopost switch and allowed classes; `secondary` is removed
   from `NBN_AUTOPOST_CLASSES` in code.

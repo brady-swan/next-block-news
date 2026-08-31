@@ -196,10 +196,25 @@ def render(con, day: str = None) -> str:
         day, (s, e) = today, store.day_bounds(today)
     is_today = day == today
 
-    posts = con.execute("SELECT * FROM posts WHERE created>=? AND created<? "
-                        "ORDER BY created DESC", (s, e)).fetchall()
-    held = con.execute("SELECT * FROM items WHERE status='held' AND first_seen>=? AND "
-                       "first_seen<? ORDER BY first_seen DESC", (s, e)).fetchall()
+    posts = con.execute(
+        "SELECT p.*, r.original_source AS resolution_original_source,"
+        " r.original_tier AS resolution_original_tier,"
+        " r.selected_source AS resolution_selected_source,"
+        " r.selected_tier AS resolution_selected_tier, r.status AS resolution_status,"
+        " r.note AS resolution_note,"
+        " (SELECT COUNT(*) FROM source_evidence ev WHERE ev.item_hash=p.resolution_id"
+        "  AND ev.support_verdict=1 AND ev.receipt_eligible=1) AS resolution_evidence_count"
+        " FROM posts p"
+        " LEFT JOIN source_resolutions r ON r.item_hash=p.resolution_id"
+        " WHERE p.created>=? AND p.created<? ORDER BY p.created DESC", (s, e)).fetchall()
+    held = con.execute(
+        "SELECT i.*, r.original_tier AS resolution_original_tier,"
+        " r.selected_source AS resolution_selected_source,"
+        " r.selected_tier AS resolution_selected_tier, r.status AS resolution_status,"
+        " r.note AS resolution_note FROM items i"
+        " LEFT JOIN source_resolutions r ON r.item_hash=i.url_hash"
+        " WHERE i.status='held' AND i.first_seen>=? AND i.first_seen<?"
+        " ORDER BY i.first_seen DESC", (s, e)).fetchall()
     skipped = con.execute("SELECT note, COUNT(*) n FROM items WHERE status='skipped' AND "
                           "first_seen>=? AND first_seen<? GROUP BY note ORDER BY n DESC "
                           "LIMIT 14", (s, e)).fetchall()
@@ -222,6 +237,7 @@ def render(con, day: str = None) -> str:
         f"<div class=name>Next Block News <span>· Desk</span></div>"
         f"<span class=dot></span></div>"
         f"<div class=pills>{auto}"
+        f"<span class=pill>source policy: {_esc(config.SOURCE_POLICY_MODE)}</span>"
         f"<span class=pill>fresh {store.current_max_age_hours():g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
         f" @ high</span>"
@@ -251,9 +267,18 @@ def render(con, day: str = None) -> str:
                      [("receipt ↗", p["receipt_url"], True)]),
         }
         color, verb, actions = treatments[p["mode"]]
+        source_meta = ""
+        if p["resolution_selected_tier"]:
+            source_meta = (f"<p class=ednote>Source: {_esc(p['resolution_original_source'])} "
+                           f"({_esc(p['resolution_original_tier'])}) → "
+                           f"{_esc(p['resolution_selected_source'])} "
+                           f"({_esc(p['resolution_selected_tier'])}) · "
+                           f"{_esc(p['resolution_status'])} · "
+                           f"eligible evidence: {p['resolution_evidence_count']}<br>"
+                           f"{_esc(p['resolution_note'])}</p>")
         needs.append(_need_card(color, verb,
                                 f"{_ct(p['created'])} · {_esc(p['class'])}",
-                                f"<p>{body_html}</p>",
+                                f"<p>{body_html}</p>{source_meta}",
                                 actions,
                                 extra=_dismiss_link("post", p["id"], day)))
     for h in held:
@@ -337,6 +362,14 @@ def render(con, day: str = None) -> str:
                 lab_cls = " rev" if verdict == "revise" else ""
                 ed_html = (f"<div class=edblock><div class='lab{lab_cls}'>Editor · "
                            f"{_esc(verdict)}</div><p>{_esc(reason)}</p></div>")
+            source_html = ""
+            if p["resolution_selected_tier"]:
+                source_html = (f"<div class=edblock><div class=lab>Source resolution</div>"
+                               f"<p>{_esc(p['resolution_original_source'])} "
+                               f"({_esc(p['resolution_original_tier'])}) → "
+                               f"{_esc(p['resolution_selected_source'])} "
+                               f"({_esc(p['resolution_selected_tier'])}) · "
+                               f"{_esc(p['resolution_note'])}</p></div>")
             receipt = (f"<a href='{_esc(p['receipt_url'])}'>receipt ↗</a>"
                        if (p["receipt_url"] or "").startswith("http") else "")
             out.append(
@@ -345,7 +378,7 @@ def render(con, day: str = None) -> str:
                 f"<span class=t>{_ct(p['created'])}</span>"
                 f"<span class=key>{_esc(p['story_key'] or '')}</span></div>"
                 f"<div class=lede>{_esc(lede)}</div></summary>"
-                f"<div class=rest>{f'<p>{_esc(rest)}</p>' if rest else ''}{ed_html}"
+                f"<div class=rest>{f'<p>{_esc(rest)}</p>' if rest else ''}{source_html}{ed_html}"
                 f"<div class=links>{receipt}"
                 f"<a href='{PROFILE_URL}' style='color:var(--sub)'>on X ↗</a></div>"
                 f"</div></details>")
@@ -383,10 +416,18 @@ def render(con, day: str = None) -> str:
                        f"<span class=n>{len(rows)}</span></summary>")
             first = False
             for h in rows:
+                resolution_meta = ""
+                if h["resolution_original_tier"]:
+                    resolution_meta = (f" · {_esc(h['resolution_original_tier'])} → "
+                                       f"{_esc(h['resolution_selected_tier'])} "
+                                       f"({_esc(h['resolution_status'])})")
                 out.append(f"<div class=hentry><div class=m>{_ct(h['first_seen'])} · "
-                           f"{_esc(h['source'])} · <a href='{_esc(h['url'])}'>source ↗</a></div>"
+                           f"{_esc(h['source'])}{resolution_meta} · "
+                           f"<a href='{_esc(h['url'])}'>source ↗</a></div>"
                            f"<div class=ttl>{_esc(h['title'])}</div>"
-                           f"<div class=why>{_esc(h['note'] or '')}</div></div>")
+                           f"<div class=why>{_esc(h['note'] or '')}"
+                           f"{(' · ' + _esc(h['resolution_note'])) if h['resolution_note'] else ''}"
+                           f"</div></div>")
             out.append("</details>")
         out.append("</div>")
     else:

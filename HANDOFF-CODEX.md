@@ -34,8 +34,11 @@ poll sources → intake gates → triage (Sonnet 5) → verify/corroborate → d
   cost seam, don't break it, and never poll a list TIMELINE endpoint (no since_id).
 - **Classes**: `primary` (official artifact) and `corroborated` auto-post;
   **`secondary` NEVER auto-posts** (code-enforced); `data` dormant; `briefing` stages DRAFT.
-- **Corroboration**: 2+ distinct publishers on one story_key, or web-search verification
-  (`nbn/verify.py`, adversarial prompt + deterministic domain checks the model can't override).
+- **Source ladder**: `config/source_tiers.toml` is the canonical P0–T4 registry;
+  `nbn/source_policy.py` validates and classifies domains, aliases, and X handles.
+- **Corroboration**: 2+ fresh, directly supporting, independent persisted evidence chains
+  on one exact story_key. Same owners, syndication copies, and a shared primary artifact
+  collapse. A detector plus the artifact it finds is one chain, not two.
 - **Editor** (`nbn/editor.py`): last-mile judgment before autonomous publish. Fails OPEN
   (an editor outage must not block news). Verdicts logged to `posts.editor_note`.
 - **Publishing** (`nbn/publisher_typefully.py`): Typefully v2. `publish_at:"now"` REJECTS
@@ -66,8 +69,9 @@ poll sources → intake gates → triage (Sonnet 5) → verify/corroborate → d
    never metric-vs-price "tension" as the story, never questions in posts (lint bans `?`
    outside quotes).
 6. **A number belongs to whoever measured it.** Attribute the original data provider
-   (Coinglass, Glassnode...), never the aggregator. A data story whose only receipt is a
-   second-tier domain (`NBN_LOW_TIER_DOMAINS`) is held, and `per <aggregator>` fails lint.
+   (Coinglass, Glassnode...), never the aggregator. A different named provider triggers
+   one targeted lookup and redraft; mismatch or unsupported copy holds. `per <aggregator>`
+   also fails lint.
 7. **Attribute ONCE per post.** Numbers verbatim from fetched source text (`numbers_used`
    is lint-checked). Mentions only from `handles.json`, max 2. Bitcoin-only scope —
    "crypto" allowed solely as a business adjective. No hype, no forecasts, no em dashes
@@ -107,7 +111,8 @@ PYTHONPATH=. NBN_DATA_DIR=/tmp/x railway run python3 test.py   # local pipeline 
   silence — if you take the worker down deliberately, warn him.
 - **Desk Report** (Brady's browse/action surface): `/report?k=<token>` — token in
   `DESK-REPORT-URL.txt` (gitignored). Day nav `?d=YYYY-MM-DD`, dismiss links, editor
-  verdicts, held groups with reasons. If you change pipeline behavior, keep the Desk honest.
+  verdicts, held groups with reasons, and source-resolution status/note/evidence counts on
+  draft cards. If you change pipeline behavior, keep the Desk honest.
 - **Test pattern for pipeline changes**: local rerun via `railway run` (draft+lint+editor,
   nothing publishes), then if Brady wants a live test, inject the item into `/data/nbn.db`
   via `railway ssh` (INSERT into items with status 'new') and let the worker's own cycle
