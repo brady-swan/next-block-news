@@ -78,6 +78,15 @@ underlying story, and a proposed class. It receives both **posted** story keys (
 and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
 corroboration promotion).
 
+Triage has no target quota. Factual Bitcoin market state—defined-period price moves,
+flows, leverage, funding, open interest, volatility, liquidity, holder activity, and
+directly relevant rates/yields—is eligible when the underlying figures can be verified.
+It judges the factual payload beneath a headline and leaves the writer/editor to strip
+sentiment or narrative framing. Forecasts, price targets, trading advice, unsupported
+causal stories, and context-free price ticks still skip. A relevant official post linking
+only to a speech, hearing, release, or video advances to source resolution so the wire can
+find prepared remarks or a transcript; missing feed copy is not itself a rejection.
+
 `update` is a separate machine-readable triage action. It is valid only for a material
 development matching an exact reader-covered story key. Ordinary `draft` on an already
 handled key still skips. Deterministic lint requires `NEW:` for first coverage and
@@ -183,7 +192,9 @@ from the Marketing Node read API, folds in the wire's own catches since the prev
 Block, renders a 5-9 post thread: post 1 = link-free index (`Morning Block - <date>`,
 "Top stories:" bullets, "More inside ➡️" — the wire's one emoji), per-post receipt
 links from post 2. Gates: Swan-strip (deterministic), receipts-from-brief-only, full
-lint. Stages as DRAFT. Known tradeoff: the Block trusts the brief's numbers (the "60%"
+lint. The worker has a 60-minute catch-up window after each scheduled time, and one
+compact retry protects against empty or truncated model JSON. Stages as DRAFT. Known
+tradeoff: the Block trusts the brief's numbers (the "60%"
 incident); the cross-check pass is the spec'd fix.
 
 ## 9. Self-audit (daily 09:00 UTC)

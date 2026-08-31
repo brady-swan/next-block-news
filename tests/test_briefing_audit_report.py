@@ -44,6 +44,51 @@ class BriefingTests(unittest.TestCase):
     def test_wrong_thread_size_is_rejected(self):
         self.assertIsNone(self.build(block_posts()[:3]))
 
+    def test_truncated_json_gets_one_compact_retry_with_larger_budget(self):
+        with patch.object(brain, "_create", side_effect=[object(), object()]) as create, \
+                patch.object(brain, "_json_from", side_effect=[
+                    ValueError("no JSON in response"), {"posts": block_posts()}
+                ]):
+            posts = briefing.build_thread(brief_payload(), "Afternoon")
+        self.assertEqual(posts, block_posts())
+        self.assertEqual(create.call_count, 2)
+        self.assertEqual(create.call_args_list[0].kwargs["max_tokens"], 8000)
+        retry_payload = json.loads(create.call_args_list[1].args[2])
+        self.assertIn("compact", retry_payload["retry_instruction"])
+
+    def test_two_invalid_json_responses_fail_cleanly(self):
+        with patch.object(brain, "_create", side_effect=[object(), object()]), \
+                patch.object(brain, "_json_from", side_effect=ValueError("truncated")):
+            self.assertIsNone(briefing.build_thread(brief_payload(), "Afternoon"))
+
+    def test_triage_prompt_allows_factual_data_and_official_media_research(self):
+        self.assertIn("Factual Bitcoin market-state reporting is eligible", brain.TRIAGE_SYSTEM)
+        self.assertIn("Judge the factual payload", brain.TRIAGE_SYSTEM)
+        self.assertIn("prepared remarks or a transcript", brain.TRIAGE_SYSTEM)
+        self.assertNotIn("Typical batch yields 0-3 drafts", brain.TRIAGE_SYSTEM)
+
+
+class AfternoonDateTime(datetime.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        value = cls(2026, 8, 31, 21, 55, tzinfo=datetime.timezone.utc)
+        return value if tz else value.replace(tzinfo=None)
+
+
+class BriefingScheduleTests(unittest.TestCase):
+    def test_afternoon_block_has_sixty_minute_catch_up_window(self):
+        with temporary_store() as con, \
+                patch.object(briefing.datetime, "datetime", AfternoonDateTime), \
+                patch.object(config, "BRIEFING_SCHEDULE", [("21:15", "Afternoon")]), \
+                patch.object(briefing, "fetch_brief", return_value=brief_payload()), \
+                patch.object(briefing, "build_thread", return_value=block_posts()), \
+                patch("nbn.publisher.publish_thread", return_value=("DRAFT", "draft-block")):
+            self.assertTrue(briefing.maybe_run(con))
+            row = con.execute("SELECT story_key,mode FROM posts").fetchone()
+        self.assertEqual(dict(row), {
+            "story_key": "briefing:2026-08-31:afternoon", "mode": "DRAFT"
+        })
+
 
 class FixedDateTime(datetime.datetime):
     @classmethod

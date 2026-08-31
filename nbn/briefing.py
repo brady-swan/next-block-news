@@ -112,9 +112,29 @@ def build_thread(brief_payload: dict, window_title: str, wire_items: list = None
         "wire_items": [{"title": w["title"], "source": w["source"], "url": w["url"]}
                        for w in wire_items[:10]],
     }
-    resp = brain._create(config.ANTHROPIC_MODEL, BRIEFING_PROMPT, json.dumps(payload),
-                         max_tokens=4000)
-    out = brain._json_from(resp)
+    out = None
+    for attempt in range(2):
+        request = dict(payload)
+        if attempt:
+            request["retry_instruction"] = (
+                "The previous response was empty, truncated, or invalid JSON. Return a compact "
+                "complete JSON object with 5-7 concise posts; close every string and array."
+            )
+        resp = brain._create(config.ANTHROPIC_MODEL, BRIEFING_PROMPT, json.dumps(request),
+                             max_tokens=8000)
+        try:
+            candidate = brain._json_from(resp)
+        except ValueError as exc:
+            log.warning("briefing JSON attempt %d failed: %s", attempt + 1, exc)
+            continue
+        if isinstance(candidate, dict):
+            out = candidate
+            break
+        log.warning("briefing JSON attempt %d returned %s", attempt + 1,
+                    type(candidate).__name__)
+    if out is None:
+        log.error("briefing generation failed after two attempts")
+        return None
     posts = out.get("posts") or []
     if not (4 <= len(posts) <= 10):
         log.error("briefing thread wrong size: %d", len(posts))
@@ -143,8 +163,9 @@ def maybe_run(con) -> bool:
     for hhmm, title in config.BRIEFING_SCHEDULE:
         h, m = hhmm.split(":")
         fire = now.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
-        # fire window: within 30 min after the scheduled time
-        if not (fire <= now < fire + datetime.timedelta(minutes=30)):
+        # A wider catch-up window survives deploys and a slow news cycle. The story key
+        # remains the once-per-window guard, so repeated checks cannot duplicate a Block.
+        if not (fire <= now < fire + datetime.timedelta(minutes=60)):
             continue
         key = f"briefing:{now:%Y-%m-%d}:{title.lower()}"
         if store.story_produced(con, key):

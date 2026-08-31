@@ -99,7 +99,25 @@ Source-type rules:
   is the actual artifact; t1/t2 are reporting/research; t3/t4/unknown are discovery tips
   whose receipt must be upgraded later. Never infer primary merely from publisher quality.
 
-Be strict: a wire that posts everything is noise. Typical batch yields 0-3 drafts.
+Market-data calibration:
+- Factual Bitcoin market-state reporting is eligible news: current price and a defined
+  period move, flows, leverage, funding, open interest, volatility, liquidity, holder
+  activity, and directly relevant rates/yields. These are facts, not prohibited price
+  narrative, when a reliable receipt or original dataset can support them.
+- Judge the factual payload, not the headline's framing. A headline may say "volatile,"
+  "cautious," or pose a narrative; use action draft when useful verifiable facts remain.
+  The writer/editor will strip forecasts, causal guesses, trading advice, and sentiment.
+- Skip pure price ticks with no informative context, price targets, directional forecasts,
+  buy/sell framing, or unsupported explanations of WHY price moved.
+
+Official-media discovery:
+- When an in-scope official account links a speech, hearing, release, or video but the
+  feed item has no transcript, do not treat missing copy as proof there is no story.
+  Use action draft when the event is plausibly within the money/Bitcoin charter so source
+  resolution can search for prepared remarks or a transcript. Downstream gates will hold
+  it if no substantive directly supporting text is found.
+
+Be selective on reader value, but do not target a fixed number of drafts per batch.
 Return ONLY a JSON array: [{{"url_hash": ..., "action": ..., "story_key": ..., "class": ..., "reason": ...}}]"""
 
 
