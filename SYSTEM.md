@@ -193,7 +193,8 @@ Block, renders a 5-9 post thread: post 1 = link-free index (`Morning Block - <da
 "Top stories:" bullets, "More inside ➡️" — the wire's one emoji), per-post receipt
 links from post 2. Gates: Swan-strip (deterministic), receipts-from-brief-only, full
 lint. The worker has a 60-minute catch-up window after each scheduled time, and one
-compact retry protects against empty or truncated model JSON. Stages as DRAFT. Known
+compact feedback retry protects against empty/truncated JSON or a failed factual/style
+gate. Stages as DRAFT. Known
 tradeoff: the Block trusts the brief's numbers (the "60%"
 incident); the cross-check pass is the spec'd fix.
 
