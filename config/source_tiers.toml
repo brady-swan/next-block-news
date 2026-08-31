@@ -853,6 +853,17 @@ domains = ["hashrateindex.com"]
 aliases = ["hashrate index"]
 handles = ["hashrateindex"]
 
+[[sources]]
+id = "kobeissi-letter"
+display_name = "The Kobeissi Letter"
+tier = "t2"
+category = "research_data"
+independence_key = "kobeissi-letter"
+receipt_role = "research"
+domains = ["thekobeissiletter.com"]
+aliases = ["the kobeissi letter", "kobeissi letter", "kobeissi"]
+handles = ["KobeissiLetter"]
+
 # Tier 3: discovery/corroboration leads only; never autonomous receipts.
 [[sources]]
 id = "cryptoslate"

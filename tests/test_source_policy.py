@@ -14,6 +14,8 @@ class SourcePolicyTests(unittest.TestCase):
             "https://x.com/BitcoinMagazine/status/1": ("bitcoin-magazine", "t2"),
             "https://x.com/coindesk/status/1": ("coindesk", "t2"),
             "https://www.btcpolicy.org/research/report": ("bitcoin-policy-institute", "t2"),
+            "https://x.com/KobeissiLetter/status/1": ("kobeissi-letter", "t2"),
+            "https://www.thekobeissiletter.com/p/markets": ("kobeissi-letter", "t2"),
         }
         for url, expected in cases.items():
             with self.subTest(url=url):

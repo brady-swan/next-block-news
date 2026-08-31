@@ -219,6 +219,8 @@ X_STATIC_QUERIES = [
     ' OR from:BlackRock OR from:DigitalAssets OR from:BitwiseInvest OR from:Grayscale'
     ' OR from:River OR from:Strike OR from:unchainedcom OR from:CasaHODL OR from:Swan)'
     ' -is:retweet',
+    # Tier 2 research signal monitored directly, eligible only for its own analysis.
+    '(from:KobeissiLetter) -is:retweet',
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
     # source-resolution hunt that finds an eligible receipt.
     '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:BitcoinMagazine'
