@@ -20,6 +20,47 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(len(first), 1)
             self.assertEqual(second, [])
 
+    def test_operator_stage_is_guarded_and_audited(self):
+        with temporary_store() as con:
+            row = store.upsert_new_items(con, [item()])[0]
+            store.set_status(con, row["url_hash"], "held", "fresh-story",
+                             "stale event: dated 2026-08-28, window 6h")
+            result = store.request_operator_action(con, row["url_hash"], "stage")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["gate"], "freshness")
+            current = con.execute(
+                "SELECT status,note FROM items WHERE url_hash=?", (row["url_hash"],)
+            ).fetchone()
+            self.assertEqual(current["status"], "new")
+            self.assertIn("stale event", current["note"])
+            action = store.pending_stage_action(con, row["url_hash"])
+            self.assertEqual((action["state"], action["original_status"]), ("queued", "held"))
+
+    def test_operator_dismiss_records_disposition(self):
+        with temporary_store() as con:
+            row = store.upsert_new_items(con, [item()])[0]
+            store.set_status(con, row["url_hash"], "held", "dismiss-story",
+                             "source policy: unresolved")
+            result = store.request_operator_action(con, row["url_hash"], "dismiss")
+            self.assertTrue(result["ok"])
+            current = con.execute(
+                "SELECT status,note FROM items WHERE url_hash=?", (row["url_hash"],)
+            ).fetchone()
+            self.assertEqual(current["status"], "skipped")
+            self.assertIn("owner dismissed", current["note"])
+            action = store.latest_operator_action(con, row["url_hash"])
+            self.assertEqual((action["action"], action["state"]), ("dismiss", "completed"))
+
+    def test_source_hold_cannot_be_forced_without_material(self):
+        with temporary_store() as con:
+            row = store.upsert_new_items(con, [item()])[0]
+            store.set_status(con, row["url_hash"], "held", "source-story",
+                             "source policy: selected receipt text unavailable")
+            result = store.request_operator_action(con, row["url_hash"], "stage")
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["reason"], "this hold needs more source material")
+            self.assertEqual(con.execute("SELECT status FROM items").fetchone()["status"], "held")
+
     def test_last_decision_run_keeps_final_state_and_survives_empty_poll(self):
         with temporary_store() as con:
             pending = store.upsert_new_items(con, [item(title="Decision candidate")])

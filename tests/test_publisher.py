@@ -57,6 +57,18 @@ class PublisherRouterTests(unittest.TestCase):
             self.assertFalse(publish.call_args.kwargs["immediate"])
         self.assertFalse(publish.call_args.kwargs["immediate"])
 
+    def test_operator_override_forces_draft_even_for_primary_autopost(self):
+        with patch.object(config, "SOURCE_POLICY_MODE", "enforce"), \
+                patch.object(config, "AUTOPOST_ENABLED", True), \
+                patch.object(config, "AUTOPOST_CLASSES", {"primary"}), \
+                patch.object(publisher, "_backend", return_value="typefully"), \
+                patch.object(tf, "publish_thread", return_value=(
+                    tf.PublishOutcome.STAGED, "draft-owner")) as publish:
+            mode, _ = publisher.publish(
+                "NEW: Test.", "https://example.com", "primary", force_draft=True)
+        self.assertEqual(mode, "DRAFT")
+        self.assertFalse(publish.call_args.kwargs["immediate"])
+
 
 if __name__ == "__main__":
     unittest.main()

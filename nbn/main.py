@@ -15,8 +15,28 @@ log = logging.getLogger("nbn.main")
 STATE = {"started": time.time(), "cycles": 0, "last_cycle": None, "last_error": None}
 
 
+def _action_ids(item) -> list[int]:
+    ids = item.get("_operator_action_ids") or []
+    if item.get("_operator_action_id"):
+        ids = [*ids, item["_operator_action_id"]]
+    return list(dict.fromkeys(ids))
+
+
+def _override_allows(item, gate: str) -> bool:
+    gates = set(item.get("_operator_gates") or [])
+    if item.get("_operator_gate"):
+        gates.add(item["_operator_gate"])
+    return gate in gates
+
+
+def _finish_actions(con, item, state: str, result: str) -> None:
+    for action_id in _action_ids(item):
+        store.finish_operator_action(con, action_id, state, result)
+
+
 def _hold(con, item, result, note):
     store.set_status(con, item["url_hash"], "held", item.get("story_key"), note[:300])
+    _finish_actions(con, item, "blocked", note)
     result["held"] += 1
 
 
@@ -89,10 +109,22 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     inserted = store.upsert_new_items(con, items)
     summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
     pending = store.pending_items(con, config.MAX_ITEMS_PER_TRIAGE)
+    overrides = {}
+    for it in pending:
+        action = store.pending_stage_action(con, it["url_hash"])
+        if action:
+            overrides[it["url_hash"]] = action
+            it["_operator_action_id"] = action["id"]
+            it["_operator_gate"] = action["gate"]
     fresh = []
     for it in pending:
-        if store.is_stale(it.get("published", "")):
-            store.set_status(con, it["url_hash"], "skipped", None, "stale at intake")
+        if store.is_stale(it.get("published", "")) and not _override_allows(it, "freshness"):
+            note = "stale at intake"
+            if _action_ids(it):
+                store.set_status(con, it["url_hash"], "held", None, note)
+                _finish_actions(con, it, "blocked", note)
+            else:
+                store.set_status(con, it["url_hash"], "skipped", None, note)
             continue
         if store.is_non_english(it.get("title", "")):
             store.set_status(con, it["url_hash"], "skipped", None, "non-English source")
@@ -108,6 +140,16 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         return result
 
     verdicts = brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
+    for item in verdicts:
+        action = overrides.get(item["url_hash"])
+        if not action:
+            continue
+        store.start_operator_action(con, action["id"])
+        item["_operator_action_id"] = action["id"]
+        item["_operator_gate"] = action["gate"]
+        item["action"] = "draft"
+        item["story_key"] = action["story_key"] or item.get("story_key")
+        item["reason"] = (f"owner requested Typefully draft; overriding {action['gate']} hold")
     handles = lint.verified_handles()
     resolutions, original_texts = {}, {}
 
@@ -134,7 +176,9 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         item["_canonical_url"] = fetched["canonical_url"]
         item["_byline"] = fetched["byline"]
         original_texts[item["url_hash"]] = text
-        resolution = verify.resolve_source(item, text, con=con)
+        resolution = verify.resolve_source(
+            item, text, con=con, use_persisted=not bool(_action_ids(item)),
+            force_refresh=bool(_action_ids(item)))
         resolutions[item["url_hash"]] = resolution
         store.persist_resolution(con, resolution, config.SOURCE_POLICY_MODE)
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
@@ -152,6 +196,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             continue
         if action == "draft" and store.story_handled(con, story_key):
             store.set_status(con, item["url_hash"], "skipped", story_key, "story already handled")
+            _finish_actions(con, item, "blocked", "story already handled")
             continue
         if action == "update" and not store.story_reader_covered(con, story_key):
             _hold(con, item, result, "update lacks exact reader-covered story")
@@ -185,6 +230,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             draft = brain.draft(effective, article_text, handles, already_covered=covered)
         except Exception as exc:  # noqa: BLE001
             store.set_status(con, item["url_hash"], "error", story_key, str(exc)[:200])
+            _finish_actions(con, item, "blocked", f"writer error: {exc}")
             continue
         post = draft.get("post")
         if not post:
@@ -270,11 +316,14 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             item, resolution = candidate["item"], candidate["resolution"]
             effective, article_text = candidate["effective"], candidate["article_text"]
             draft, post = candidate["draft"], candidate["post"]
-            if store.event_is_stale(draft.get("event_date"), config.max_event_age_hours()):
+            if (store.event_is_stale(draft.get("event_date"), config.max_event_age_hours())
+                    and not _override_allows(item, "freshness")):
                 _hold(con, item, result, f"stale event: dated {draft['event_date']}, window "
                       f"{config.max_event_age_hours():g}h")
                 continue
-            if store.event_is_stale(resolution.earliest_coverage_date, config.max_event_age_hours()):
+            if (store.event_is_stale(resolution.earliest_coverage_date,
+                                     config.max_event_age_hours())
+                    and not _override_allows(item, "freshness")):
                 _hold(con, item, result,
                       f"stale event: earliest coverage {resolution.earliest_coverage_date}")
                 continue
@@ -327,6 +376,11 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                     except Exception as exc:  # noqa: BLE001
                         errors = [f"retry failed: {exc}"]
             if errors:
+                if _override_allows(item, "style"):
+                    log.warning("owner override stages lint-held copy %s: %s",
+                                item["title"][:60], errors)
+                    errors = []
+            if errors:
                 _hold(con, item, result, "lint: " + "; ".join(errors)[:294])
                 log.warning("lint held %s: %s", item["title"][:60], errors)
                 continue
@@ -339,10 +393,15 @@ def _cycle_locked(con, lease_owner: str) -> dict:
 
         ready.sort(key=lambda row: (_resolution_rank(row["resolution"]), row["item"]["url"]))
         chosen = ready[0]
+        group_action_ids = [action_id for row in ready for action_id in _action_ids(row["item"])]
+        group_gates = [gate for row in ready for gate in (
+            [row["item"].get("_operator_gate")] if row["item"].get("_operator_gate") else [])]
         for superseded in ready[1:]:
             store.set_status(con, superseded["item"]["url_hash"], "skipped", story_key,
                              "stronger final receipt selected")
         item, resolution = chosen["item"], chosen["resolution"]
+        item["_operator_action_ids"] = group_action_ids
+        item["_operator_gates"] = group_gates
         effective, article_text = chosen["effective"], chosen["article_text"]
         draft, post = chosen["draft"], chosen["post"]
         provider_resolution = chosen["provider_resolution"]
@@ -353,7 +412,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         if klass == "secondary" and evidence_count >= 2:
             klass = "corroborated"
         effective["class"] = klass
-        if draft.get("needs_second_source") and klass == "secondary":
+        if (draft.get("needs_second_source") and klass == "secondary"
+                and not _override_allows(item, "corroboration")):
             _hold(con, item, result, f"needs second source ({resolution.note})")
             continue
 
@@ -362,7 +422,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             from . import editor
             ed = editor.review(post, effective, con)
             editor_note = f"{ed['verdict']}: {ed['reason']}"[:300]
-            if ed["verdict"] == "spike":
+            if ed["verdict"] == "spike" and not _override_allows(item, "editor"):
                 _hold(con, item, result, f"editor spiked: {ed['reason'][:220]}")
                 continue
             if ed["verdict"] == "revise" and ed["post"] != post:
@@ -381,7 +441,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             raise RuntimeError("cycle lease lost before delivery")
         chart = sources.chart_image(receipt_url)
         publisher_backend = publisher.backend_name()
-        mode, publisher_ref = publisher.publish(post, receipt_url, klass, image=chart)
+        mode, publisher_ref = publisher.publish(
+            post, receipt_url, klass, image=chart, force_draft=bool(_action_ids(item)))
         lifecycle = {
             "IMMEDIATE": ("posted", "posted"), "DRAFT": ("drafted", "drafted"),
             "UNCERTAIN": ("uncertain", "uncertain"), "FAILED": ("failed", "failed"),
@@ -392,12 +453,48 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         store.log_post(con, story_key, item["url_hash"], klass, post, receipt_url, mode,
                        publisher_ref, editor_note=editor_note, resolution_id=item["url_hash"],
                        publisher_backend=publisher_backend)
+        _finish_actions(con, item, "completed", f"delivery result: {mode}")
         result[counter] += 1
     store.record_decision_run(con, pending, verdicts, result, run_started)
     return result
 
 
 class Health(BaseHTTPRequestHandler):
+    def do_POST(self):  # noqa: N802
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(self.path)
+        if parsed.path != "/item-action":
+            self.send_response(404)
+            self.end_headers()
+            return
+        try:
+            length = min(int(self.headers.get("Content-Length", "0")), 4096)
+        except ValueError:
+            length = 0
+        q = parse_qs(self.rfile.read(length).decode("utf-8", errors="replace"))
+        token = (q.get("k") or [""])[0]
+        if not config.REPORT_TOKEN or token != config.REPORT_TOKEN:
+            self.send_response(403)
+            self.end_headers()
+            return
+        item_hash = (q.get("id") or [""])[0]
+        action = (q.get("action") or [""])[0]
+        day = (q.get("d") or [""])[0]
+        con = store.connect()
+        try:
+            outcome = store.request_operator_action(con, item_hash, action)
+        finally:
+            con.close()
+        if not outcome["ok"]:
+            self.send_response(409)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(outcome["reason"].encode())
+            return
+        self.send_response(303)
+        self.send_header("Location", f"/report?k={token}" + (f"&d={day}" if day else ""))
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)

@@ -150,6 +150,10 @@ health becomes HTTP 500 when the last completed cycle is more than ten minutes o
 Desk is available at `/report?k=<token>` when `NBN_REPORT_TOKEN` is configured. The worker
 reconciles recent Typefully publication receipts every five minutes, so drafts published
 manually are counted by their confirmed X publication time and leave the action queue.
+For held items, the Desk can queue a guarded **Stage draft** retry (freshness,
+corroboration, style, and Editor holds only) or record **Dismiss**. Operator retries run
+the complete source/Writer/lint/Editor stack with a fresh web source search, override only the displayed gate, and are
+always delivered as Typefully drafts—not autonomous posts.
 
 See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
 publishing behavior.

@@ -226,6 +226,38 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Bitcoin &lt;script&gt;alert(1)&lt;/script&gt;", html)
         self.assertNotIn("<script>alert(1)</script>", html)
 
+    def test_held_freshness_item_has_specific_label_and_operator_controls(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            pending = store.upsert_new_items(con, [{
+                "source": "Bitcoin Magazine", "title": "Strive buys bitcoin",
+                "url": "https://example.com/strive", "published": "", "summary": "",
+            }])
+            store.set_status(con, pending[0]["url_hash"], "held", "strive-buy",
+                             "stale event: dated 2026-08-28, window 6h")
+            store.record_decision_run(
+                con, pending,
+                [{**pending[0], "action": "draft", "story_key": "strive-buy",
+                  "reason": "material bitcoin treasury purchase news"}],
+                {"fetched": 1, "new": 1, "considered": 1, "pending": 1}, time.time(),
+            )
+            html = report.render(con)
+        self.assertIn("final · held · freshness", html)
+        self.assertIn("STAGE DRAFT", html)
+        self.assertIn("DISMISS", html)
+        self.assertIn("method=post action='/item-action'", html)
+
+    def test_source_hold_offers_dismiss_but_not_stage(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            row = store.upsert_new_items(con, [{
+                "source": "Example", "title": "Thin item", "url": "https://example.com/thin",
+                "published": "", "summary": "",
+            }])[0]
+            store.set_status(con, row["url_hash"], "held", "thin",
+                             "source policy: selected receipt text unavailable")
+            html = report.render(con)
+        self.assertNotIn("STAGE DRAFT", html)
+        self.assertIn("DISMISS", html)
+
     def test_skipped_headline_is_exact_when_reason_table_is_limited(self):
         with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
             for index in range(16):

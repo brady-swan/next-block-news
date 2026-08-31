@@ -81,6 +81,21 @@ CREATE TABLE IF NOT EXISTS cycle_leases (
   owner TEXT NOT NULL,
   expires_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS operator_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_hash TEXT NOT NULL,
+  story_key TEXT,
+  action TEXT NOT NULL,
+  gate TEXT,
+  requested_at REAL NOT NULL,
+  completed_at REAL,
+  state TEXT NOT NULL,
+  original_status TEXT NOT NULL,
+  original_note TEXT,
+  result TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_operator_actions_item
+  ON operator_actions(item_hash, id DESC);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
@@ -116,6 +131,100 @@ def kv_get(con, k: str) -> str:
 
 def kv_set(con, k: str, v: str):
     con.execute("INSERT INTO kv(k, v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
+    con.commit()
+
+
+def hold_gate(note: str) -> str:
+    """Return the operator-facing gate for holds that can safely become a draft.
+
+    Source and thin-source holds are intentionally excluded: they do not have enough
+    reliable material to send through the Writer/Editor stack.
+    """
+    value = str(note or "").lower()
+    if value.startswith("stale event:"):
+        return "freshness"
+    if value.startswith("needs second source"):
+        return "corroboration"
+    if value.startswith("editor spiked"):
+        return "editor"
+    if value.startswith("lint:"):
+        return "style"
+    return ""
+
+
+def request_operator_action(con, item_hash: str, action: str) -> dict:
+    """Apply a Desk disposition or queue one guarded, draft-only pipeline retry."""
+    if action not in ("stage", "dismiss"):
+        return {"ok": False, "reason": "unknown action"}
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        item = con.execute(
+            "SELECT status,story_key,note FROM items WHERE url_hash=?", (item_hash,)
+        ).fetchone()
+        if not item:
+            con.rollback()
+            return {"ok": False, "reason": "item not found"}
+        if item["status"] != "held":
+            con.rollback()
+            return {"ok": False, "reason": f"item is {item['status']}, not held"}
+        gate = hold_gate(item["note"])
+        if action == "stage" and not gate:
+            con.rollback()
+            return {"ok": False, "reason": "this hold needs more source material"}
+        now = time.time()
+        state = "queued" if action == "stage" else "completed"
+        cur = con.execute(
+            "INSERT INTO operator_actions(item_hash,story_key,action,gate,requested_at,"
+            "completed_at,state,original_status,original_note,result)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (item_hash, item["story_key"], action, gate or None, now,
+             None if action == "stage" else now, state, item["status"], item["note"],
+             None if action == "stage" else "owner dismissed"),
+        )
+        if action == "stage":
+            con.execute("UPDATE items SET status='new' WHERE url_hash=?", (item_hash,))
+        else:
+            note = "owner dismissed"
+            if item["note"]:
+                note += f" · was: {item['note']}"
+            con.execute(
+                "UPDATE items SET status='skipped',note=? WHERE url_hash=?", (note[:300], item_hash)
+            )
+        con.commit()
+        return {"ok": True, "id": cur.lastrowid, "state": state, "gate": gate}
+    except Exception:
+        con.rollback()
+        raise
+
+
+def pending_stage_action(con, item_hash: str):
+    return con.execute(
+        "SELECT * FROM operator_actions WHERE item_hash=? AND action='stage'"
+        " AND state IN ('queued','processing') ORDER BY id DESC LIMIT 1", (item_hash,)
+    ).fetchone()
+
+
+def latest_operator_action(con, item_hash: str):
+    return con.execute(
+        "SELECT * FROM operator_actions WHERE item_hash=? ORDER BY id DESC LIMIT 1", (item_hash,)
+    ).fetchone()
+
+
+def start_operator_action(con, action_id: int) -> None:
+    con.execute(
+        "UPDATE operator_actions SET state='processing' WHERE id=? AND state='queued'",
+        (action_id,),
+    )
+    con.commit()
+
+
+def finish_operator_action(con, action_id: int, state: str, result: str) -> None:
+    if state not in ("completed", "blocked"):
+        raise ValueError("invalid operator action state")
+    con.execute(
+        "UPDATE operator_actions SET state=?,completed_at=?,result=? WHERE id=?",
+        (state, time.time(), str(result or "")[:300], action_id),
+    )
     con.commit()
 
 

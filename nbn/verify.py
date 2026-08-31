@@ -294,20 +294,22 @@ def _persisted_result(con, item: dict) -> ResolutionResult | None:
 
 
 def resolve_source(item: dict, original_text: str, con=None,
-                   use_persisted: bool = True) -> ResolutionResult:
+                   use_persisted: bool = True, force_refresh: bool = False) -> ResolutionResult:
     """Return a typed, non-destructive resolution for one actionable item."""
     original_url = item.get("_final_url") or item.get("url", "")
     original = source_policy.classify(original_url, item.get("source", ""))
     source_text = ((item.get("summary", "") or original_text) if original.handle and
                    _domain(original.url) in {"x.com", "twitter.com"} else original_text)
     cache_key = source_policy.normalize_url(item.get("url", ""))
+    if force_refresh:
+        _url_cache.pop(cache_key, None)
     cached = _url_cache.get(cache_key)
     if cached and cached[0] > time.time() - config.SOURCE_RESOLUTION_CACHE_SECONDS:
         result = cached[1]
         return replace(result, item_hash=item["url_hash"], story_key=item.get("story_key") or "",
                        original_source_name=item.get("source", ""))
 
-    persisted = _persisted_result(con, item) if use_persisted else None
+    persisted = _persisted_result(con, item) if use_persisted and not force_refresh else None
     if persisted:
         _url_cache[cache_key] = (time.time(), persisted)
         return persisted

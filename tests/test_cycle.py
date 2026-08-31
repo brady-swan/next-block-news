@@ -278,6 +278,56 @@ class CycleTests(unittest.TestCase):
             self.assertEqual(result["held"], 1)
             publish.assert_not_called()
 
+    def test_owner_freshness_override_reruns_full_stack_and_stages(self):
+        raw = item()
+        with temporary_store() as con:
+            inserted = store.upsert_new_items(con, [raw])[0]
+            store.set_status(con, inserted["url_hash"], "held", "stale",
+                             "stale event: dated 2020-01-01, window 6h")
+            action = store.request_operator_action(con, inserted["url_hash"], "stage")
+            self.assertTrue(action["ok"])
+            result, draft, publish, review, resolve = self.run_cycle(
+                con, [raw],
+                [{"action": "skip", "story_key": "wrong-key", "class": "primary",
+                  "reason": "triage would skip"}],
+                drafts=[{"post": "NEW: Bitcoin test.", "event_date": "2020-01-01",
+                         "needs_second_source": False}],
+                mode="DRAFT", auto=True,
+            )
+            self.assertEqual(result["drafted"], 1)
+            draft.assert_called_once()
+            resolve.assert_called_once()
+            self.assertTrue(resolve.call_args.kwargs["force_refresh"])
+            self.assertFalse(resolve.call_args.kwargs["use_persisted"])
+            review.assert_called_once()
+            self.assertTrue(publish.call_args.kwargs["force_draft"])
+            self.assertEqual(publish.call_args.args[1], "https://example.com/story")
+            saved = store.latest_operator_action(con, inserted["url_hash"])
+            self.assertEqual((saved["state"], saved["result"]),
+                             ("completed", "delivery result: DRAFT"))
+
+    def test_owner_override_does_not_bypass_a_different_gate(self):
+        raw = item()
+        with temporary_store() as con:
+            inserted = store.upsert_new_items(con, [raw])[0]
+            store.set_status(con, inserted["url_hash"], "held", "stale",
+                             "stale event: dated 2020-01-01, window 6h")
+            action = store.request_operator_action(con, inserted["url_hash"], "stage")
+            result, _draft, publish, review, _resolve = self.run_cycle(
+                con, [raw], [{"action": "draft", "story_key": "stale", "class": "primary"}],
+                drafts=[{"post": "NEW: Bitcoin test.", "event_date": "2020-01-01",
+                         "needs_second_source": False}],
+                auto=True,
+                editor_result={"verdict": "spike", "post": None, "reason": "too weak"},
+            )
+            self.assertEqual(result["held"], 1)
+            review.assert_called_once()
+            publish.assert_not_called()
+            saved = store.latest_operator_action(con, inserted["url_hash"])
+            self.assertEqual(saved["id"], action["id"])
+            self.assertEqual(saved["state"], "blocked")
+            self.assertIn("editor spiked", saved["result"])
+
     def test_editor_spike_holds_autonomous_candidate(self):
         with temporary_store() as con:
             result, _draft, publish, review, _verify = self.run_cycle(

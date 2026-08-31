@@ -220,6 +220,16 @@ stalled-weekday flags, day
 navigation) → Published (lede-only cards + editor verdicts) → Held grouped by reason
 family → Self-audit → Skips.
 
+Held items have an explicit operator disposition. **Stage draft** is offered only when
+the pipeline already has usable material and the hold came from freshness,
+corroboration, style, or Editor judgment. It queues a one-time retry, preserves the
+story key, forces a fresh web source-resolution pass → Writer → lint → Editor, bypasses only that recorded
+gate, and forces `DRAFT` delivery even if autopost is enabled. Any different gate can
+still hold it. **Dismiss** moves any held item to skipped with an `owner dismissed`
+reason. Both actions are persisted in `operator_actions`; neither deletes the decision
+history. Source-policy and thin-source holds deliberately have no Stage button because
+they do not yet have reliable material to draft from.
+
 Desk counters deliberately do not form one equation; they use two units and two date
 axes:
 

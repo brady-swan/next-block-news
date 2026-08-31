@@ -71,10 +71,14 @@ def _mode_for(klass: str) -> str:
     return "DRAFT"
 
 
-def publish(post: str, receipt_url: str, klass: str, image: tuple = None) -> tuple:
+def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
+            force_draft: bool = False) -> tuple:
     """Returns (mode, post_id_or_None). image: optional (bytes, file_name) chart from
-    the source page, attached to the lead post (FRED links preview poorly on X)."""
+    the source page, attached to the lead post (FRED links preview poorly on X).
+    Operator overrides use force_draft so they can never become autonomous posts."""
     mode = _mode_for(klass)
+    if force_draft and mode != "TAPE":
+        mode = "DRAFT"
     if mode == "TAPE":
         tape(post, receipt_url, klass, mode)
         return mode, None

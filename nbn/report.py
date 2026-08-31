@@ -87,6 +87,13 @@ h2.needs{color:var(--orange)}
         background:rgba(247,147,26,.1);border-right:1px solid var(--line);color:var(--orange)}
 .acts a.sec{flex:none;min-width:116px;font-weight:500;background:none;border-right:none;
             color:var(--sub)}
+.itemacts{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.itemacts form{margin:0}
+.itemacts button{appearance:none;border:1px solid rgba(247,147,26,.4);border-radius:5px;
+                 background:rgba(247,147,26,.1);color:var(--orange);cursor:pointer;
+                 padding:7px 10px;font:600 11.5px/1 var(--mono);letter-spacing:.03em}
+.itemacts button.dismiss{border-color:var(--line2);background:none;color:var(--sub)}
+.itemacts .actionstatus{font:500 11.5px/1.4 var(--mono);color:var(--amber)}
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .day{text-decoration:none;background:var(--panel);border:1px solid var(--line);
      border-radius:8px;padding:7px 0 6px;text-align:center}
@@ -245,6 +252,52 @@ def _dismissed(con, kind, ref) -> bool:
 def _dismiss_link(kind, ref, day):
     return (f"<a class=sec href='/dismiss?k={config.REPORT_TOKEN}&kind={kind}&id={ref}&d={day}' "
             f"style='color:var(--dim)'>dismiss ✓</a>")
+
+
+def _hold_label(note: str) -> str:
+    gate = store.hold_gate(note)
+    if gate:
+        return gate
+    value = str(note or "").lower()
+    if value.startswith("source policy:") or "source unresolved" in value:
+        return "source"
+    if "thin source" in value:
+        return "thin source"
+    if value.startswith("update lacks"):
+        return "coverage"
+    return "held"
+
+
+def _item_controls(con, item_hash: str, day: str) -> str:
+    current = con.execute(
+        "SELECT status,note FROM items WHERE url_hash=?", (item_hash,)
+    ).fetchone()
+    action = store.latest_operator_action(con, item_hash)
+    if action and action["state"] in ("queued", "processing"):
+        label = "draft requested · awaiting next run" if action["state"] == "queued" \
+            else "draft request processing"
+        return f"<div class=itemacts><span class=actionstatus>{_esc(label)}</span></div>"
+    if not current or current["status"] != "held":
+        if action and action["action"] == "dismiss" and action["state"] == "completed":
+            return "<div class=itemacts><span class=actionstatus>dismissed</span></div>"
+        return ""
+    hidden = (f"<input type=hidden name=k value='{_esc(config.REPORT_TOKEN)}'>"
+              f"<input type=hidden name=id value='{_esc(item_hash)}'>"
+              f"<input type=hidden name=d value='{_esc(day)}'>")
+    buttons = []
+    if store.hold_gate(current["note"]):
+        buttons.append(
+            f"<form method=post action='/item-action'>{hidden}"
+            "<input type=hidden name=action value=stage>"
+            "<button type=submit>STAGE DRAFT</button></form>"
+        )
+    buttons.append(
+        f"<form method=post action='/item-action'>{hidden}"
+        "<input type=hidden name=action value=dismiss>"
+        "<button class=dismiss type=submit "
+        "onclick=\"return confirm('Dismiss this item?')\">DISMISS</button></form>"
+    )
+    return f"<div class=itemacts>{''.join(buttons)}</div>"
 
 
 def render(con, day: str = None) -> str:
@@ -413,6 +466,8 @@ def render(con, day: str = None) -> str:
             output_mode = item.get("output_mode")
             final_label = f"{final_status} / {output_mode}" if output_mode else final_status
             final_note = item.get("final_note") or ""
+            if final_status == "held":
+                final_label = f"held · {_hold_label(final_note)}"
             source_path = ""
             if item.get("selected_source"):
                 source_path = (f"<p>Receipt: {_esc(item.get('original_source') or item.get('source'))} "
@@ -433,7 +488,8 @@ def render(con, day: str = None) -> str:
                 f"{_esc(item.get('story_key') or 'no story key')}</div></summary>"
                 f"<div class=body><p>Decision: {_esc(triage_reason)}</p>"
                 f"{downstream}{source_path}<p><a href='{_esc(item.get('url'))}'>"
-                f"discovery item ↗</a></p></div></details>")
+                f"discovery item ↗</a></p>"
+                f"{_item_controls(con, item.get('url_hash'), day)}</div></details>")
         out.append("</div>")
     else:
         out.append("<div class=empty>no completed non-empty decision run recorded yet</div>")
@@ -527,7 +583,9 @@ def render(con, day: str = None) -> str:
         out.append("<div class=empty>none this day</div>")
 
     # ── Held, grouped ────────────────────────────────────────────────────────
-    groups = [("Waiting on a second source",
+    groups = [("Freshness",
+               lambda n: n.startswith("stale event:")),
+              ("Waiting on a second source",
                lambda n: "second source" in n or "unconfirmed" in n),
               ("Editor spiked", lambda n: n.startswith("editor spiked")),
               ("Style gate (lint)", lambda n: n.startswith("lint")),
@@ -567,7 +625,7 @@ def render(con, day: str = None) -> str:
                            f"<div class=ttl>{_esc(h['title'])}</div>"
                            f"<div class=why>{_esc(h['note'] or '')}"
                            f"{(' · ' + _esc(h['resolution_note'])) if h['resolution_note'] else ''}"
-                           f"</div></div>")
+                           f"</div>{_item_controls(con, h['url_hash'], day)}</div>")
             out.append("</details>")
         out.append("</div>")
     else:
