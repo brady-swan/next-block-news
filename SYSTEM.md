@@ -91,8 +91,11 @@ cost zero. Three tiers:
   Unchained, Casa, Swan) — kept off the public list for association optics.
 - **Tier 2 research watch** (Kobeissi Letter, Barchart) — eligible for supported
   analysis and market data, but not as authority for claims outside its own work.
-- **Fast detectors** (WatcherGuru, CoinDesk, TheBlockCo, Bitcoin Magazine,
-  BitcoinNewsCom, TFTC21, BitcoinArchive) — tips only, never sources (see §3).
+- **Bitcoin-news guides** (BitcoinNewsCom, BitcoinArchive, Bitcoin Magazine, TFTC21) —
+  proven editorial desks used as strong attention priors and bounded format examples.
+  Every original news-bearing post or story link is prioritized into corroboration;
+  their post is never evidence and NBN still replaces it with an eligible receipt.
+- **Broad detectors** (WatcherGuru, CoinDesk, TheBlockCo) — ordinary tips, never sources.
 
 **Web search (on demand):** Claude's server-side web_search, used by verification (§3)
 and the self-audit.
@@ -113,6 +116,12 @@ and the self-audit.
 underlying story, and a proposed class. It receives both **posted** story keys (skip duplicates)
 and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
 corroboration promotion).
+
+Guide-account leads are ordered ahead of ordinary FIFO intake and must reach source
+research when they contain a plausible factual news claim or story link; terseness,
+link-only presentation, hype, or lack of in-post corroboration is not a reason to skip.
+If a batch response omits any item, NBN retries only the omitted subset. A still-omitted
+ordinary item is held, while a still-omitted guide lead fails into research—never skip.
 
 Triage has no target quota. Factual Bitcoin market state—defined-period price moves,
 flows, leverage, funding, open interest, volatility, liquidity, holder activity, and
@@ -205,6 +214,10 @@ Sonnet 5 drafts from the FETCHED article text under the charter
   genuinely enumerable stories; mixed allowed (one run ≤3) — bullets carry lists, prose
   carries the story. Attribute the source ONCE. Mentions only from `handles.json`
   (hand-verified), max 2.
+- For a guide-surfaced story, Writer also receives that guide post as explicitly
+  untrusted craft context. It may borrow information order, structure, and approximate
+  length when useful, but not phrasing, emotional framing, or any fact absent from the
+  selected receipt.
 
 ## 5. The gates (deterministic; one retry with violations fed back)
 

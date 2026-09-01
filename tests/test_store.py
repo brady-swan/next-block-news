@@ -13,6 +13,16 @@ from tests.support import item, temporary_store
 
 
 class StoreTests(unittest.TestCase):
+    def test_guide_items_are_prioritized_for_triage(self):
+        with temporary_store() as con:
+            store.upsert_new_items(con, [item(url="https://example.com/ordinary")])
+            store.upsert_new_items(con, [item(
+                url="https://x.com/BitcoinArchive/status/1",
+                source="X guide @BitcoinArchive",
+            )])
+            pending = store.pending_items(con, 1)
+            self.assertEqual(pending[0]["source"], "X guide @BitcoinArchive")
+
     def test_url_deduplication(self):
         with temporary_store() as con:
             first = store.upsert_new_items(con, [item()])

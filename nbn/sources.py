@@ -7,6 +7,7 @@ shows up on its own, failures are per-feed and non-fatal.
 """
 import html
 import ipaddress
+import json
 import logging
 import re
 import socket
@@ -224,13 +225,25 @@ X_RESEARCH_QUERIES = [
     # Tier 2 research signal monitored directly, eligible only for its own analysis.
     '(from:KobeissiLetter OR from:Barchart) -is:retweet',
 ]
+X_GUIDE_HANDLES = (
+    "BitcoinNewsCom",
+    "BitcoinArchive",
+    "BitcoinMagazine",
+    "TFTC21",
+)
+X_GUIDE_QUERIES = [
+    # Proven Bitcoin-news desks. Their posts are editorial leads: NBN still replaces
+    # the receipt, but substantive claims should reach research before being judged.
+    "(" + " OR ".join(f"from:{handle}" for handle in X_GUIDE_HANDLES) + ") -is:retweet",
+]
 X_DETECTOR_QUERIES = [
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
     # source-resolution hunt that finds an eligible receipt.
-    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:BitcoinMagazine'
-    ' OR from:BitcoinNewsCom OR from:TFTC21 OR from:BitcoinArchive) -is:retweet',
+    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo) -is:retweet',
 ]
-X_STATIC_QUERIES = X_PRIMARY_QUERIES + X_RESEARCH_QUERIES + X_DETECTOR_QUERIES
+X_STATIC_QUERIES = (
+    X_PRIMARY_QUERIES + X_RESEARCH_QUERIES + X_GUIDE_QUERIES + X_DETECTOR_QUERIES
+)
 
 _list_cache = {"members": [], "fetched": 0.0}
 
@@ -286,7 +299,7 @@ def fetch_x(con=None) -> list:
     with httpx.Client(timeout=15, headers=headers) as client:
         queries = _list_member_queries(client) + X_PRIMARY_QUERIES + X_RESEARCH_QUERIES
         if config.X_DETECTOR_ENABLED:
-            queries += X_DETECTOR_QUERIES
+            queries += X_GUIDE_QUERIES + X_DETECTOR_QUERIES
         for qi, q in enumerate(queries):
             try:
                 params = {
@@ -318,7 +331,12 @@ def fetch_x(con=None) -> list:
                 for t in data.get("data", []):
                     user = users.get(t["author_id"], {})
                     uname = user.get("username", "unknown")
-                    label = "X detector" if q in X_DETECTOR_QUERIES else "X"
+                    if q in X_GUIDE_QUERIES:
+                        label = "X guide"
+                    elif q in X_DETECTOR_QUERIES:
+                        label = "X detector"
+                    else:
+                        label = "X"
                     tweet_url = f"https://x.com/{uname}/status/{t['id']}"
                     # A tweet is usually a POINTER: when a primary/roster account links
                     # out (FRED graph, press release, filing), THAT page is the story —
@@ -327,23 +345,47 @@ def fetch_x(con=None) -> list:
                     # Detector tips keep the tweet URL (their links get replaced by
                     # web corroboration anyway).
                     outbound = []
-                    if label == "X":
+                    if label in {"X", "X guide"}:
                         for u in (t.get("entities", {}) or {}).get("urls", []):
                             target = u.get("unwound_url") or u.get("expanded_url") or ""
                             host = target.split("/")[2].lower() if target.count("/") >= 2 else ""
                             if host and not host.endswith(("twitter.com", "x.com", "t.co")):
                                 outbound.append(target)
-                    story_url = outbound[0] if len(outbound) == 1 else tweet_url
+                    # Keep guide posts as distinct leads even when RSS already ingested
+                    # the linked page. Their value is the independent attention signal;
+                    # source resolution receives the outbound links separately below.
+                    story_url = (outbound[0] if label == "X" and len(outbound) == 1
+                                 else tweet_url)
                     summary = t["text"][:600]
                     if story_url != tweet_url:
                         summary += f"\n[original post: {tweet_url}]"
-                    out.append({
+                    elif label == "X guide" and outbound:
+                        summary += "\n[linked pages: " + " ".join(outbound[:4]) + "]"
+                    item = {
                         "source": f"{label} @{uname}",
                         "title": t["text"][:200],
                         "url": story_url,
                         "published": t.get("created_at", ""),
                         "summary": summary,
-                    })
+                    }
+                    if label == "X guide":
+                        metrics = t.get("public_metrics") or {}
+                        item["discovery_context"] = json.dumps({
+                            "untrusted_discovery_context": True,
+                            "origin": "bitcoin_news_guide_account",
+                            "guide_account_signal": True,
+                            "guide_handle": uname,
+                            "guide_post_url": tweet_url,
+                            "guide_post_text": t["text"][:600],
+                            "guide_format_metrics": {
+                                "characters": len(t["text"]),
+                                "likes": int(metrics.get("like_count") or 0),
+                                "reposts": int(metrics.get("retweet_count") or 0),
+                                "quotes": int(metrics.get("quote_count") or 0),
+                            },
+                            "outbound_urls": outbound[:4],
+                        }, separators=(",", ":"))
+                    out.append(item)
             except Exception as exc:  # noqa: BLE001
                 log.warning("x query failed: %s", exc)
                 break  # a 429 would fail the rest too

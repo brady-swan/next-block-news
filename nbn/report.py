@@ -405,7 +405,7 @@ def render(con, day: str = None) -> str:
         f"{_freshness_pills(con, now_ts)}"
         f"<span class=pill>source policy: {_esc(config.SOURCE_POLICY_MODE)}</span>"
         f"<span class=pill>direct Perception: {'on' if config.PERCEPTION_DIRECT_ENABLED else 'off'}</span>"
-        f"<span class=pill>X detectors: {'on' if config.X_DETECTOR_ENABLED else 'off'}</span>"
+        f"<span class=pill>X guides + detectors: {'on' if config.X_DETECTOR_ENABLED else 'off'}</span>"
         f"<span class=pill>fresh {store.current_max_age_hours():g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
         f" @ high</span>"

@@ -59,6 +59,62 @@ class BrainJsonTests(unittest.TestCase):
         self.assertNotIn("detector_context_untrusted", draft_payload[0])
         self.assertNotIn("discovery_context", draft_payload[0])
 
+    def test_triage_retries_items_omitted_by_the_first_response(self):
+        items = [
+            {"url_hash": "one", "source": "CoinDesk", "title": "First", "url":
+             "https://coindesk.com/one", "published": "", "summary": ""},
+            {"url_hash": "two", "source": "X guide @BitcoinArchive", "title": "Second",
+             "url": "https://x.com/BitcoinArchive/status/2", "published": "", "summary": "",
+             "discovery_context": json.dumps({
+                 "untrusted_discovery_context": True, "guide_account_signal": True,
+             })},
+        ]
+        replies = [
+            response('[{"url_hash":"one","action":"skip","story_key":null,'
+                     '"class":"secondary","reason":"test"}]'),
+            response('[{"url_hash":"two","action":"draft","story_key":"second-story",'
+                     '"class":"secondary","reason":"guide lead"}]'),
+        ]
+        with patch.object(brain, "_create", side_effect=replies) as create:
+            out = brain.triage(items, [], [])
+        self.assertEqual(create.call_count, 2)
+        self.assertEqual(out[1]["action"], "draft")
+        self.assertEqual(out[1]["story_key"], "second-story")
+
+    def test_omitted_guide_verdict_fails_into_research_not_skip(self):
+        item = {
+            "url_hash": "abcdef1234567890ffff", "source": "X guide @BitcoinNewsCom",
+            "title": "A Bitcoin claim", "url": "https://x.com/BitcoinNewsCom/status/1",
+            "published": "", "summary": "", "discovery_context": json.dumps({
+                "untrusted_discovery_context": True, "guide_account_signal": True,
+            }),
+        }
+        with patch.object(brain, "_create", return_value=response("[]")):
+            out = brain.triage([item], [], [])
+        self.assertEqual(out[0]["action"], "draft")
+        self.assertEqual(out[0]["reason"], "guide lead recovery")
+
+    def test_guide_post_reaches_writer_as_format_example_not_evidence(self):
+        item = {
+            "source": "Bloomberg", "title": "Verified Bitcoin story",
+            "url": "https://bloomberg.com/story", "published": "", "class": "secondary",
+            "discovery_context": json.dumps({
+                "untrusted_discovery_context": True,
+                "guide_account_signal": True,
+                "guide_handle": "BitcoinArchive",
+                "guide_post_text": "JUST IN: Bitcoin policy changed. • First fact • Second fact",
+                "guide_format_metrics": {"likes": 42, "characters": 60},
+            }),
+        }
+        payloads = []
+        with patch.object(brain, "_create", side_effect=lambda _m, _s, user, **_k: (
+                payloads.append(json.loads(user)) or response('{"post":null}'))):
+            brain.draft(item, "The verified source text.", {})
+        example = payloads[0]["guide_format_example_untrusted"]
+        self.assertEqual(example["handle"], "BitcoinArchive")
+        self.assertIn("First fact", example["text"])
+        self.assertEqual(payloads[0]["source_text"], "The verified source text.")
+
 
 if __name__ == "__main__":
     unittest.main()

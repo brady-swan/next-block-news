@@ -57,7 +57,9 @@ def _record_source_overlap(con, run_id: str, perception_items: list[dict],
     all_refs = set(pulse.get("all_key_hashes") or []) if fresh else set()
     primary_refs = set(pulse.get("primary_key_hashes") or []) if fresh else set()
     detector_items = [
-        item for item in x_items if str(item.get("source") or "").startswith("X detector")
+        item for item in x_items if str(item.get("source") or "").startswith(
+            ("X detector", "X guide")
+        )
     ]
 
     def lane(items: list[dict]) -> dict:

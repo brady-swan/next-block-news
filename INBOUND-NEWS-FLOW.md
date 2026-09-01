@@ -90,13 +90,17 @@ The watch has four parts:
    River, Strike, Unchained, Casa, and Swan.
 3. **Tier 2 research.** The Kobeissi Letter and Barchart. These accounts may support
    their own analysis or data, not unrelated claims.
-4. **Tier 3 detectors.** WatcherGuru, CoinDesk, The Block, Bitcoin Magazine,
-   BitcoinNewsCom, TFTC, and Bitcoin Archive. These are tips: NBN must find an eligible
-   underlying receipt before publication.
+4. **Bitcoin-news guide accounts.** BitcoinNewsCom, Bitcoin Archive, Bitcoin Magazine,
+   and TFTC. Every original news-bearing post or linked story gets priority intake and a
+   corroboration attempt. The account is an attention/format signal, never the receipt.
+5. **Broad detectors.** WatcherGuru, CoinDesk, and The Block. These remain ordinary tips:
+   NBN must find an eligible underlying receipt before publication.
 
 When a primary or research account links to exactly one external public page, NBN uses
-that page as the candidate URL and retains the X post as context. Detector posts remain
-tips and enter source resolution before they can become receipts.
+that page as the candidate URL and retains the X post as context. Guide posts remain
+distinct leads so they cannot disappear behind an already-ingested RSS URL; their linked
+pages are retained as untrusted research hints. Detector and guide posts enter source
+resolution before they can become receipts.
 
 ### Direct Perception — every 15 minutes
 

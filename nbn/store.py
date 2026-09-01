@@ -794,7 +794,8 @@ def pending_items(con, limit: int) -> list:
     rows = con.execute(
         "SELECT url_hash, source, title, url, published_at AS published,"
         " summary,discovery_origin,discovery_context,discovery_candidate_id"
-        " FROM items WHERE status='new' ORDER BY first_seen LIMIT ?",
+        " FROM items WHERE status='new'"
+        " ORDER BY CASE WHEN source LIKE 'X guide @%' THEN 0 ELSE 1 END, first_seen LIMIT ?",
         (limit,),
     ).fetchall()
     return [dict(r) for r in rows]
