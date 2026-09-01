@@ -16,6 +16,8 @@ class SourcePolicyTests(unittest.TestCase):
             "https://www.btcpolicy.org/research/report": ("bitcoin-policy-institute", "t2"),
             "https://x.com/KobeissiLetter/status/1": ("kobeissi-letter", "t2"),
             "https://www.thekobeissiletter.com/p/markets": ("kobeissi-letter", "t2"),
+            "https://x.com/Barchart/status/1": ("barchart", "t2"),
+            "https://www.barchart.com/futures/quotes/BT*0/overview": ("barchart", "t2"),
             "https://x.com/Strategy/status/1": ("strategy", "p0"),
             "https://x.com/Strive/status/1": ("strive", "p0"),
             "https://x.com/Metaplanet_JP/status/1": ("metaplanet", "p0"),

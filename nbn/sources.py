@@ -222,7 +222,7 @@ X_PRIMARY_QUERIES = [
 ]
 X_RESEARCH_QUERIES = [
     # Tier 2 research signal monitored directly, eligible only for its own analysis.
-    '(from:KobeissiLetter) -is:retweet',
+    '(from:KobeissiLetter OR from:Barchart) -is:retweet',
 ]
 X_DETECTOR_QUERIES = [
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the

@@ -89,6 +89,8 @@ cost zero. Three tiers:
 - **Quiet hardcoded bundles**: watched legislators; company newsrooms (BitGo, NYDIG,
   Coinbase, Strategy, Galaxy, BlackRock, Fidelity, Bitwise, Grayscale, River, Strike,
   Unchained, Casa, Swan) — kept off the public list for association optics.
+- **Tier 2 research watch** (Kobeissi Letter, Barchart) — eligible for supported
+  analysis and market data, but not as authority for claims outside its own work.
 - **Fast detectors** (WatcherGuru, CoinDesk, TheBlockCo, Bitcoin Magazine,
   BitcoinNewsCom, TFTC21, BitcoinArchive) — tips only, never sources (see §3).
 

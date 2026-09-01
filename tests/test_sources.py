@@ -10,6 +10,10 @@ class SourceFetchSafetyTests(unittest.TestCase):
         self.assertTrue(any("from:KobeissiLetter" in query
                             for query in sources.X_STATIC_QUERIES))
 
+    def test_barchart_is_in_direct_research_watch(self):
+        self.assertTrue(any("from:Barchart" in query
+                            for query in sources.X_STATIC_QUERIES))
+
     def test_private_literal_is_rejected_before_request(self):
         client = MagicMock()
         http = client.return_value.__enter__.return_value

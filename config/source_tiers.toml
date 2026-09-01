@@ -915,6 +915,17 @@ domains = ["thekobeissiletter.com"]
 aliases = ["the kobeissi letter", "kobeissi letter", "kobeissi"]
 handles = ["KobeissiLetter"]
 
+[[sources]]
+id = "barchart"
+display_name = "Barchart"
+tier = "t2"
+category = "research_data"
+independence_key = "barchart"
+receipt_role = "research"
+domains = ["barchart.com"]
+aliases = ["barchart"]
+handles = ["Barchart"]
+
 # Tier 3: discovery/corroboration leads only; never autonomous receipts.
 [[sources]]
 id = "cryptoslate"
