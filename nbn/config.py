@@ -96,7 +96,18 @@ SOURCE_EVIDENCE_LOOKBACK_HOURS = float(
 SOURCE_RESOLUTION_CACHE_SECONDS = int(
     os.environ.get("NBN_SOURCE_RESOLUTION_CACHE_SECONDS", "3600")
 )
-CYCLE_LEASE_SECONDS = int(os.environ.get("NBN_CYCLE_LEASE_SECONDS", "900"))
+# A live worker renews this lease in the background. Keep the orphan window short
+# so a Railway deploy cannot pause intake for the duration of a long model cycle.
+CYCLE_LEASE_SECONDS = int(os.environ.get("NBN_CYCLE_LEASE_SECONDS", "120"))
+CYCLE_LEASE_HEARTBEAT_SECONDS = int(
+    os.environ.get("NBN_CYCLE_LEASE_HEARTBEAT_SECONDS", "30")
+)
+
+# A Block must be backed by an EIC brief generated from the current Daily Intel
+# window. This is a second bound after the provenance checks in briefing.py.
+BRIEFING_MAX_AGE_SECONDS = int(
+    os.environ.get("NBN_BRIEFING_MAX_AGE_SECONDS", "14400")
+)
 
 # Dead-man's switch: ping this URL after every successful cycle (healthchecks.io);
 # alerts fire on SILENCE, catching crash and stall alike. Empty = disabled.

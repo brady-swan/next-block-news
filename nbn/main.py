@@ -186,6 +186,14 @@ def _lease_run(con, scheduled: bool) -> dict:
     if not store.acquire_cycle_lease(con, owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
         log.warning("worker iteration skipped: another process owns the lease")
         return {"skipped_locked": 1}
+    stop_heartbeat = threading.Event()
+    heartbeat = threading.Thread(
+        target=_renew_cycle_lease_until_stopped,
+        args=(owner, stop_heartbeat),
+        name="cycle-lease-heartbeat",
+        daemon=True,
+    )
+    heartbeat.start()
     try:
         # Repair human-published Typefully drafts before any coverage/dedup decisions.
         publisher.reconcile_publications(con)
@@ -198,7 +206,28 @@ def _lease_run(con, scheduled: bool) -> dict:
                 audit.maybe_run(con)
         return result
     finally:
+        stop_heartbeat.set()
+        heartbeat.join(timeout=max(1, config.CYCLE_LEASE_HEARTBEAT_SECONDS + 1))
         store.release_cycle_lease(con, owner)
+
+
+def _renew_cycle_lease_until_stopped(owner: str, stop: threading.Event) -> None:
+    """Keep a live cycle's short lease valid using its own SQLite connection."""
+    con = store.connect()
+    try:
+        while not stop.wait(config.CYCLE_LEASE_HEARTBEAT_SECONDS):
+            try:
+                renewed = store.renew_cycle_lease(
+                    con, owner, ttl_seconds=config.CYCLE_LEASE_SECONDS
+                )
+            except Exception:  # noqa: BLE001 - the foreground stage checks remain authoritative
+                log.exception("cycle lease heartbeat failed")
+                continue
+            if not renewed:
+                log.error("cycle lease heartbeat lost ownership")
+                return
+    finally:
+        con.close()
 
 
 def cycle(con) -> dict:

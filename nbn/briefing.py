@@ -11,12 +11,14 @@ import datetime
 import json
 import logging
 import re
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from . import config, lint, store
 
 log = logging.getLogger("nbn.briefing")
+EDITORIAL_TZ = ZoneInfo("America/Chicago")
 
 BRIEFING_PROMPT = """You turn a daily Bitcoin intelligence brief into an X thread for
 Next Block News, a neutral Bitcoin news wire. Voice: facts stated flat, no adjectives of
@@ -58,7 +60,62 @@ def _node_headers():
     return {"Authorization": f"Bearer {config.NODE_READ_TOKEN}"}
 
 
-def fetch_brief():
+def _as_utc(value) -> datetime.datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def _freshness_issue(data: dict, window_title: str,
+                     now: datetime.datetime | None = None) -> str | None:
+    """Return why the Node payload cannot safely back this Block, or None."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=datetime.timezone.utc)
+    now = now.astimezone(datetime.timezone.utc)
+    run = data.get("run") if isinstance(data.get("run"), dict) else {}
+    brief = data.get("daily_brief") if isinstance(data.get("daily_brief"), dict) else {}
+    expected_date = now.astimezone(EDITORIAL_TZ).date().isoformat()
+    expected_window = window_title.strip().lower()
+
+    if str(run.get("selected_date") or "") != expected_date:
+        return f"Daily Intel date is {run.get('selected_date')}, expected {expected_date}"
+    if str(brief.get("date") or "") != expected_date:
+        return f"EIC brief date is {brief.get('date')}, expected {expected_date}"
+    if str(run.get("run_window") or "").lower() != expected_window:
+        return f"Daily Intel window is {run.get('run_window')}, expected {expected_window}"
+
+    latest_run_id = run.get("run_id")
+    source_run_id = brief.get("source_daily_intel_run_id")
+    if not latest_run_id or source_run_id != latest_run_id:
+        return f"EIC brief used Daily Intel run {source_run_id}, latest is {latest_run_id}"
+    if str(brief.get("source_daily_intel_run_window") or "").lower() != expected_window:
+        return "EIC brief provenance does not match the requested window"
+
+    generated_at = _as_utc(brief.get("generated_at"))
+    source_received_at = _as_utc(brief.get("source_daily_intel_received_at"))
+    run_received_at = _as_utc(run.get("received_at"))
+    if generated_at is None or source_received_at is None or run_received_at is None:
+        return "EIC brief freshness timestamps are missing or invalid"
+    if source_received_at != run_received_at:
+        return "EIC brief source timestamp does not match the latest Daily Intel run"
+    if generated_at < source_received_at:
+        return "EIC brief predates its source Daily Intel run"
+    age = (now - generated_at).total_seconds()
+    if age < -300:
+        return "EIC brief timestamp is in the future"
+    if age > config.BRIEFING_MAX_AGE_SECONDS:
+        return f"EIC brief is stale ({int(age)}s old)"
+    return None
+
+
+def fetch_brief(window_title: str, now: datetime.datetime | None = None):
     try:
         resp = httpx.get(
             f"{config.NODE_BASE_URL}/api/daily-intel/latest",
@@ -66,7 +123,13 @@ def fetch_brief():
         )
         resp.raise_for_status()
         data = resp.json()
-        return data if data.get("daily_brief") else None
+        if not data.get("daily_brief"):
+            return None
+        issue = _freshness_issue(data, window_title, now)
+        if issue:
+            log.warning("brief rejected for %s Block: %s", window_title, issue)
+            return None
+        return data
     except Exception as exc:  # noqa: BLE001
         log.error("brief fetch failed: %s", exc)
         return None
@@ -175,7 +238,7 @@ def maybe_run(con) -> bool:
         key = f"briefing:{now:%Y-%m-%d}:{title.lower()}"
         if store.story_produced(con, key):
             continue
-        payload = fetch_brief()
+        payload = fetch_brief(title, now=now)
         if not payload:
             log.warning("no brief available for %s window", title)
             continue

@@ -16,6 +16,26 @@ def brief_payload():
     }}
 
 
+def fresh_brief_payload(window="afternoon"):
+    return {
+        "run": {
+            "run_id": 42,
+            "selected_date": "2026-08-31",
+            "run_window": window,
+            "received_at": "2026-08-31T20:30:00+00:00",
+        },
+        "daily_brief": {
+            **brief_payload()["daily_brief"],
+            "date": "2026-08-31",
+            "workflow_run_id": 99,
+            "generated_at": "2026-08-31T20:50:00+00:00",
+            "source_daily_intel_run_id": 42,
+            "source_daily_intel_received_at": "2026-08-31T20:30:00+00:00",
+            "source_daily_intel_run_window": window,
+        },
+    }
+
+
 def block_posts(text="Bitcoin policy update.", receipt="https://example.com/source"):
     return [
         {"text": "Morning Block - August thirty-first\n\nTop stories:\n• Bitcoin policy\n\nMore inside ➡️",
@@ -77,6 +97,38 @@ class BriefingTests(unittest.TestCase):
         self.assertIn("Judge the factual payload", brain.TRIAGE_SYSTEM)
         self.assertIn("prepared remarks or a transcript", brain.TRIAGE_SYSTEM)
         self.assertNotIn("Typical batch yields 0-3 drafts", brain.TRIAGE_SYSTEM)
+
+    def test_freshness_gate_accepts_exact_current_window_provenance(self):
+        now = datetime.datetime(2026, 8, 31, 21, 55, tzinfo=datetime.timezone.utc)
+        self.assertIsNone(briefing._freshness_issue(
+            fresh_brief_payload(), "Afternoon", now
+        ))
+
+    def test_freshness_gate_rejects_brief_from_prior_daily_intel_run(self):
+        payload = fresh_brief_payload()
+        payload["daily_brief"]["source_daily_intel_run_id"] = 41
+        now = datetime.datetime(2026, 8, 31, 21, 55, tzinfo=datetime.timezone.utc)
+        self.assertIn("used Daily Intel run 41", briefing._freshness_issue(
+            payload, "Afternoon", now
+        ))
+
+    def test_freshness_gate_rejects_morning_brief_for_afternoon_block(self):
+        payload = fresh_brief_payload("morning")
+        now = datetime.datetime(2026, 8, 31, 21, 55, tzinfo=datetime.timezone.utc)
+        self.assertIn("expected afternoon", briefing._freshness_issue(
+            payload, "Afternoon", now
+        ))
+
+    def test_freshness_gate_rejects_old_eic_generation(self):
+        payload = fresh_brief_payload()
+        payload["run"]["received_at"] = "2026-08-31T15:30:00+00:00"
+        payload["daily_brief"]["source_daily_intel_received_at"] = (
+            "2026-08-31T15:30:00+00:00"
+        )
+        payload["daily_brief"]["generated_at"] = "2026-08-31T16:00:00+00:00"
+        now = datetime.datetime(2026, 8, 31, 21, 55, tzinfo=datetime.timezone.utc)
+        with patch.object(config, "BRIEFING_MAX_AGE_SECONDS", 4 * 3600):
+            self.assertIn("stale", briefing._freshness_issue(payload, "Afternoon", now))
 
 
 class AfternoonDateTime(datetime.datetime):

@@ -20,7 +20,7 @@ Typefully. Two products: breaking singles (anytime) and the Morning/Afternoon Bl
  │ bundles)       non-English                                       source (+1   │ revise/publish confirm-
  │ web search     gate                                              retry)       │               polled
  └───────────────────────────────────────────────────────────────────────────────┘
- weekdays 14:40 & 21:15 UTC: Node brief + wire's own catches → the Block (staged DRAFT)
+ weekdays 14:40 & 21:15 UTC: fresh Node EIC brief + wire's own catches → the Block
  daily 09:00 UTC: self-audit re-verifies yesterday's posts against their receipts
  every cycle: heartbeat ping → healthchecks.io (silence >15 min pages Brady)
 ```
@@ -250,15 +250,20 @@ never auto-publish, nothing new posts over an uncorrected material error).
 
 ## 8. The Block (scheduled briefing threads)
 
-Weekdays 14:40 UTC (Morning, after the Node's 14:00 EIC brief) and 21:15 UTC
-(Afternoon, after the 20:30 intel run); once per window. Fetches Brady's tuned brief
+Weekdays 14:40 UTC (Morning, after the Node's 06:10 CT synthesis → EIC chain) and
+21:15 UTC (Afternoon, after the 20:30 UTC Daily Intel → quiet EIC chain); once per
+window. Fetches Brady's tuned brief
 from the Marketing Node read API, folds in the wire's own catches since the previous
 Block, renders a 5-9 post thread: post 1 = link-free index (`Morning Block - <date>`,
 "Top stories:" bullets, "More inside ➡️" — the wire's one emoji), per-post receipt
 links from post 2. Gates: Swan-strip (deterministic), receipts-from-brief-only, full
 lint. The worker has a 60-minute catch-up window after each scheduled time, and one
 compact feedback retry protects against empty/truncated JSON or a failed factual/style
-gate. Stages as DRAFT. Known
+gate. Before generation, NBN requires the EIC brief to name the exact latest Daily Intel
+run for that date and window, match its receipt timestamp, and be no more than four hours
+old. A missing, stale, morning-for-afternoon, or prior-run brief fails closed; the worker
+retries during the catch-up window and never reuses it. Delivery follows the normal
+autopost/Typefully setting. Known
 tradeoff: the Block trusts the brief's numbers (the "60%"
 incident); the cross-check pass is the spec'd fix.
 
@@ -350,7 +355,7 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_SOURCE_POLICY_MODE` | `enforce` (code default) | `observe` records decisions but forces DRAFT/TAPE |
 | `NBN_SOURCE_EVIDENCE_LOOKBACK_HOURS` | `24` | freshness bound for cross-cycle evidence |
 | `NBN_SOURCE_RESOLUTION_CACHE_SECONDS` | `3600` | persisted per-item resolution cache across restarts |
-| `NBN_CYCLE_LEASE_SECONDS` | `900` | expiring mutex across news, briefing, and audit work |
+| `NBN_CYCLE_LEASE_SECONDS` / `NBN_CYCLE_LEASE_HEARTBEAT_SECONDS` | `120` / `30` | renewable mutex; dead deploy owners expire within two minutes |
 | `NBN_AUTOPOST_CLASSES` | `primary,corroborated` | autonomy surface (`secondary` ignored even if listed) |
 | `NBN_PUBLISH_DELAY_SECONDS` | `30` | the scheduled-publish fuse |
 | `NBN_PUBLISH_RECONCILE_SECONDS` | `300` | published-receipt reconciliation cadence |
@@ -365,6 +370,7 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | v2 wire pulse, legacy fallback, and Blocks |
 | `NBN_NODE_PULSE_MAX_AGE_SECONDS` | `10800` | maximum accepted v2 pulse age (3h) |
 | `NBN_BRIEFING_UTC` | `14:40,Morning;21:15,Afternoon` | Block schedule |
+| `NBN_BRIEFING_MAX_AGE_SECONDS` | `14400` | second freshness bound after exact Node run-provenance checks |
 | `NBN_AUDIT_UTC` | `09:00` | self-audit |
 | `NBN_REPORT_TOKEN` | set | Desk access (rotate to invalidate the bookmark) |
 | `NBN_HEARTBEAT_URL` | set | dead-man's switch |
@@ -388,7 +394,7 @@ Run rate ≈ **$100-180/mo all-in**.
 | Typefully confirmation is ambiguous | stored `UNCERTAIN`; no second create | Needs You (VERIFY ON TYPEFULLY / X) |
 | Typefully definitively fails | stored `FAILED`; URL fallback only on the known definitive policy rejection | Needs You (PUBLISH FAILED), logs |
 | Node discovery unavailable | intake continues from all other sources; status pill turns red; throttle prevents hammering | Desk, logs |
-| Node brief unavailable at Block time | Block skipped with a warning | logs |
+| Node brief unavailable, stale, or from the wrong Daily Intel run/window | Block waits through its catch-up window, then skips without publishing | logs |
 | Out-of-charter copy | lint holds after one retry | Desk holds ("Style gate") |
 | Contextual dup / weak value | editor spikes with reasoning | Needs You (AGREE OR OVERRULE) |
 | Press story misclassed `primary` | **the one gate-proof failure** — daily class audit is the net | Self-audit (CLASS SUSPECT) |

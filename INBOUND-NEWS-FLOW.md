@@ -260,13 +260,18 @@ The same complete stack runs whether autopost is on or off.
 ## 6. Morning and Afternoon Blocks
 
 Blocks are a separate batch product, not another one-off candidate feed. On weekdays NBN
-fetches the latest Marketing Node Daily Intel brief, removes Swan-specific framing, adds
+fetches the latest Marketing Node EIC brief, removes Swan-specific framing, adds
 independent one-off wire items published since the previous Block, and builds a 5-9 post
 thread from citations already present in those inputs.
 
 - Morning Block: 14:40 UTC.
 - Afternoon Block: 21:15 UTC.
 - Each has a one-hour catch-up window and a once-per-window database guard.
+- The morning brief follows the Node's 06:10 CT synthesis/EIC path. A successful 20:30
+  UTC PM Daily Intel run explicitly chains a quiet EIC refresh for the afternoon brief.
+- NBN verifies the brief's editorial date, morning/afternoon window, exact source Daily
+  Intel run ID and receipt timestamp, EIC generation timestamp, and maximum age. If any
+  field is missing or mismatched, the Block is not generated from the stale brief.
 
 If Wire Pulse v2 is healthy, the Daily Intel brief does not normally feed individual NBN
 posts. Its `more_reads` list is retained only as the Wire Pulse fallback described above.
@@ -292,4 +297,3 @@ The durable `discovery_origin` values are `rss`, `edgar`, `perception`, `x`, and
 `marketing_node`. First-ingestion provenance means a story independently found by both
 systems is credited to whichever URL reached NBN first; Node overlap may therefore be
 useful without appearing as a Node-origin publication.
-

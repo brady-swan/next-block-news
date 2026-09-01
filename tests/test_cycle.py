@@ -590,6 +590,25 @@ class CycleTests(unittest.TestCase):
         briefing_run.assert_not_called()
         audit_run.assert_not_called()
 
+    def test_cycle_lease_heartbeat_renews_with_separate_connection(self):
+        class StopAfterOneRenewal:
+            def __init__(self):
+                self.calls = 0
+
+            def wait(self, _seconds):
+                self.calls += 1
+                return self.calls > 1
+
+        connection = Mock()
+        stop = StopAfterOneRenewal()
+        with patch.object(store, "connect", return_value=connection), \
+                patch.object(store, "renew_cycle_lease", return_value=True) as renew, \
+                patch.object(config, "CYCLE_LEASE_HEARTBEAT_SECONDS", 30), \
+                patch.object(config, "CYCLE_LEASE_SECONDS", 120):
+            main._renew_cycle_lease_until_stopped("owner-a", stop)
+        renew.assert_called_once_with(connection, "owner-a", ttl_seconds=120)
+        connection.close.assert_called_once()
+
     def test_editor_revision_is_relinted_and_published(self):
         with temporary_store() as con:
             revised = "NEW: Bitcoin test, tightened."

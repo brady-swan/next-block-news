@@ -141,9 +141,10 @@ restore the timestamped backup only for demonstrated database corruption, not as
 code rollback. Once this release is installed, `python scripts/backup_db.py` is the shorter
 online-backup command for later maintenance.
 
-The worker uses an expiring SQLite lease across news, briefing, and audit work so overlapping
-deploy processes or an accidental `run_once` invocation cannot execute external work
-concurrently. Fresh persisted resolutions are reused across worker restarts.
+The worker uses a short expiring SQLite lease, renewed by a background heartbeat, across
+news, briefing, and audit work. Overlapping deploy processes or an accidental `run_once`
+invocation cannot execute external work concurrently, while an orphaned deploy lease
+expires within two minutes. Fresh persisted resolutions are reused across worker restarts.
 
 The worker exposes `/health` and `/status`; both return runtime and database state, and
 health becomes HTTP 500 when the last completed cycle is more than ten minutes old. The
