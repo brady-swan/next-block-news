@@ -114,7 +114,7 @@ the fetched evidence. Claude's server-side search is a one-use, 45-second last r
 
 ## 3. Judgment (triage → source resolution)
 
-**Triage** (Sonnet 5, batch): action draft/update/hold/skip, a `story_key` naming the
+**Triage** (Sonnet 5, medium effort, batch): action draft/update/hold/skip, a `story_key` naming the
 underlying story, and a proposed class. It receives both **posted** story keys (skip duplicates)
 and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
 corroboration promotion).
@@ -386,7 +386,7 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_X_DETECTOR_ENABLED` | `true` | broad detector-X lane; independent of curated primary/research X |
 | `NBN_PERCEPTION_API_KEY` / `NBN_PERCEPTION_POLL_SECONDS` | set (shared) / `900` | direct Perception fallback lane |
 | `NBN_PERCEPTION_DIRECT_ENABLED` | `true` until production cutover gate passes | lets Node own Perception discovery once safely proven |
-| `NBN_MODEL` / `NBN_TRIAGE_MODEL` | `claude-sonnet-5` | writer + triage (effort = API default high) |
+| `NBN_MODEL` / `NBN_TRIAGE_MODEL` / `NBN_TRIAGE_EFFORT` | `claude-sonnet-5` / `claude-sonnet-5` / `medium` | writer + bounded triage judgment |
 | `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | the editor seat |
 | `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | v2 wire pulse, legacy fallback, and Blocks |
 | `NBN_NODE_PULSE_MAX_AGE_SECONDS` | `10800` | maximum accepted v2 pulse age (3h) |

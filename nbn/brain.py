@@ -189,7 +189,13 @@ def _triage_payload(items: list, recent_keys: list, open_keys: list) -> dict:
 
 def triage(items: list, recent_keys: list, open_keys: list = None) -> list:
     payload = _triage_payload(items, recent_keys, open_keys or [])
-    resp = _create(config.TRIAGE_MODEL, TRIAGE_SYSTEM, json.dumps(payload), max_tokens=4000)
+    resp = _create(
+        config.TRIAGE_MODEL,
+        TRIAGE_SYSTEM,
+        json.dumps(payload),
+        max_tokens=6000,
+        effort=config.TRIAGE_EFFORT,
+    )
     try:
         verdicts = _json_from(resp)
     except Exception as exc:  # noqa: BLE001 - omitted-item recovery handles the batch.
@@ -207,7 +213,8 @@ def triage(items: list, recent_keys: list, open_keys: list = None) -> list:
             retry = _json_from(_create(
                 config.TRIAGE_MODEL, retry_system,
                 json.dumps(_triage_payload(missing, recent_keys, open_keys or [])),
-                max_tokens=4000,
+                max_tokens=6000,
+                effort=config.TRIAGE_EFFORT,
             ))
         except Exception as exc:  # noqa: BLE001 - deterministic fallback below
             log.warning("triage omitted-item recovery failed: %s", exc)

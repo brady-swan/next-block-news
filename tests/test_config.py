@@ -23,6 +23,7 @@ from nbn import config
 print(json.dumps({
     'model': config.ANTHROPIC_MODEL,
     'triage': config.TRIAGE_MODEL,
+    'triage_effort': config.TRIAGE_EFFORT,
     'editor': config.EDITOR_MODEL,
     'effort': config.EDITOR_EFFORT,
     'poll': config.POLL_SECONDS,
@@ -54,6 +55,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(values, {
             "model": "claude-sonnet-5",
             "triage": "claude-sonnet-5",
+            "triage_effort": "medium",
             "editor": "claude-fable-5",
             "effort": "low",
             "poll": 60,

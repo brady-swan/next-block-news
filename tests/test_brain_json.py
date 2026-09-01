@@ -94,6 +94,8 @@ class BrainJsonTests(unittest.TestCase):
         with patch.object(brain, "_create", side_effect=replies) as create:
             out = brain.triage([item], [], [])
         self.assertEqual(create.call_count, 2)
+        self.assertEqual(create.call_args_list[0].kwargs["effort"], "medium")
+        self.assertEqual(create.call_args_list[0].kwargs["max_tokens"], 6000)
         self.assertEqual(out[0]["action"], "draft")
         self.assertEqual(out[0]["story_key"], "first")
 

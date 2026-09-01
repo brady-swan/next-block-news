@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # LLM
 ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-sonnet-5")
 TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
+TRIAGE_EFFORT = os.environ.get("NBN_TRIAGE_EFFORT", "medium")
 # The Editor: last-mile judgment seat. It runs only on autonomous candidates, so the
 # higher-judgment Fable seat remains a small share of the model budget.
 EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-fable-5")
