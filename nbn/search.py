@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -37,15 +38,24 @@ def google(query: str, *, max_results: int | None = None) -> list[dict]:
         "no_cache": "false",
         "api_key": config.SERPAPI_KEY,
     }
+    # SerpAPI requires its credential in the query string. NBN's root logger enables
+    # httpx INFO access logs, which otherwise record the full URL (and key). Suppress
+    # only this synchronous request and restore the prior logger level immediately.
+    httpx_log = logging.getLogger("httpx")
+    prior_level = httpx_log.level
+    httpx_log.setLevel(max(prior_level, logging.WARNING))
     try:
-        response = httpx.get(
-            _SEARCH_URL,
-            params=params,
-            timeout=config.SERPAPI_TIMEOUT_SECONDS,
-            follow_redirects=False,
-        )
-    except httpx.HTTPError as exc:
-        raise SearchError(f"serpapi transport error: {type(exc).__name__}") from exc
+        try:
+            response = httpx.get(
+                _SEARCH_URL,
+                params=params,
+                timeout=config.SERPAPI_TIMEOUT_SECONDS,
+                follow_redirects=False,
+            )
+        except httpx.HTTPError as exc:
+            raise SearchError(f"serpapi transport error: {type(exc).__name__}") from exc
+    finally:
+        httpx_log.setLevel(prior_level)
     if not response.is_success:
         raise SearchError(f"serpapi HTTP {response.status_code}")
     try:

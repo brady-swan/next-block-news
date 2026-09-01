@@ -1,3 +1,4 @@
+import logging
 import unittest
 from unittest.mock import Mock, patch
 
@@ -51,6 +52,25 @@ class SearchTests(unittest.TestCase):
             self.assertRaisesRegex(search.SearchError, "HTTP 429"),
         ):
             search.google("Bitcoin policy")
+
+    def test_httpx_logging_level_is_restored_after_search(self):
+        response = Mock(is_success=True, status_code=200)
+        response.json.return_value = {
+            "search_metadata": {"status": "Success"},
+            "organic_results": [],
+        }
+        logger = logging.getLogger("httpx")
+        prior_level = logger.level
+        logger.setLevel(logging.INFO)
+        try:
+            with (
+                patch("nbn.search.config.SERPAPI_KEY", "secret"),
+                patch("nbn.search.httpx.get", return_value=response),
+            ):
+                search.google("Bitcoin policy")
+            self.assertEqual(logger.level, logging.INFO)
+        finally:
+            logger.setLevel(prior_level)
 
 
 if __name__ == "__main__":
