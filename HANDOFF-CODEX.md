@@ -29,6 +29,14 @@ snapshot on the Desk. Themes are broad subjects, not event keys or evidence. The
 establish corroboration, force/suppress a post, lower gates, or create quotas. Missing
 historical tags are explicitly unknown.
 
+**Deployment:** Node commit `2f3378b` is live on Railway deployment
+`058865be-7a11-481b-9837-a10ca1cbc6cb`; NBN commit `fb525df` is live on deployment
+`75431c08-cdc3-487c-8102-46467e8459d3`. Production Node run `177077` completed with the
+new diagnostics and was consumed over v2 by NBN, which deduped both already-known URLs.
+That natural pulse had no theme matches, so the contract/consumer path is live-smoked while
+production Desk theme rendering remains unobserved until a natural match arrives. No
+synthetic story, draft, or publication was created for the smoke.
+
 ## The pipeline (read `nbn/main.py:cycle` top to bottom — it's the whole story)
 
 ```
