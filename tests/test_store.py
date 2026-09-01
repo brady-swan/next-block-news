@@ -408,6 +408,191 @@ class StoreTests(unittest.TestCase):
             )
             self.assertEqual(summary["outputs_created"], 5)
 
+    def test_theme_coverage_snapshot_is_bounded_advisory_history(self):
+        context = json.dumps({
+            "untrusted_discovery_context": True,
+            "schema_version": "wire-pulse-v2",
+            "theme_ids": ["institutional-adoption"],
+            "theme_signal_version": "node-theme-signal-v1",
+            "theme_signals": [{
+                "theme_id": "institutional-adoption",
+                "name": "Institutional adoption",
+                "trajectory": "building",
+                "count_7d": 8,
+                "count_14d": 12,
+                "count_30d": 20,
+                "last_evidence_at": "2026-09-01T12:00:00+00:00",
+                "match_basis": "node-classifier-v1",
+                "confidence": 0.91,
+                "rank_eligible": True,
+            }],
+        })
+        with temporary_store() as con:
+            current = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Current", "url": "https://example.com/current",
+                "published": "", "summary": "", "discovery_context": context,
+            }])[0]
+            unknown = store.theme_coverage_snapshot(con, [current])
+            self.assertFalse(unknown[0]["coverage_known"])
+
+            prior = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Prior", "url": "https://example.com/prior",
+                "published": "", "summary": "", "discovery_context": context,
+            }])[0]
+            store.set_status(con, prior["url_hash"], "posted", "prior-event")
+            store.log_post(
+                con, "prior-event", prior["url_hash"], "primary", "NEW: Prior.",
+                "https://example.com/prior", "IMMEDIATE", publisher_backend="typefully",
+            )
+            draft = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Draft", "url": "https://example.com/draft",
+                "published": "", "summary": "", "discovery_context": context,
+            }])[0]
+            store.set_status(con, draft["url_hash"], "drafted", "draft-event")
+            store.log_post(
+                con, "draft-event", draft["url_hash"], "secondary", "NEW: Draft.",
+                "https://example.com/draft", "DRAFT", "tf-1",
+                publisher_backend="typefully",
+            )
+            snapshot = store.theme_coverage_snapshot(con, [current], key_limit=1)
+            self.assertTrue(snapshot[0]["coverage_known"])
+            self.assertTrue(snapshot[0]["open_draft"])
+            self.assertIsNotNone(snapshot[0]["last_published_at"])
+            self.assertEqual(len(snapshot[0]["recent_story_keys"]), 1)
+
+    def test_theme_coverage_includes_uncertain_but_excludes_nonreader_lifecycles(self):
+        def signal(theme_id):
+            return {
+                "theme_id": theme_id, "name": theme_id, "trajectory": "building",
+                "count_7d": 1, "count_14d": 1, "count_30d": 1,
+                "last_evidence_at": "2026-09-01T12:00:00+00:00",
+                "match_basis": "node-classifier-v1", "confidence": 0.9,
+                "rank_eligible": True,
+            }
+
+        def context(theme_id):
+            return json.dumps({
+                "untrusted_discovery_context": True,
+                "schema_version": "wire-pulse-v2",
+                "theme_ids": [theme_id],
+                "theme_signal_version": "node-theme-signal-v1",
+                "theme_signals": [signal(theme_id)],
+            })
+
+        with temporary_store() as con:
+            current_context = json.loads(context("reader-theme"))
+            current_context["theme_ids"].append("excluded-theme")
+            current_context["theme_signals"].append(signal("excluded-theme"))
+            current = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Current", "url": "https://example.com/current-2",
+                "published": "", "summary": "",
+                "discovery_context": json.dumps(current_context),
+            }])[0]
+            uncertain = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Uncertain", "url": "https://example.com/uncertain",
+                "published": "", "summary": "", "discovery_context": context("reader-theme"),
+            }])[0]
+            store.log_post(
+                con, "uncertain-event", uncertain["url_hash"], "primary", "NEW: Maybe live.",
+                "https://example.com/uncertain", "UNCERTAIN", publisher_backend="typefully",
+            )
+
+            for index, mode in enumerate(("DISMISSED", "FAILED", "TAPE")):
+                row = store.upsert_new_items(con, [{
+                    "source": "Node", "title": mode,
+                    "url": f"https://example.com/excluded-{index}", "published": "",
+                    "summary": "", "discovery_context": context("excluded-theme"),
+                }])[0]
+                store.log_post(
+                    con, f"excluded-{index}", row["url_hash"], "primary", f"{mode} body",
+                    row["url"], mode, publisher_backend="typefully",
+                )
+            deleted = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Deleted", "url": "https://example.com/deleted",
+                "published": "", "summary": "", "discovery_context": context("excluded-theme"),
+            }])[0]
+            store.log_post(
+                con, "deleted-event", deleted["url_hash"], "secondary", "NEW: Deleted.",
+                deleted["url"], "DRAFT", "tf-deleted", publisher_backend="typefully",
+            )
+            con.execute("UPDATE posts SET publisher_status='deleted' WHERE story_key='deleted-event'")
+            for index, mode in enumerate(("IMMEDIATE", "UNCERTAIN"), 1):
+                deleted_reader = store.upsert_new_items(con, [{
+                    "source": "Node", "title": f"Deleted {mode}",
+                    "url": f"https://example.com/deleted-reader-{index}", "published": "",
+                    "summary": "", "discovery_context": context("excluded-theme"),
+                }])[0]
+                story_key = f"deleted-reader-{index}"
+                store.log_post(
+                    con, story_key, deleted_reader["url_hash"], "primary", "NEW: Deleted.",
+                    deleted_reader["url"], mode, publisher_backend="typefully",
+                )
+                con.execute(
+                    "UPDATE posts SET publisher_status='deleted' WHERE story_key=?",
+                    (story_key,),
+                )
+            briefing = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Briefing", "url": "https://example.com/briefing",
+                "published": "", "summary": "", "discovery_context": context("excluded-theme"),
+            }])[0]
+            store.log_post(
+                con, "briefing-event", briefing["url_hash"], "briefing", "Block body",
+                briefing["url"], "IMMEDIATE", publisher_backend="typefully",
+            )
+            con.commit()
+
+            snapshot = {
+                row["theme_id"]: row for row in store.theme_coverage_snapshot(con, [current])
+            }
+            self.assertTrue(snapshot["reader-theme"]["coverage_known"])
+            self.assertIsNotNone(snapshot["reader-theme"]["last_published_at"])
+            self.assertFalse(snapshot["excluded-theme"]["coverage_known"])
+            self.assertFalse(snapshot["excluded-theme"]["open_draft"])
+
+    def test_theme_coverage_falls_back_to_tagged_story_alias_family(self):
+        context = json.dumps({
+            "untrusted_discovery_context": True,
+            "schema_version": "wire-pulse-v2",
+            "theme_ids": ["policy-theme"],
+            "theme_signal_version": "node-theme-signal-v1",
+            "theme_signals": [{
+                "theme_id": "policy-theme", "name": "Bitcoin policy",
+                "trajectory": "building", "count_7d": 3, "count_14d": 5,
+                "count_30d": 9, "last_evidence_at": "2026-09-01T12:00:00+00:00",
+                "match_basis": "node-classifier-v1", "confidence": 0.94,
+                "rank_eligible": True,
+            }],
+        })
+        with temporary_store() as con:
+            tagged = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Tagged alias",
+                "url": "https://example.com/tagged-alias", "published": "", "summary": "",
+                "discovery_context": context,
+            }])[0]
+            store.set_status(con, tagged["url_hash"], "held", "policy-vote-alias")
+            untagged = store.upsert_new_items(con, [{
+                "source": "RSS", "title": "Published canonical",
+                "url": "https://example.com/published-canonical", "published": "",
+                "summary": "",
+            }])[0]
+            store.set_status(con, untagged["url_hash"], "posted", "policy-vote")
+            store.log_post(
+                con, "policy-vote", untagged["url_hash"], "primary", "NEW: Vote passed.",
+                untagged["url"], "IMMEDIATE", publisher_backend="typefully",
+            )
+            store.register_story_alias(
+                con, "policy-vote-alias", "policy-vote", "same dated vote")
+            current = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Current theme candidate",
+                "url": "https://example.com/current-policy", "published": "", "summary": "",
+                "discovery_context": context,
+            }])[0]
+
+            snapshot = store.theme_coverage_snapshot(con, [current])
+            self.assertTrue(snapshot[0]["coverage_known"])
+            self.assertIsNotNone(snapshot[0]["last_published_at"])
+            self.assertEqual(snapshot[0]["recent_story_keys"], ["policy-vote"])
+
     def test_time_boundaries_are_deterministic(self):
         utc = datetime.timezone.utc
         weekday_active = datetime.datetime(2026, 8, 31, 16, 0, tzinfo=utc)  # noon ET

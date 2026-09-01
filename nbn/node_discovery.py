@@ -13,7 +13,7 @@ import time
 
 import httpx
 
-from . import config, sources, store
+from . import config, sources, store, theme_context
 
 log = logging.getLogger("nbn.node_discovery")
 
@@ -95,6 +95,8 @@ def _v2_context_json(raw: dict, run: dict, refs: list[dict]) -> str:
         "bitcoin_relevance": raw["bitcoin_relevance"],
         "relevance_reasons": list(raw["relevance_reasons"]),
         "theme_ids": list(raw["theme_ids"]),
+        "theme_signal_version": raw.get("theme_signal_version"),
+        "theme_signals": list(raw.get("theme_signals") or []),
         "novelty_hint": raw["novelty_hint"],
         "confidence_hint": raw["confidence_hint"],
         "source_refs": list(refs),
@@ -110,6 +112,10 @@ def _v2_context_json(raw: dict, run: dict, refs: list[dict]) -> str:
             value["relevance_reasons"].pop()
         elif value["theme_ids"]:
             value["theme_ids"].pop()
+            if value["theme_signals"]:
+                value["theme_signals"].pop()
+            if not value["theme_signals"]:
+                value["theme_signal_version"] = None
         elif optional_text:
             key = optional_text.pop(0)
             value[key] = None
@@ -160,12 +166,14 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
     if provider_names != {"perception", "rss", "twitter"}:
         raise InvalidNodeEnvelope("v2 provider diagnostics incomplete")
 
+    node_theme_diagnostics = _parse_theme_diagnostics(payload.get("theme_diagnostics"))
+
     candidates = payload.get("candidates")
     if not isinstance(candidates, list) or len(candidates) > 24:
         raise InvalidNodeEnvelope("v2 candidate list outside contract")
     items, all_key_hashes, primary_key_hashes = [], set(), set()
     timestamp_counts = {"parseable": 0, "unknown": 0, "unparseable": 0}
-    rejected = 0
+    rejected = theme_rejected = theme_signals_parsed = 0
     for position, raw in enumerate(candidates, 1):
         try:
             if not isinstance(raw, dict) or raw.get("order") != position:
@@ -231,7 +239,9 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
             event_key = _short_text(raw.get("event_key_hint"), 180, required=True)
             reasons = _bounded_list(raw.get("relevance_reasons", []), 6, 240,
                                     "relevance_reasons")
-            themes = _bounded_list(raw.get("theme_ids", []), 8, 120, "theme_ids")
+            packet = theme_context.validate_packet(raw)
+            themes = packet["theme_ids"]
+            theme_signals_parsed += len(packet["theme_signals"])
             relevance = raw.get("bitcoin_relevance")
             if isinstance(relevance, bool) or not isinstance(relevance, int | float) \
                     or not 0 <= relevance <= 1:
@@ -249,6 +259,8 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
                 "event_key_hint": event_key,
                 "relevance_reasons": reasons,
                 "theme_ids": themes,
+                "theme_signal_version": packet["theme_signal_version"],
+                "theme_signals": packet["theme_signals"],
                 "bitcoin_relevance": float(relevance),
                 "novelty_hint": novelty,
                 "confidence_hint": confidence,
@@ -270,6 +282,10 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
             })
             all_key_hashes.update(store.url_hash(key) for key in keys)
             primary_key_hashes.add(store.url_hash(keys[0]))
+        except theme_context.InvalidThemePacket as exc:
+            rejected += 1
+            theme_rejected += 1
+            log.warning("Node v2 candidate rejected: invalid theme packet")
         except (ValueError, InvalidNodeEnvelope, sources.UnsafeSourceURL) as exc:
             rejected += 1
             log.warning("Node v2 candidate rejected: %s", exc)
@@ -280,10 +296,13 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         "generated_at": generated.isoformat(),
         "completed_at": completed.isoformat(),
         "provider_diagnostics": providers,
+        "theme_diagnostics": node_theme_diagnostics,
     }
     diagnostics = {
         "candidates_returned": len(candidates),
         "nbn_rejected": rejected,
+        "theme_candidates_rejected": theme_rejected,
+        "theme_signals_parsed": theme_signals_parsed,
         "validated_candidates": len(items),
     }
     return ({
@@ -293,6 +312,30 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         "primary_key_hashes": sorted(primary_key_hashes),
         "timestamp_counts": timestamp_counts,
     }, context, diagnostics, items)
+
+
+def _parse_theme_diagnostics(value) -> dict:
+    keys = {
+        "active_themes": 150,
+        "classifier_matches": 500,
+        "keyword_matches": 500,
+        "matched_candidates": 500,
+        "qualified_before_cap": 500,
+        "eligible_tiebreak_candidates": 500,
+        "rank_moves": 500,
+        "cap_displacements": 24,
+    }
+    if value is None:
+        return {key: 0 for key in keys}
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise InvalidNodeEnvelope("theme diagnostics invalid")
+    parsed = {}
+    for key, limit in keys.items():
+        raw = value.get(key)
+        if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= limit:
+            raise InvalidNodeEnvelope("theme diagnostics invalid")
+        parsed[key] = raw
+    return parsed
 
 
 def _bounded_context(payload: dict, run: dict, selected_date: str) -> dict:
@@ -443,6 +486,7 @@ def _cache_v2_state(con, run: dict, context: dict, candidate_count: int) -> None
         "primary_key_hashes": run["primary_key_hashes"][:24],
         "candidate_count": candidate_count,
         "provider_diagnostics": context["provider_diagnostics"],
+        "theme_diagnostics": context.get("theme_diagnostics", {}),
         "timestamp_counts": run["timestamp_counts"],
     }
     store.kv_set(con, "node:latest_pulse", json.dumps(value, separators=(",", ":")))

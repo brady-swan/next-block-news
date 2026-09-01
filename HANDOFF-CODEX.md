@@ -1,8 +1,8 @@
 # Handoff: Next Block News → Codex
 
-*Written 2026-08-31 by Claude (Brady's session), for Codex taking over day-to-day work.
-Everything here is current as of this morning. The deeper owner's manual is `SYSTEM.md`;
-this file is your orientation and the rules you must not break.*
+*Written 2026-08-31 by Claude (Brady's session), then updated 2026-09-01 by Codex.
+The deeper owner's manual is `SYSTEM.md`; this file is orientation and the rules you must
+not break.*
 
 **Operational update, later 2026-08-31:** a read-only Railway check found
 `NBN_AUTOPOST_ENABLED=false`. The worker remains reachable, but autonomous publishing is
@@ -17,9 +17,17 @@ sources continuously, and for stories that pass every gate it **publishes to X b
 via Typefully. It has been live and autonomously publishing since 2026-08-30.
 
 ⚠️ **This is a secret skunkworks between Brady and his agents. It is NOT Swan-affiliated.**
-No Swan branding, no Swan mentions in posts (the briefing module strips them), no
-integration with the Swan Marketing Node beyond read-only brief consumption. Don't
+No Swan branding, no Swan mentions in posts (the briefing module strips them). Integration
+with the Swan Marketing Node is read-only through versioned brief and wire-pulse APIs; the
+codebases and databases remain separate. Don't
 discuss it in Swan channels.
+
+**2026-09-01 integration update:** `wire-pulse-v2` may carry bounded Node theme activity.
+NBN validates it as untrusted discovery context, computes a seven-day advisory coverage
+snapshot from its own tagged output, supplies that context to triage, and renders the exact
+snapshot on the Desk. Themes are broad subjects, not event keys or evidence. They cannot
+establish corroboration, force/suppress a post, lower gates, or create quotas. Missing
+historical tags are explicitly unknown.
 
 ## The pipeline (read `nbn/main.py:cycle` top to bottom — it's the whole story)
 

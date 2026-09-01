@@ -15,7 +15,7 @@ RSS feeds          every 1 minute                 Wire Pulse hourly, 5am-8pm CT
 SEC EDGAR           every 1 minute                   |- Perception: 6 searches
 X account watches  every 3 minutes                   |- 24 RSS feeds
 Perception         every 15 minutes                  |- 10 X searches
-                                                      `- active Node themes
+                                                      `- active Node theme signals
         |                                                   |
         |                               NBN polls Node every 5 minutes
         |                                                   |
@@ -173,12 +173,17 @@ The deterministic Curator:
 - Rejects candidates below the deterministic relevance threshold.
 - Prefers official and research receipts, then reporting, then discovery sources.
 - Labels candidates as new/developing/unknown based on timestamps.
-- Adds matching active Node theme IDs as context.
+- Adds up to eight matching active Node theme signals. Recent Node classifier assignments
+  at confidence 0.80+ are preferred; a conservative exact taxonomy fallback is used when
+  no assignment exists, with negative examples acting as vetoes.
 - Generates a versioned event-key hint and stable reference/candidate identifiers.
 - Returns at most 24 candidates.
 
-Themes influence surfacing and ranking context; they do not approve a story. Node titles,
-summaries, relevance, confidence, and event keys are untrusted discovery hints to NBN.
+Ranking is confidence → primary role → source tier → freshness bucket → eligible theme
+activity → exact timestamp → candidate ID. Theme activity can therefore break only an
+otherwise-equal attention tie. It does not approve a story, cross a stronger source or
+freshness bucket, or create a target output count. Node titles, summaries, relevance,
+confidence, themes, and event keys are untrusted discovery hints to NBN.
 
 ### NBN consumption of a pulse
 
@@ -195,6 +200,9 @@ For each candidate, NBN:
 - Takes ordinary intake fields only from the selected source reference.
 - Does not trust the Node's summary as evidence.
 - Deduplicates against URLs already known from native NBN discovery.
+- Strictly validates the optional versioned theme packet and derives a bounded seven-day
+  advisory coverage snapshot from NBN's own tagged publications and open Typefully drafts.
+  Untagged history remains `coverage_known=false` rather than being called uncovered.
 
 If the current v2 pulse is missing, stale, incomplete, or invalid, NBN may fall back to
 the legacy Daily Intel `more_reads` candidate projection for the current UTC date. That is
@@ -231,6 +239,11 @@ key unchanged. Evidence queries and prior-coverage checks operate across the res
 canonical key family.
 
 There is no target quota. Discovery volume should not force publication.
+
+For Node-tagged candidates, triage also sees Node activity and the exact NBN coverage
+snapshot later shown on the Desk. A theme is a broad ongoing subject, not an event cluster:
+it cannot satisfy evidence or corroboration, merge story keys, force a post because coverage
+is unknown/thin, or suppress a material distinct development because the theme was covered.
 
 ### Source resolution and verification
 

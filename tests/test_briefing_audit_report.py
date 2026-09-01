@@ -295,6 +295,57 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Bitcoin &lt;script&gt;alert(1)&lt;/script&gt;", html)
         self.assertNotIn("<script>alert(1)</script>", html)
 
+    def test_desk_shows_bounded_theme_context_and_escapes_node_text(self):
+        context = {
+            "untrusted_discovery_context": True,
+            "schema_version": "wire-pulse-v2",
+            "theme_ids": ["institutional-adoption"],
+            "theme_signal_version": "node-theme-signal-v1",
+            "theme_signals": [{
+                "theme_id": "institutional-adoption",
+                "name": "Institutional <script>alert(1)</script> adoption",
+                "trajectory": "building",
+                "count_7d": 8,
+                "count_14d": 12,
+                "count_30d": 20,
+                "last_evidence_at": "2026-08-31T17:30:00+00:00",
+                "match_basis": "node-classifier-v1",
+                "confidence": 0.91,
+                "rank_eligible": True,
+            }],
+        }
+        coverage = [{
+            "theme_id": "institutional-adoption",
+            "name": context["theme_signals"][0]["name"],
+            "trajectory": "building",
+            "count_7d": 8,
+            "last_evidence_at": "2026-08-31T17:30:00+00:00",
+            "coverage_known": False,
+            "last_published_at": None,
+            "open_draft": False,
+            "recent_story_keys": [],
+        }]
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            pending = store.upsert_new_items(con, [{
+                "source": "Node", "title": "Theme candidate",
+                "url": "https://example.com/theme", "published": "", "summary": "",
+                "discovery_context": json.dumps(context),
+            }])
+            store.set_status(con, pending[0]["url_hash"], "skipped", "theme-story",
+                             "not material")
+            store.record_decision_run(
+                con, pending,
+                [{**pending[0], "action": "skip", "story_key": "theme-story",
+                  "reason": "not material"}],
+                {"fetched": 1, "new": 1, "considered": 1, "pending": 1}, time.time(),
+                theme_snapshot=coverage,
+            )
+            html = report.render(con)
+        self.assertIn("Node theme · Institutional &lt;script&gt;", html)
+        self.assertIn("Node activity: building · 8 evidence items / 7d", html)
+        self.assertIn("NBN coverage: unknown", html)
+        self.assertNotIn("<script>alert(1)</script>", html)
+
     def test_held_freshness_item_has_specific_label_and_operator_controls(self):
         with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
             pending = store.upsert_new_items(con, [{

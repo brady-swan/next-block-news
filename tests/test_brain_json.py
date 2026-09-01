@@ -81,6 +81,25 @@ class BrainJsonTests(unittest.TestCase):
         self.assertEqual(out[1]["action"], "draft")
         self.assertEqual(out[1]["story_key"], "second-story")
 
+    def test_triage_receives_advisory_theme_snapshot_without_quota_rule(self):
+        item = {
+            "url_hash": "one", "source": "Node", "title": "Bitcoin development",
+            "url": "https://example.com/one", "published": "", "summary": "",
+        }
+        snapshot = [{
+            "theme_id": "institutional-adoption", "coverage_known": False,
+            "last_published_at": None, "open_draft": False, "recent_story_keys": [],
+        }]
+        payloads = []
+        with patch.object(brain, "_create", side_effect=lambda _m, _s, user, **_k: (
+                payloads.append(json.loads(user)) or response(
+                    '[{"url_hash":"one","action":"skip","story_key":null,'
+                    '"class":"secondary","reason":"test"}]'))):
+            brain.triage([item], [], [], snapshot)
+        self.assertEqual(payloads[0]["theme_coverage_snapshot"], snapshot)
+        self.assertIn("no theme has a publishing quota", brain.TRIAGE_SYSTEM)
+        self.assertIn("does NOT mean", brain.TRIAGE_SYSTEM)
+
     def test_empty_initial_triage_response_uses_recovery_batch(self):
         item = {
             "url_hash": "one", "source": "CoinDesk", "title": "First",
@@ -152,6 +171,27 @@ class BrainJsonTests(unittest.TestCase):
             out = brain.reconcile_story_keys(items, clusters)
         self.assertEqual(out[0]["canonical_key"], "g7-yields")
         self.assertEqual(out[0]["relationship"], "distinct")
+
+    def test_story_identity_receives_theme_only_as_broad_context(self):
+        item = {
+            "url_hash": "candidate", "source": "Bloomberg", "title": "Vote",
+            "summary": "", "story_key": "vote", "action": "draft",
+            "discovery_context": json.dumps({
+                "untrusted_discovery_context": True,
+                "theme_ids": ["strategic-bitcoin-reserves"],
+            }),
+        }
+        payloads = []
+        with patch.object(brain, "_create", side_effect=lambda _m, _s, user, **_k: (
+                payloads.append(json.loads(user)) or response(
+                    '[{"url_hash":"candidate","canonical_key":"vote",'
+                    '"relationship":"distinct","confidence":1,"reason":"distinct"}]'))):
+            brain.reconcile_story_keys([item], [])
+        self.assertEqual(
+            payloads[0]["candidates"][0]["node_theme_ids"],
+            ["strategic-bitcoin-reserves"],
+        )
+        self.assertIn("never sufficient", brain.CLUSTER_SYSTEM)
 
     def test_story_key_reconciliation_failure_preserves_provisional_key(self):
         items = [{

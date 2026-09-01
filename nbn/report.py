@@ -149,6 +149,9 @@ h2.needs{color:var(--orange)}
 .decision .meta{font:400 11.5px/1.4 var(--mono);color:var(--dim);margin-top:5px}
 .decision .body{padding:0 13px 12px;color:var(--sub);font-size:13px}
 .decision .body p{margin:6px 0 0}
+.decision .themes{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.decision .themes .chip{color:var(--sub);border-color:var(--line2);margin:0}
+.decision .themectx{font:400 12px/1.5 var(--mono);color:var(--dim);margin-top:6px}
 .countdefs{margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .countdefs summary{padding:9px 11px;font:500 11px/1.3 var(--mono);color:var(--sub)}
 .countdefs .body{padding:0 11px 10px;font:400 12.5px/1.5 var(--sans);color:var(--dim)}
@@ -211,6 +214,58 @@ def _age(ts: float, now: float) -> str:
     if seconds < 3600:
         return f"{int(seconds // 60)}m ago"
     return f"{int(seconds // 3600)}h ago"
+
+
+def _iso_age(value, now: float) -> str:
+    if not value:
+        return "unknown"
+    try:
+        timestamp = datetime.datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        ).timestamp()
+    except (TypeError, ValueError):
+        return "unknown"
+    return _age(timestamp, now)
+
+
+def _decision_theme_context(item: dict, coverage_by_id: dict, now_ts: float) -> str:
+    signals = item.get("theme_signals") if isinstance(item.get("theme_signals"), list) else []
+    signal_by_id = {
+        row.get("theme_id"): row for row in signals
+        if isinstance(row, dict) and row.get("theme_id")
+    }
+    ids = item.get("theme_ids") if isinstance(item.get("theme_ids"), list) else []
+    if not ids:
+        return ""
+    chips = []
+    details = []
+    for theme_id in ids[:2]:
+        signal = signal_by_id.get(theme_id, {})
+        coverage = coverage_by_id.get(theme_id, {})
+        name = signal.get("name") or coverage.get("name") or theme_id
+        chips.append(f"<span class=chip>Node theme · {_esc(name)}</span>")
+        trajectory = signal.get("trajectory") or coverage.get("trajectory") or "unknown"
+        count = signal.get("count_7d")
+        count_text = str(count) if isinstance(count, int) else "unknown"
+        evidence_age = _iso_age(
+            signal.get("last_evidence_at") or coverage.get("last_evidence_at"), now_ts)
+        if coverage.get("coverage_known"):
+            parts = []
+            if coverage.get("last_published_at"):
+                parts.append(f"published {_age(float(coverage['last_published_at']), now_ts)}")
+            if coverage.get("open_draft"):
+                parts.append("open draft")
+            coverage_text = " / ".join(parts) or "known tagged history"
+        else:
+            coverage_text = "unknown"
+        details.append(
+            f"<div class=themectx>Node activity: {_esc(trajectory)} · "
+            f"{_esc(count_text)} evidence items / 7d · latest {_esc(evidence_age)}<br>"
+            f"NBN coverage: {_esc(coverage_text)}</div>"
+        )
+    if len(ids) > 2:
+        chips.append(f"<span class=chip>+{len(ids) - 2}</span>")
+    return f"<div class=themes>{''.join(chips)}</div>{''.join(details)}"
 
 
 def _kv_float(con, key: str) -> float:
@@ -386,6 +441,11 @@ def render(con, day: str = None) -> str:
         decision_run = json.loads(decision_raw) if decision_raw else None
     except (TypeError, ValueError):
         decision_run = None
+    coverage_by_id = {
+        row.get("theme_id"): row
+        for row in (decision_run or {}).get("theme_coverage_snapshot", [])
+        if isinstance(row, dict) and row.get("theme_id")
+    }
 
     out = ["<!doctype html><meta charset=utf-8>"
            "<meta name=viewport content='width=device-width,initial-scale=1'>"
@@ -522,6 +582,7 @@ def render(con, day: str = None) -> str:
                                f"{_esc(item.get('resolution_status'))}</p>")
             downstream = (f"<p>Final: {_esc(final_note)}</p>"
                           if final_note and final_note != triage_reason else "")
+            theme_html = _decision_theme_context(item, coverage_by_id, now_ts)
             out.append(
                 f"<details class=decision{' open' if index == 0 else ''}>"
                 f"<summary><div class=route>"
@@ -530,7 +591,8 @@ def render(con, day: str = None) -> str:
                 f"<div class=ttl>{_esc(item.get('title'))}</div>"
                 f"<div class=meta>{_esc(item.get('source'))} · "
                 f"{_esc(item.get('discovery_origin') or 'legacy')} · "
-                f"{_esc(item.get('story_key') or 'no story key')}</div></summary>"
+                f"{_esc(item.get('story_key') or 'no story key')}</div>"
+                f"{theme_html}</summary>"
                 f"<div class=body><p>Decision: {_esc(triage_reason)}</p>"
                 f"{downstream}{source_path}<p><a href='{_esc(item.get('url'))}'>"
                 f"discovery item ↗</a></p>"

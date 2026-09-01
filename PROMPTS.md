@@ -27,6 +27,12 @@ live in:
 - `nbn/config.py`: master autopost switch and allowed classes; `secondary` is removed
   from `NBN_AUTOPOST_CLASSES` in code.
 
+Triage receives optional Node theme activity plus NBN's bounded recent coverage snapshot.
+Both are advisory, untrusted context. Runtime instructions explicitly prohibit treating a
+theme as evidence, corroboration, same-event identity, a quota, or a reason to lower a gate;
+`coverage_known=false` means historical tagging is incomplete. The identity prompt receives
+theme IDs only to state that a broad shared theme is insufficient to merge story keys.
+
 When a prompt changes, update its runtime source directly, add a regression case for the
 behavior where practical, and observe one complete live cycle after deployment as
 described in `HANDOFF-CODEX.md`.

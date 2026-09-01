@@ -1,6 +1,6 @@
 # How Next Block News works — the owner's manual
 
-*Current as of 2026-08-31, matching deployed code. One always-on
+*Current as of 2026-09-01. One always-on
 Python worker on Railway watches the news, judges it, writes it, checks itself twice —
 once with rules, once with an editor — and publishes to @nextblocknews_ through
 Typefully. Two products: breaking singles (anytime) and the Morning/Afternoon Block.*
@@ -47,8 +47,8 @@ yesterday — corporate Bitcoin news before journalists write it. Free, unmetere
 Marketing Node (one key per Perception account) — the interval is a budget decision;
 `/feed` 429s in either system's logs mean widen `NBN_PERCEPTION_POLL_SECONDS` first.
 
-**Marketing Node wire pulse (NBN polls every 5 min; Node runs weekdays at 8am, 10am,
-noon, 2pm, 4pm, 6pm, and 8pm Central):** the Node runs a deliberately narrow,
+**Marketing Node wire pulse (NBN polls every 5 min; Node runs hourly from 5am through
+8pm Central, every day):** the Node runs a deliberately narrow,
 source-only Scout → Curator profile over an eight-hour window. It gathers only its
 curated Perception core, RSS, and curated-X evidence, relates that evidence to active
 Node themes, clusters it, and publishes at most 24 discovery candidates. It does not
@@ -73,6 +73,15 @@ try at most three Node-ranked references that NBN itself classifies P0/Tier 1/Ti
 stopping at the first qualified receipt; otherwise its normal web upgrade search runs.
 The Node event key is a heuristic cluster hint (artifact ID/reporting period/exact event
 date/undated entity-event fingerprint), not the NBN story key. Their mapping is logged.
+
+The optional `node-theme-signal-v1` packet adds a stable theme ID/name, activity trajectory,
+bounded 7/14/30-day evidence counts, last-evidence time, and match provenance. NBN strictly
+validates it as untrusted context. Node activity is not editorial importance: it cannot
+prove a claim, establish corroboration or event identity, lower any gate, or create a quota.
+The Node may use building/peaked activity only after confidence, source role, source tier,
+and freshness are tied. NBN derives a bounded seven-day coverage snapshot from its own
+theme-tagged publications and open Typefully drafts. Missing tagged history is `unknown`,
+never “not covered.” The exact snapshot triage saw is preserved on the Desk.
 
 When the same URL already exists in NBN as `new`, the pulse may attach its context and
 candidate ID; it may not overwrite title, source, summary, status, or provenance. It
@@ -138,6 +147,11 @@ single-use hosted-search fallback run.
 An omitted or structurally invalid triage response gets one smaller recovery call. If
 that also fails, ordinary items fail closed as held while guide leads still enter source
 research—never skip; a model formatting failure does not crash the worker cycle.
+
+Triage also receives the validated theme packet and the advisory coverage snapshot for the
+current batch. It may use them to notice a distinct development or repetitive coverage, but
+a shared theme never merges event keys, under-coverage never requires a post, and recent
+coverage never suppresses a genuinely material distinct event.
 
 Triage has no target quota. Factual Bitcoin market state—defined-period price moves,
 flows, leverage, funding, open interest, volatility, liquidity, holder activity, and

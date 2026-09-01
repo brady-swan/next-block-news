@@ -328,12 +328,33 @@ def _cycle_locked(con, lease_owner: str) -> dict:
               "pending": len(fresh) + len(retry_verdicts),
               "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
               "failed": 0, "taped": 0, "policy_held": 0}
+    theme_snapshot = store.theme_coverage_snapshot(con, fresh)
+    node_diagnostics = node_result.get("diagnostics") or {}
+    store.record_pipeline_event(
+        con, pipeline_run_id, f"themes:{pipeline_run_id}", "theme_context_summary",
+        None, "discovery", {
+            "theme_signals_parsed": int(node_diagnostics.get("theme_signals_parsed", 0)),
+            "theme_candidates_rejected": int(
+                node_diagnostics.get("theme_candidates_rejected", 0)),
+            "snapshot_themes": len(theme_snapshot),
+            "coverage_known": sum(bool(row.get("coverage_known")) for row in theme_snapshot),
+            "coverage_unknown": sum(not bool(row.get("coverage_known"))
+                                    for row in theme_snapshot),
+            "open_drafts": sum(bool(row.get("open_draft")) for row in theme_snapshot),
+            "published": sum(bool(row.get("last_published_at")) for row in theme_snapshot),
+        },
+    )
     if not fresh and not retry_verdicts:
-        store.record_decision_run(con, pending, [], result, run_started)
+        store.record_decision_run(
+            con, pending, [], result, run_started, theme_snapshot=theme_snapshot)
         return result
 
-    verdicts = (brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
-                if fresh else [])
+    if fresh:
+        triage_args = (fresh, store.recent_story_keys(con), store.open_story_keys(con))
+        verdicts = (brain.triage(*triage_args, theme_coverage=theme_snapshot)
+                    if theme_snapshot else brain.triage(*triage_args))
+    else:
+        verdicts = []
     verdicts.extend(retry_verdicts)
     cluster_context = store.story_cluster_context(
         con, exclude_hashes={item["url_hash"] for item in verdicts})
@@ -787,7 +808,9 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         store.finish_research_job(con, item["url_hash"])
         _finish_actions(con, item, "completed", f"delivery result: {mode}")
         result[counter] += 1
-    store.record_decision_run(con, pending + retry_verdicts, verdicts, result, run_started)
+    store.record_decision_run(
+        con, pending + retry_verdicts, verdicts, result, run_started,
+        theme_snapshot=theme_snapshot)
     return result
 
 

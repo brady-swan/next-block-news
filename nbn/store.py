@@ -6,7 +6,7 @@ import time
 import unicodedata
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from . import config, source_policy
+from . import config, source_policy, theme_context
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
@@ -358,7 +358,7 @@ def finish_operator_action(con, action_id: int, state: str, result: str) -> None
 
 
 def record_decision_run(con, pending: list, verdicts: list, result: dict,
-                        started_at: float) -> None:
+                        started_at: float, theme_snapshot: list | None = None) -> None:
     """Keep the last completed, non-empty intake decision run for Desk inspection."""
     if not pending:
         return
@@ -377,6 +377,7 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
         output = con.execute(
             "SELECT mode FROM posts WHERE item_hash=? ORDER BY id DESC LIMIT 1", (item_hash,)
         ).fetchone()
+        packet = theme_context.parse_discovery_context(candidate.get("discovery_context"))
         decisions.append({
             "url_hash": item_hash,
             "source": str(candidate.get("source") or "")[:120],
@@ -396,12 +397,15 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "selected_url": resolution["selected_url"] if resolution else "",
             "resolution_status": resolution["status"] if resolution else "",
             "output_mode": output["mode"] if output else "",
+            "theme_ids": packet["theme_ids"],
+            "theme_signals": packet["theme_signals"],
         })
     payload = {
         "started": started_at,
         "completed": time.time(),
         "result": dict(result),
         "items": decisions,
+        "theme_coverage_snapshot": list(theme_snapshot or []),
     }
     kv_set(con, "desk:last_decision_run", json.dumps(payload, separators=(",", ":")))
 
@@ -808,6 +812,104 @@ def pending_items(con, limit: int) -> list:
         (limit,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def theme_coverage_snapshot(con, items: list, days: float = 7.0,
+                            row_limit: int = 250, key_limit: int = 3,
+                            theme_limit: int = 24) -> list[dict]:
+    """Advisory recent coverage for current-batch Node themes.
+
+    Absence is deliberately ``coverage_known=false`` because older and non-Node items may
+    not carry a theme mapping. This is context for triage, never a novelty gate.
+    """
+    requested: dict[str, dict] = {}
+    for item in items:
+        packet = theme_context.parse_discovery_context(item.get("discovery_context"))
+        signals = theme_context.signals_by_id(packet)
+        for theme_id in packet["theme_ids"]:
+            if theme_id in requested or len(requested) >= theme_limit:
+                continue
+            signal = signals.get(theme_id, {})
+            requested[theme_id] = {
+                "theme_id": theme_id,
+                "name": signal.get("name") or theme_id,
+                "trajectory": signal.get("trajectory"),
+                "count_7d": signal.get("count_7d"),
+                "last_evidence_at": signal.get("last_evidence_at"),
+                "coverage_known": False,
+                "last_published_at": None,
+                "open_draft": False,
+                "recent_story_keys": [],
+            }
+    if not requested:
+        return []
+
+    effective = effective_post_ts_sql("p")
+    rows = con.execute(
+        "SELECT p.*,i.discovery_context,i.story_key AS item_story_key,"
+        f" {effective} AS effective_at FROM posts p"
+        " LEFT JOIN items i ON i.url_hash=p.item_hash"
+        f" WHERE {effective}>? AND p.mode IN ('IMMEDIATE','UNCERTAIN','DRAFT')"
+        " AND COALESCE(p.publisher_status,'')<>'deleted'"
+        " AND COALESCE(p.class,'')<>'briefing' ORDER BY effective_at DESC LIMIT ?",
+        (time.time() - max(1.0, days) * 86400, max(1, min(row_limit, 500))),
+    ).fetchall()
+    family_packets: dict[str, list[dict]] = {}
+
+    def packets_for_story(story_key: str) -> list[dict]:
+        canonical = canonical_story_key(con, story_key)
+        if canonical in family_packets:
+            return family_packets[canonical]
+        family = story_key_family(con, canonical)
+        if not family:
+            family_packets[canonical] = []
+            return []
+        placeholders = ",".join("?" for _ in family)
+        item_rows = con.execute(
+            f"SELECT discovery_context FROM items WHERE story_key IN ({placeholders})"
+            " AND COALESCE(discovery_context,'')<>'' ORDER BY first_seen DESC LIMIT 20",
+            family,
+        ).fetchall()
+        packets = [theme_context.parse_discovery_context(row["discovery_context"])
+                   for row in item_rows]
+        family_packets[canonical] = packets
+        return packets
+
+    story_times: dict[str, dict[str, float]] = {theme_id: {} for theme_id in requested}
+    for row in rows:
+        packet = theme_context.parse_discovery_context(row["discovery_context"])
+        packets = [packet] if packet["theme_ids"] else packets_for_story(row["story_key"])
+        mapped_ids = {
+            theme_id for candidate in packets for theme_id in candidate["theme_ids"]
+            if theme_id in requested
+        }
+        if not mapped_ids:
+            continue
+        canonical = canonical_story_key(con, row["story_key"])
+        for theme_id in mapped_ids:
+            entry = requested[theme_id]
+            if row["mode"] in ("IMMEDIATE", "UNCERTAIN"):
+                entry["coverage_known"] = True
+                visible_at = float(row["effective_at"] or row["created"] or 0)
+                entry["last_published_at"] = max(
+                    float(entry["last_published_at"] or 0), visible_at
+                ) or None
+                if canonical:
+                    story_times[theme_id][canonical] = max(
+                        story_times[theme_id].get(canonical, 0), visible_at
+                    )
+            elif (row["mode"] == "DRAFT" and row["publisher_backend"] == "typefully"
+                  and row["nuelink_id"] and row["publisher_status"] != "deleted"):
+                entry["coverage_known"] = True
+                entry["open_draft"] = True
+                if canonical:
+                    story_times[theme_id][canonical] = max(
+                        story_times[theme_id].get(canonical, 0), float(row["created"] or 0)
+                    )
+    for theme_id, entry in requested.items():
+        ordered = sorted(story_times[theme_id].items(), key=lambda pair: pair[1], reverse=True)
+        entry["recent_story_keys"] = [key for key, _ in ordered[:max(1, min(key_limit, 5))]]
+    return list(requested.values())
 
 
 def effective_post_ts_sql(alias: str = "") -> str:
