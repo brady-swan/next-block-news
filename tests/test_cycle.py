@@ -35,12 +35,20 @@ class CycleTests(unittest.TestCase):
                   editor_result=None, resolution_factory=None,
                   provider_resolution=None, claim_support=None,
                   article_text="Bitcoin test source", source_policy_mode="enforce",
-                  article_result=None):
+                  article_result=None, cluster_results=None, promote_mode="DRAFT"):
         drafts = drafts or [{"post": "NEW: Bitcoin test.", "event_date": None,
                               "needs_second_source": False}]
 
         def triage(items, _recent, _open):
             return [{**row, **verdicts[index]} for index, row in enumerate(items)]
+
+        def reconcile(items, _clusters):
+            if cluster_results is not None:
+                return cluster_results
+            return [{
+                "url_hash": row["url_hash"], "canonical_key": row["story_key"],
+                "relationship": "distinct", "confidence": 1.0, "reason": "test",
+            } for row in items]
 
         draft = Mock(side_effect=drafts)
         publish = Mock(return_value=(mode, "publisher-ref"))
@@ -71,8 +79,11 @@ class CycleTests(unittest.TestCase):
                 })))
             stack.enter_context(patch.object(sources, "chart_image", return_value=None))
             stack.enter_context(patch.object(brain, "triage", side_effect=triage))
+            stack.enter_context(patch.object(brain, "reconcile_story_keys", side_effect=reconcile))
             stack.enter_context(patch.object(brain, "draft", draft))
             stack.enter_context(patch.object(publisher, "publish", publish))
+            stack.enter_context(patch.object(
+                publisher, "promote_draft", return_value=(promote_mode, "publisher-ref")))
             stack.enter_context(patch.object(editor, "review", review))
             stack.enter_context(patch.object(verify, "resolve_source", resolve))
             stack.enter_context(patch.object(verify, "resolve_data_provider", provider_resolve))
@@ -204,7 +215,7 @@ class CycleTests(unittest.TestCase):
     def test_ordinary_draft_for_handled_exact_key_is_skipped(self):
         with temporary_store() as con:
             store.log_post(con, "same-story", None, "secondary", "NEW: Earlier.",
-                           "https://example.com/earlier", "DRAFT")
+                           "https://example.com/earlier", "IMMEDIATE")
             result, draft, publish, _review, resolve = self.run_cycle(
                 con, [item(url="https://example.com/new-source")],
                 [{"action": "draft", "story_key": "same-story", "class": "secondary"}],
@@ -224,7 +235,7 @@ class CycleTests(unittest.TestCase):
             prior = {**inserted, "story_key": "old-wrong-key", "class": "secondary"}
             store.persist_resolution(con, make_resolution(prior, "Bitcoin retry source"), "enforce")
             store.log_post(con, "correct-key", None, "secondary", "NEW: Earlier.",
-                           "https://example.com/earlier", "DRAFT")
+                           "https://example.com/earlier", "IMMEDIATE")
             result, draft, publish, _review, resolve = self.run_cycle(
                 con, [raw],
                 [{"action": "draft", "story_key": "correct-key", "class": "secondary"}],
@@ -444,6 +455,43 @@ class CycleTests(unittest.TestCase):
                 mode="IMMEDIATE", auto=True)
             self.assertEqual(second_result["posted"], 1)
             self.assertEqual(publish.call_args.args[2], "corroborated")
+
+    def test_later_alias_source_promotes_one_existing_typefully_draft(self):
+        with temporary_store() as con:
+            first_raw = item("https://one.example/yields", source="Outlet One")
+            first = store.upsert_new_items(con, [first_raw])[0]
+            first.update({"story_key": "global-yields", "class": "secondary"})
+            store.set_status(con, first["url_hash"], "drafted", "global-yields")
+            store.persist_resolution(con, make_resolution(first, "Global bond yields rose"), "enforce")
+            store.log_post(
+                con, "global-yields", first["url_hash"], "secondary",
+                "NEW: Global bond yields rose.", "https://one.example/yields", "DRAFT",
+                "existing-draft", publisher_backend="typefully",
+            )
+            second_raw = item("https://two.example/yields", source="Outlet Two")
+            second_hash = store.url_hash(store.canonical_discovery_key(second_raw["url"]))
+            cluster = [{
+                "url_hash": second_hash, "canonical_key": "global-yields",
+                "relationship": "same_event", "confidence": 0.98,
+                "reason": "same dated bond move",
+            }]
+            result, draft, publish, review, resolve = self.run_cycle(
+                con, [second_raw],
+                [{"action": "draft", "story_key": "g7-yields-surge", "class": "secondary"}],
+                auto=True, mode="IMMEDIATE", cluster_results=cluster,
+                promote_mode="IMMEDIATE",
+            )
+            self.assertEqual(result["posted"], 1)
+            self.assertEqual(store.canonical_story_key(con, "g7-yields-surge"),
+                             "global-yields")
+            self.assertEqual(store.qualified_evidence_count(con, "global-yields"), 2)
+            self.assertEqual(con.execute("SELECT COUNT(*) n FROM posts").fetchone()["n"], 1)
+            self.assertEqual(con.execute("SELECT mode FROM posts").fetchone()["mode"],
+                             "IMMEDIATE")
+            resolve.assert_called_once()
+            draft.assert_not_called()
+            review.assert_not_called()
+            publish.assert_not_called()
 
     def test_lint_failure_after_retry_is_held(self):
         with temporary_store() as con:

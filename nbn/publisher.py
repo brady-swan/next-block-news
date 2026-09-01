@@ -121,6 +121,24 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
         return "FAILED", str(exc)[:200]
 
 
+def promote_draft(draft_id: str, klass: str) -> tuple:
+    """Schedule an existing Typefully draft once pooled evidence clears autopost."""
+    mode = _mode_for(klass)
+    if mode != "IMMEDIATE":
+        return "DRAFT", str(draft_id)
+    if _backend() != "typefully":
+        return "FAILED", "existing-draft promotion requires Typefully"
+    from . import publisher_typefully
+    outcome = publisher_typefully.schedule_draft(str(draft_id))
+    actual = {
+        publisher_typefully.PublishOutcome.CONFIRMED: "IMMEDIATE",
+        publisher_typefully.PublishOutcome.STAGED: "DRAFT",
+        publisher_typefully.PublishOutcome.FAILED: "FAILED",
+        publisher_typefully.PublishOutcome.UNCERTAIN: "UNCERTAIN",
+    }[outcome]
+    return actual, str(draft_id)
+
+
 def publish_thread(texts: list, klass: str) -> tuple:
     """Publish/stage an N-post thread (briefing threads). Returns (mode, ref)."""
     mode = _mode_for(klass)

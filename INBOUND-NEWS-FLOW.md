@@ -223,6 +223,13 @@ The triage model assigns `draft`, `update`, `hold`, or `skip`; creates or reuses
 NBN story key; and proposes a post class. It sees already-published and still-open story
 keys so separate reports about the same event converge.
 
+Actionable pages are then fetched before final novelty and corroboration decisions. A
+high-precision identity pass compares their verified facts with recent clusters and can
+persist a short-lived alias when triage produced a different key for the same dated event.
+Only known keys and confidence of at least 0.85 are accepted; failure leaves the provisional
+key unchanged. Evidence queries and prior-coverage checks operate across the resulting
+canonical key family.
+
 There is no target quota. Discovery volume should not force publication.
 
 ### Source resolution and verification
@@ -247,6 +254,11 @@ link in the final post.
 
 Retryable network failures are persisted and retried after five minutes. Editorial holds
 are kept separate from infrastructure failures.
+
+A Typefully draft remains open to later evidence. A second independent outlet enriches
+that cluster rather than generating a duplicate draft; once the evidence class becomes
+`corroborated` (or a primary artifact arrives), the existing approved draft is scheduled
+in place when autopost is enabled.
 
 ### Writer, deterministic gates, and Editor
 

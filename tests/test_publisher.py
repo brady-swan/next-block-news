@@ -69,6 +69,17 @@ class PublisherRouterTests(unittest.TestCase):
         self.assertEqual(mode, "DRAFT")
         self.assertFalse(publish.call_args.kwargs["immediate"])
 
+    def test_corroboration_promotes_existing_typefully_draft_in_place(self):
+        with patch.object(config, "SOURCE_POLICY_MODE", "enforce"), \
+                patch.object(config, "AUTOPOST_ENABLED", True), \
+                patch.object(config, "AUTOPOST_CLASSES", {"primary", "corroborated"}), \
+                patch.object(publisher, "_backend", return_value="typefully"), \
+                patch.object(tf, "schedule_draft",
+                             return_value=tf.PublishOutcome.CONFIRMED) as schedule:
+            mode, ref = publisher.promote_draft("draft-9", "corroborated")
+        self.assertEqual((mode, ref), ("IMMEDIATE", "draft-9"))
+        schedule.assert_called_once_with("draft-9")
+
 
 if __name__ == "__main__":
     unittest.main()

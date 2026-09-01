@@ -119,6 +119,14 @@ underlying story, and a proposed class. It receives both **posted** story keys (
 and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
 corroboration promotion).
 
+After actionable pages are fetched, a separate low-effort Sonnet identity pass compares
+their verified article facts with a compact two-day catalog of recent event clusters. It
+does not approve stories or lower any gate. Only mappings at 0.85+ confidence to a key
+already present in the catalog or current batch are accepted. Accepted aliases persist
+for three days, so related keys converge across adjacent runs without merging recurring
+reports or corporate actions months apart. Failure is a no-op that preserves the triage
+key. Titles, article text, and Node hints in this pass remain untrusted content.
+
 Guide-account leads are ordered ahead of ordinary FIFO intake and must reach source
 research when they contain a plausible factual news claim or story link; terseness,
 link-only presentation, hype, or lack of in-post corroboration is not a reason to skip.
@@ -154,7 +162,8 @@ registry entries rather than relying on a shared social identity.
 
 `update` is a separate machine-readable triage action. It is valid only for a material
 development matching an exact reader-covered story key. Ordinary `draft` on an already
-handled key still skips. Deterministic lint requires `NEW:` for first coverage and
+reader-covered cluster still skips. A Typefully draft is deliberately not terminal:
+later outlets may add independent evidence to its cluster. Deterministic lint requires `NEW:` for first coverage and
 `UPDATE:` for an authorized update.
 
 **Source tier and evidence class are separate:** `config/source_tiers.toml` is the
@@ -168,7 +177,7 @@ supports the story, is original, or is independent.
 | Class | Meaning | Autopost |
 |---|---|---|
 | `primary` | The item IS the official artifact (regulator release, filing, company's own statement) | yes |
-| `corroborated` | 2+ eligible independent evidence chains on one exact story_key | yes |
+| `corroborated` | 2+ eligible independent evidence chains in one canonical event cluster | yes |
 | `secondary` | Single-outlet press report | never (code-hardened) → Typefully DRAFT |
 | `data` | Pure market/chain data | in the allowed set; dormant until the wire computes its own numbers |
 | `briefing` | The Blocks | DRAFT until Brady promotes the class |
@@ -184,14 +193,17 @@ P0/Tier 1/Tier 2 page or they hold.
 
 The original tip and final receipt are stored separately. A detector plus the artifact it
 located is one evidence chain, not two. Eligible evidence persists across cycles for the
-exact story key and expires after the configured lookback. Same-owner publications,
+canonical story-key family and expires after the configured lookback. Same-owner publications,
 aggregators, syndication/content copies, and reports resolving to the same primary artifact
 collapse, including lightly boilerplate-modified copies and an entity's website plus its
 official X account. Ambiguous originality is never corroboration-eligible. A directly
 supporting, artifact-scoped P0 official page may justify `primary`; deterministic code
 vetoes `primary` on anything else. Every candidate for one exact story key finishes source
 and provider resolution before the strongest final receipt is chosen, so feed order cannot
-change the receipt or class and the worker emits at most one post per story group.
+change the receipt or class and the worker emits at most one post per story group. If a
+single-source Typefully draft already exists, later evidence never creates another draft:
+it is pooled into the open cluster. When the cluster becomes primary or corroborated and
+autopost is enabled, NBN schedules that already-approved Typefully draft in place.
 
 Node-ranked references are a prepared search path inside this same resolver, not a bypass.
 Their source tiers and role labels are discarded and recomputed locally; fetched metadata

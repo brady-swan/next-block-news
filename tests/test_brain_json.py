@@ -131,6 +131,38 @@ class BrainJsonTests(unittest.TestCase):
         self.assertEqual(out[0]["action"], "draft")
         self.assertEqual(out[0]["reason"], "guide lead recovery")
 
+    def test_story_key_reconciliation_accepts_only_known_high_confidence_cluster(self):
+        items = [{
+            "url_hash": "candidate", "source": "Bloomberg", "title": "G7 yields rise",
+            "summary": "", "story_key": "g7-yields", "action": "draft",
+            "_selected_source": "Bloomberg", "_selected_text": "Global yields rose.",
+        }]
+        clusters = [{"canonical_key": "global-yields", "titles": ["Bond yields rise"]}]
+        reply = response('[{"url_hash":"candidate","canonical_key":"global-yields",'
+                         '"relationship":"same_event","confidence":0.96,'
+                         '"reason":"same dated move"}]')
+        with patch.object(brain, "_create", return_value=reply):
+            out = brain.reconcile_story_keys(items, clusters)
+        self.assertEqual(out[0]["canonical_key"], "global-yields")
+        self.assertEqual(out[0]["relationship"], "same_event")
+
+        low = response('[{"url_hash":"candidate","canonical_key":"global-yields",'
+                       '"relationship":"same_event","confidence":0.6,"reason":"unclear"}]')
+        with patch.object(brain, "_create", return_value=low):
+            out = brain.reconcile_story_keys(items, clusters)
+        self.assertEqual(out[0]["canonical_key"], "g7-yields")
+        self.assertEqual(out[0]["relationship"], "distinct")
+
+    def test_story_key_reconciliation_failure_preserves_provisional_key(self):
+        items = [{
+            "url_hash": "candidate", "source": "CNBC", "title": "Treasury yields rise",
+            "summary": "", "story_key": "treasury-yields", "action": "draft",
+        }]
+        with patch.object(brain, "_create", side_effect=TimeoutError("model timeout")):
+            out = brain.reconcile_story_keys(items, [])
+        self.assertEqual(out[0]["canonical_key"], "treasury-yields")
+        self.assertEqual(out[0]["relationship"], "distinct")
+
     def test_guide_post_reaches_writer_as_format_example_not_evidence(self):
         item = {
             "source": "Bloomberg", "title": "Verified Bitcoin story",

@@ -7,6 +7,7 @@ snapshot and repeatedly drifted from runtime. Read and edit the sources of truth
 |---|---|---|---|
 | Wire voice charter | `prompts/wire_voice.md` | Injected into triage and drafting | — |
 | Triage | `nbn/brain.py` (`TRIAGE_SYSTEM`) | Each pending-item batch | `NBN_TRIAGE_MODEL` |
+| Event identity reconciliation | `nbn/brain.py` (`CLUSTER_SYSTEM`) | Fetched actionable candidates vs. recent event catalog | `NBN_TRIAGE_MODEL` at low effort |
 | Single-post drafting | `nbn/brain.py` (`DRAFT_SYSTEM`) | Each item selected for drafting and one lint retry | `NBN_MODEL` |
 | Source resolution | `nbn/verify.py` (`RESOLVE_PROMPT`) | Actionable non-primary receipts | `NBN_MODEL` |
 | Provider claim support | `nbn/verify.py` (`CLAIM_SUPPORT_PROMPT`) | One provider-specific redraft | `NBN_MODEL` |

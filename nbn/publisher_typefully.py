@@ -205,6 +205,41 @@ def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
         return PublishOutcome.UNCERTAIN, str(exc)[:200]
 
 
+def schedule_draft(draft_id: str) -> PublishOutcome:
+    """Promote one existing human-visible draft without creating a duplicate."""
+    when = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        seconds=config.PUBLISH_DELAY_SECONDS)
+    try:
+        resp = httpx.patch(
+            f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/{draft_id}",
+            json={"publish_at": when.strftime("%Y-%m-%dT%H:%M:%S+00:00")},
+            headers=_headers(), timeout=30,
+        )
+        resp.raise_for_status()
+        return _confirm(str(draft_id))
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text[:300]
+        log.error("typefully draft promotion failed: %s | body: %s", exc, body)
+        if exc.response.status_code >= 500:
+            return PublishOutcome.UNCERTAIN
+        return PublishOutcome.FAILED
+    except Exception as exc:  # noqa: BLE001 - PATCH may have been accepted remotely
+        log.error("typefully draft promotion outcome uncertain: %s", exc)
+        return PublishOutcome.UNCERTAIN
+
+
+def delete_draft(draft_id: str) -> bool:
+    """Delete one precisely identified Typefully draft; 404 is already dismissed."""
+    resp = httpx.delete(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/{draft_id}",
+        headers=_headers(), timeout=30,
+    )
+    if resp.status_code == 404:
+        return True
+    resp.raise_for_status()
+    return resp.status_code == 204
+
+
 def _confirm(draft_id: str, attempts: int = 50):
     """Return a definitive or uncertain outcome without creating another draft."""
     for _ in range(attempts):

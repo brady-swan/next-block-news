@@ -84,6 +84,15 @@ CREATE TABLE IF NOT EXISTS source_evidence (
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_story
   ON source_evidence(story_key, observed_at);
+CREATE TABLE IF NOT EXISTS story_key_aliases (
+  alias_key TEXT PRIMARY KEY,
+  canonical_key TEXT NOT NULL,
+  reason TEXT,
+  created_at REAL NOT NULL,
+  updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_story_alias_canonical
+  ON story_key_aliases(canonical_key);
 CREATE TABLE IF NOT EXISTS cycle_leases (
   name TEXT PRIMARY KEY,
   owner TEXT NOT NULL,
@@ -810,7 +819,7 @@ def effective_post_ts_sql(alias: str = "") -> str:
 
 
 def recent_story_keys(con, days: float = 3.0) -> list:
-    """Story keys readers saw or may have seen (authorizes UPDATE handling)."""
+    """Canonical keys readers saw or may have seen (authorizes UPDATE handling)."""
     effective = effective_post_ts_sql()
     rows = con.execute(
         f"SELECT story_key, MAX({effective}) effective_at FROM posts"
@@ -818,7 +827,12 @@ def recent_story_keys(con, days: float = 3.0) -> list:
         f" HAVING MAX({effective}) > ? ORDER BY effective_at DESC LIMIT 100",
         (time.time() - days * 86400,),
     ).fetchall()
-    return [r["story_key"] for r in rows if r["story_key"]]
+    out = []
+    for row in rows:
+        key = canonical_story_key(con, row["story_key"])
+        if key and key not in out:
+            out.append(key)
+    return out
 
 
 def open_story_keys(con, days: float = 2.0) -> list:
@@ -830,7 +844,131 @@ def open_story_keys(con, days: float = 2.0) -> list:
         " AND first_seen > ? LIMIT 150", (time.time() - days * 86400,),
     ).fetchall()
     posted = set(recent_story_keys(con, days))
-    return [r["story_key"] for r in rows if r["story_key"] and r["story_key"] not in posted]
+    out = []
+    for row in rows:
+        key = canonical_story_key(con, row["story_key"])
+        if key and key not in posted and key not in out:
+            out.append(key)
+    return out
+
+
+def canonical_story_key(con, story_key: str) -> str:
+    """Resolve a model-produced key through cycle-safe, news-window aliases."""
+    current = str(story_key or "").strip()[:180]
+    seen = set()
+    while current and current not in seen and len(seen) < 12:
+        seen.add(current)
+        row = con.execute(
+            "SELECT canonical_key,updated_at FROM story_key_aliases WHERE alias_key=?",
+            (current,),
+        ).fetchone()
+        # Event-key aliases bridge adjacent discovery runs, not recurring events months
+        # apart. Triage keys remain human-readable while this expiry supplies temporal
+        # identity even when a model forgets to include a date in a slug.
+        if (not row or not row["canonical_key"]
+                or float(row["updated_at"] or 0) < time.time() - 3 * 86400):
+            break
+        current = str(row["canonical_key"]).strip()[:180]
+    return current
+
+
+def register_story_alias(con, alias_key: str, canonical_key: str, reason: str = "") -> str:
+    """Persist one high-confidence event-key merge without allowing mapping churn."""
+    alias = str(alias_key or "").strip()[:180]
+    canonical = canonical_story_key(con, canonical_key)
+    if not alias or not canonical or alias == canonical:
+        return canonical or alias
+    existing = con.execute(
+        "SELECT canonical_key FROM story_key_aliases WHERE alias_key=?", (alias,)
+    ).fetchone()
+    if existing:
+        resolved = canonical_story_key(con, alias)
+        con.execute(
+            "UPDATE story_key_aliases SET updated_at=? WHERE alias_key=?",
+            (time.time(), alias),
+        )
+        con.commit()
+        return resolved
+    if canonical_story_key(con, canonical) == alias:
+        return alias
+    now = time.time()
+    con.execute(
+        "INSERT INTO story_key_aliases(alias_key,canonical_key,reason,created_at,updated_at)"
+        " VALUES (?,?,?,?,?)",
+        (alias, canonical, str(reason or "")[:300], now, now),
+    )
+    con.commit()
+    return canonical
+
+
+def story_key_family(con, story_key: str) -> list[str]:
+    """All historical aliases that resolve to the same canonical event cluster."""
+    root = canonical_story_key(con, story_key)
+    if not root:
+        return []
+    rows = con.execute("SELECT alias_key FROM story_key_aliases").fetchall()
+    family = {root}
+    for row in rows:
+        alias = row["alias_key"]
+        if canonical_story_key(con, alias) == root:
+            family.add(alias)
+    return sorted(family)
+
+
+def story_cluster_context(con, days: float = 2.0, limit: int = 50,
+                          exclude_hashes: set[str] | None = None) -> list[dict]:
+    """Compact recent event catalog for high-precision cross-run key reconciliation."""
+    excluded = exclude_hashes or set()
+    cutoff = time.time() - days * 86400
+    clusters = {}
+
+    def cluster(key: str) -> dict:
+        canonical = canonical_story_key(con, key)
+        return clusters.setdefault(canonical, {
+            "canonical_key": canonical, "aliases": set(), "titles": [], "sources": [],
+            "statuses": set(), "post_leads": [], "reader_covered": False,
+            "draft_open": False, "updated_at": 0.0,
+        })
+
+    for row in con.execute(
+        "SELECT url_hash,story_key,title,source,status,first_seen FROM items"
+        " WHERE story_key IS NOT NULL AND first_seen>=? ORDER BY first_seen DESC LIMIT 400",
+        (cutoff,),
+    ).fetchall():
+        if row["url_hash"] in excluded:
+            continue
+        entry = cluster(row["story_key"])
+        entry["aliases"].add(row["story_key"])
+        if row["title"] and row["title"] not in entry["titles"] and len(entry["titles"]) < 3:
+            entry["titles"].append(str(row["title"])[:240])
+        if row["source"] and row["source"] not in entry["sources"] and len(entry["sources"]) < 3:
+            entry["sources"].append(str(row["source"])[:100])
+        entry["statuses"].add(row["status"])
+        entry["updated_at"] = max(entry["updated_at"], float(row["first_seen"] or 0))
+
+    for row in con.execute(
+        "SELECT story_key,body,mode,created FROM posts"
+        " WHERE story_key IS NOT NULL AND created>=? ORDER BY created DESC LIMIT 250",
+        (cutoff,),
+    ).fetchall():
+        entry = cluster(row["story_key"])
+        entry["aliases"].add(row["story_key"])
+        lead = str(row["body"] or "").split("\n")[0][:260]
+        if lead and lead not in entry["post_leads"] and len(entry["post_leads"]) < 2:
+            entry["post_leads"].append(lead)
+        entry["reader_covered"] |= row["mode"] in ("IMMEDIATE", "UNCERTAIN")
+        entry["draft_open"] |= row["mode"] == "DRAFT"
+        entry["updated_at"] = max(entry["updated_at"], float(row["created"] or 0))
+
+    ordered = sorted(clusters.values(), key=lambda row: row["updated_at"], reverse=True)
+    out = []
+    for row in ordered[:limit]:
+        out.append({
+            **row,
+            "aliases": sorted(row["aliases"]),
+            "statuses": sorted(row["statuses"]),
+        })
+    return out
 
 
 def wire_items_since(con, since_ts: float) -> list:
@@ -854,6 +992,7 @@ def persist_resolution(con, result, mode: str):
     """Persist one immutable resolver result and its eligible evidence candidates."""
     now = time.time()
     original, selected = result.original, result.selected
+    story_key = canonical_story_key(con, result.story_key)
     con.execute("SAVEPOINT persist_resolution")
     try:
         con.execute(
@@ -881,7 +1020,7 @@ def persist_resolution(con, result, mode: str):
         " primary_artifact_fingerprint=excluded.primary_artifact_fingerprint,"
         " content_fingerprint=excluded.content_fingerprint, selected_text=excluded.selected_text,"
         " earliest_coverage_date=excluded.earliest_coverage_date, note=excluded.note",
-            (result.item_hash, result.story_key, now, mode, result.status,
+            (result.item_hash, story_key, now, mode, result.status,
              original.url, result.original_source_name, original.source_id, original.tier,
              selected.url, selected.display_name, selected.source_id, selected.tier,
              selected.category, selected.independence_key, selected.ownership_key,
@@ -898,7 +1037,7 @@ def persist_resolution(con, result, mode: str):
                 " independence_key, ownership_key, originality, support_verdict, receipt_eligible,"
                 " corroboration_eligible, primary_artifact_fingerprint, content_fingerprint)"
                 " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (result.item_hash, result.story_key, now, ev.ref.url, ev.ref.source_id,
+                (result.item_hash, story_key, now, ev.ref.url, ev.ref.source_id,
                  ev.ref.display_name, ev.ref.tier, ev.ref.category, ev.ref.independence_key,
                  ev.ref.ownership_key, ev.originality, int(ev.supported),
                  int(ev.receipt_eligible), int(ev.corroboration_eligible),
@@ -927,6 +1066,7 @@ def move_resolution_story_key(con, item_hash: str, story_key: str) -> None:
     """Move an existing resolution and all its evidence to one corrected exact key."""
     if not item_hash or not story_key:
         return
+    story_key = canonical_story_key(con, story_key)
     try:
         con.execute("BEGIN IMMEDIATE")
         con.execute(
@@ -936,6 +1076,10 @@ def move_resolution_story_key(con, item_hash: str, story_key: str) -> None:
         con.execute(
             "UPDATE source_evidence SET story_key=? WHERE item_hash=?",
             (story_key, item_hash),
+        )
+        con.execute(
+            "UPDATE research_jobs SET story_key=?,updated_at=? WHERE item_hash=?",
+            (story_key, time.time(), item_hash),
         )
         con.commit()
     except Exception:
@@ -949,13 +1093,15 @@ def qualified_evidence(con, story_key: str, lookback_hours: float = 24.0) -> lis
     Same-owner publications, syndication copies, and evidence resolving to the same
     primary artifact or normalized content collapse to one chain.
     """
-    if not story_key:
+    family = story_key_family(con, story_key)
+    if not family:
         return []
+    placeholders = ",".join("?" for _ in family)
     rows = con.execute(
-        "SELECT * FROM source_evidence WHERE story_key=? AND observed_at>=?"
+        f"SELECT * FROM source_evidence WHERE story_key IN ({placeholders}) AND observed_at>=?"
         " AND support_verdict=1 AND corroboration_eligible=1"
         " ORDER BY observed_at, id",
-        (story_key, time.time() - lookback_hours * 3600),
+        (*family, time.time() - lookback_hours * 3600),
     ).fetchall()
     accepted, owners, artifacts, contents = [], set(), set(), set()
     for row in rows:
@@ -1020,36 +1166,84 @@ def release_cycle_lease(con, owner: str, name: str = "worker") -> bool:
 
 
 def story_reader_covered(con, story_key: str) -> bool:
-    """True only when readers saw, or may have seen, this exact story."""
-    if not story_key:
+    """True only when readers saw, or may have seen, this event cluster."""
+    family = story_key_family(con, story_key)
+    if not family:
         return False
+    placeholders = ",".join("?" for _ in family)
     return con.execute(
-        "SELECT 1 FROM posts WHERE story_key=? AND mode IN ('IMMEDIATE','UNCERTAIN') LIMIT 1",
-        (story_key,),
+        f"SELECT 1 FROM posts WHERE story_key IN ({placeholders})"
+        " AND mode IN ('IMMEDIATE','UNCERTAIN') LIMIT 1", family,
     ).fetchone() is not None
 
 
 def story_handled(con, story_key: str) -> bool:
-    """True when an exact story is already published, uncertain, or queued as a draft."""
-    if not story_key:
+    """True when an event cluster is already published, uncertain, or queued as a draft."""
+    family = story_key_family(con, story_key)
+    if not family:
         return False
+    placeholders = ",".join("?" for _ in family)
     return con.execute(
-        "SELECT 1 FROM posts WHERE story_key=?"
-        " AND mode IN ('IMMEDIATE','DRAFT','UNCERTAIN') LIMIT 1", (story_key,)
+        f"SELECT 1 FROM posts WHERE story_key IN ({placeholders})"
+        " AND mode IN ('IMMEDIATE','DRAFT','UNCERTAIN') LIMIT 1", family,
     ).fetchone() is not None
 
 
 def story_produced(con, story_key: str) -> bool:
     """True for any recorded output; used for one-shot jobs such as briefing windows."""
-    if not story_key:
+    family = story_key_family(con, story_key)
+    if not family:
         return False
+    placeholders = ",".join("?" for _ in family)
     return con.execute(
-        "SELECT 1 FROM posts WHERE story_key=? LIMIT 1", (story_key,)
+        f"SELECT 1 FROM posts WHERE story_key IN ({placeholders}) LIMIT 1", family,
     ).fetchone() is not None
+
+
+def recent_story_bodies(con, story_key: str, limit: int = 2) -> list[str]:
+    family = story_key_family(con, story_key)
+    if not family:
+        return []
+    placeholders = ",".join("?" for _ in family)
+    effective = effective_post_ts_sql()
+    rows = con.execute(
+        f"SELECT body FROM posts WHERE story_key IN ({placeholders})"
+        " AND mode IN ('IMMEDIATE','UNCERTAIN')"
+        f" ORDER BY {effective} DESC LIMIT ?", (*family, limit),
+    ).fetchall()
+    return [row["body"] for row in rows]
+
+
+def open_typefully_draft(con, story_key: str):
+    """Newest still-local Typefully draft in an event cluster, if any."""
+    family = story_key_family(con, story_key)
+    if not family:
+        return None
+    placeholders = ",".join("?" for _ in family)
+    return con.execute(
+        f"SELECT * FROM posts WHERE story_key IN ({placeholders}) AND mode='DRAFT'"
+        " AND publisher_backend='typefully' AND COALESCE(nuelink_id,'')<>''"
+        " ORDER BY created DESC LIMIT 1", family,
+    ).fetchone()
+
+
+def record_draft_promotion(con, post_id: int, klass: str, mode: str) -> None:
+    """Record a definitive/ambiguous in-place Typefully draft promotion."""
+    if mode not in ("IMMEDIATE", "UNCERTAIN"):
+        return
+    con.execute(
+        "UPDATE posts SET class=?,mode=?,confirmed_at=CASE WHEN ?='IMMEDIATE' THEN ?"
+        " ELSE confirmed_at END,publisher_status=? WHERE id=? AND mode='DRAFT'",
+        (klass, mode, mode, time.time(),
+         "published" if mode == "IMMEDIATE" else "uncertain", post_id),
+    )
+    con.commit()
 
 
 def set_status(con, url_hash_: str, status: str, story_key: str = None, note: str = None,
                stage: str = None, category: str = None):
+    if story_key:
+        story_key = canonical_story_key(con, story_key)
     con.execute(
         "UPDATE items SET status=?,story_key=COALESCE(?,story_key),note=COALESCE(?,note),"
         "decision_stage=COALESCE(?,decision_stage),decision_category=COALESCE(?,decision_category)"
@@ -1062,6 +1256,7 @@ def set_status(con, url_hash_: str, status: str, story_key: str = None, note: st
 def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, publisher_ref=None,
              editor_note=None, resolution_id=None, publisher_backend=None):
     """Record a produced post. nuelink_id is the legacy schema name for any backend ref."""
+    story_key = canonical_story_key(con, story_key)
     con.execute(
         "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
         " nuelink_id, editor_note, resolution_id, publisher_backend)"

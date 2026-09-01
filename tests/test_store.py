@@ -202,6 +202,43 @@ class StoreTests(unittest.TestCase):
             con.commit()
             self.assertEqual(store.qualified_evidence_count(con, "story", 24), 2)
 
+    def test_story_alias_family_pools_cross_key_evidence_and_coverage(self):
+        with temporary_store() as con:
+            now = time.time()
+            for key, source_id in (("global-yields", "cnbc"), ("g7-yields", "bloomberg")):
+                con.execute(
+                    "INSERT INTO source_evidence(item_hash,story_key,observed_at,url,source_id,"
+                    "source_name,tier,category,independence_key,ownership_key,originality,"
+                    "support_verdict,receipt_eligible,corroboration_eligible,"
+                    "primary_artifact_fingerprint,content_fingerprint)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (source_id, key, now, f"https://{source_id}.example/story", source_id,
+                     source_id, "t1", "reporting", source_id, source_id,
+                     "original_reporting", 1, 1, 1, "", f"content-{source_id}"),
+                )
+            con.commit()
+            store.log_post(
+                con, "global-yields", None, "secondary", "NEW: Yields rose.",
+                "https://cnbc.example/story", "DRAFT", "draft-id",
+                publisher_backend="typefully",
+            )
+            canonical = store.register_story_alias(
+                con, "g7-yields", "global-yields", "same dated event")
+            self.assertEqual(canonical, "global-yields")
+            self.assertEqual(store.story_key_family(con, "g7-yields"),
+                             ["g7-yields", "global-yields"])
+            self.assertEqual(store.qualified_evidence_count(con, "g7-yields"), 2)
+            self.assertTrue(store.story_handled(con, "g7-yields"))
+            self.assertFalse(store.story_reader_covered(con, "g7-yields"))
+            self.assertEqual(store.open_typefully_draft(con, "g7-yields")["nuelink_id"],
+                             "draft-id")
+            con.execute(
+                "UPDATE story_key_aliases SET updated_at=? WHERE alias_key='g7-yields'",
+                (time.time() - 4 * 86400,),
+            )
+            con.commit()
+            self.assertEqual(store.canonical_story_key(con, "g7-yields"), "g7-yields")
+
     def test_resolution_evidence_replacement_is_atomic_on_insert_failure(self):
         def resolution(url, evidence_urls):
             ref = source_policy.SourceRef(

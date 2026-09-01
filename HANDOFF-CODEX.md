@@ -46,7 +46,8 @@ poll sources → intake gates → triage (Sonnet 5) → verify/corroborate → d
   (`NBN_PUBLISH_DELAY_SECONDS`). Media: upload → presigned S3 PUT → poll ready →
   `media_ids` on the lead post. Only confirmed publication records as `IMMEDIATE`;
   ambiguous confirmation records as `UNCERTAIN` and never triggers a duplicate create.
-  No delete API — deletions are manual by Brady.
+  Typefully v2 now exposes an exact-draft DELETE endpoint; use it only for a precisely
+  identified, owner-authorized cleanup. Ordinary feed-post deletion remains Brady's call.
 
 ## Editorial doctrine (each rule was bought with a live mistake — do not relax)
 

@@ -335,6 +335,11 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     verdicts = (brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
                 if fresh else [])
     verdicts.extend(retry_verdicts)
+    cluster_context = store.story_cluster_context(
+        con, exclude_hashes={item["url_hash"] for item in verdicts})
+    for item in verdicts:
+        if item.get("story_key"):
+            item["story_key"] = store.canonical_story_key(con, item["story_key"])
     for item in verdicts:
         _record_node_story_key_hint(con, item)
     for item in verdicts:
@@ -362,7 +367,9 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         action, story_key = item.get("action", "skip"), item.get("story_key")
         if action not in ("draft", "update"):
             continue
-        if action == "draft" and store.story_handled(con, story_key):
+        # A human-visible draft is not terminal: later independent outlets must still
+        # enter the cluster so their evidence can corroborate it without another draft.
+        if action == "draft" and store.story_reader_covered(con, story_key):
             continue
         if action == "update" and not store.story_reader_covered(con, story_key):
             continue
@@ -394,6 +401,115 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             continue
         resolutions[item["url_hash"]] = resolution
         store.persist_resolution(con, resolution, config.SOURCE_POLICY_MODE)
+
+    # Triage sees only headlines. Reconcile provisional keys after source fetch, using
+    # article facts and a compact recent cluster catalog. A model failure is a no-op;
+    # only high-confidence mappings to known keys are accepted by brain.py.
+    cluster_items = []
+    for item in verdicts:
+        resolution = resolutions.get(item["url_hash"])
+        if item.get("action") not in ("draft", "update") or resolution is None:
+            continue
+        enriched = dict(item)
+        enriched["_selected_source"] = resolution.selected.display_name
+        enriched["_selected_text"] = resolution.selected_text
+        cluster_items.append(enriched)
+    reconciled = {
+        row["url_hash"]: row
+        for row in brain.reconcile_story_keys(cluster_items, cluster_context)
+    } if cluster_items else {}
+    for item in verdicts:
+        match = reconciled.get(item["url_hash"])
+        if not match:
+            continue
+        previous = item.get("story_key") or ""
+        target = match.get("canonical_key") or previous
+        if target != previous:
+            target = store.register_story_alias(
+                con, previous, target,
+                f"{match.get('relationship', '')}: {match.get('reason', '')}",
+            )
+        item["story_key"] = store.canonical_story_key(con, target)
+        item["_cluster_relationship"] = match.get("relationship") or "distinct"
+        if item["story_key"] != previous:
+            store.set_status(con, item["url_hash"], "new", item["story_key"])
+            store.move_resolution_story_key(con, item["url_hash"], item["story_key"])
+            store.record_pipeline_event(
+                con, pipeline_run_id, item["url_hash"], "story_key_merged",
+                item["story_key"], "identity", {
+                    "alias_key": previous,
+                    "relationship": item["_cluster_relationship"],
+                    "confidence": match.get("confidence"),
+                    "reason": match.get("reason"),
+                },
+            )
+        if (item["_cluster_relationship"] == "new_development"
+                and store.story_reader_covered(con, item["story_key"])):
+            item["action"] = "update"
+        elif (item["_cluster_relationship"] == "same_event"
+              and store.story_reader_covered(con, item["story_key"])):
+            item["action"] = "draft"
+
+    # Resolve alias chains after all batch mappings are registered (A→B→C is valid).
+    for item in verdicts:
+        if item.get("story_key"):
+            canonical = store.canonical_story_key(con, item["story_key"])
+            if canonical != item["story_key"]:
+                item["story_key"] = canonical
+                store.set_status(con, item["url_hash"], "new", canonical)
+                store.move_resolution_story_key(con, item["url_hash"], canonical)
+
+    # An NBN-created Typefully draft remains an open evidence cluster. Later directly
+    # supporting sources enrich it without another Writer/Editor/draft pass; two
+    # independent chains (or a primary artifact) can schedule that approved copy.
+    open_draft_groups = {}
+    for item in verdicts:
+        resolution = resolutions.get(item["url_hash"])
+        story_key = item.get("story_key")
+        if (item.get("action") not in ("draft", "update") or resolution is None
+                or resolution.held or _action_ids(item)
+                or store.story_reader_covered(con, story_key)):
+            continue
+        existing = store.open_typefully_draft(con, story_key)
+        if existing:
+            open_draft_groups.setdefault(story_key, {"draft": existing, "items": []})[
+                "items"].append((item, resolution))
+    for story_key, group in open_draft_groups.items():
+        rows = group["items"]
+        klass = "primary" if any(_evidence_class(res) == "primary" for _, res in rows) \
+            else "secondary"
+        evidence_count = store.qualified_evidence_count(
+            con, story_key, max(config.SOURCE_EVIDENCE_LOOKBACK_HOURS,
+                                config.max_event_age_hours()))
+        if klass == "secondary" and evidence_count >= 2:
+            klass = "corroborated"
+        mode, _ = publisher.promote_draft(group["draft"]["nuelink_id"], klass)
+        if mode in ("IMMEDIATE", "UNCERTAIN"):
+            store.record_draft_promotion(con, group["draft"]["id"], klass, mode)
+            original_status = "posted" if mode == "IMMEDIATE" else "uncertain"
+            if group["draft"]["item_hash"]:
+                store.set_status(
+                    con, group["draft"]["item_hash"], original_status, story_key,
+                    "existing draft promoted by pooled evidence",
+                )
+            result["posted" if mode == "IMMEDIATE" else "uncertain"] += 1
+        for item, _resolution in rows:
+            item["_handled_by_open_draft"] = True
+            note = ("pooled evidence promoted existing draft" if mode in (
+                "IMMEDIATE", "UNCERTAIN") else "evidence pooled into existing draft")
+            if mode == "FAILED":
+                _hold(con, item, result, "existing Typefully draft promotion failed")
+                continue
+            store.set_status(con, item["url_hash"], "skipped", story_key, note)
+            store.finish_research_job(con, item["url_hash"])
+            _finish_actions(con, item, "completed", note)
+            store.record_pipeline_event(
+                con, pipeline_run_id, item["url_hash"],
+                "existing_draft_promoted" if mode in ("IMMEDIATE", "UNCERTAIN")
+                else "evidence_pooled_into_draft",
+                story_key, "delivery", {"mode": mode,
+                                         "draft_id": group["draft"]["nuelink_id"]},
+            )
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
         raise RuntimeError("cycle lease lost after resolution")
 
@@ -401,7 +517,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     provider_cache = {}
     for item in verdicts:
         action, story_key = item.get("action", "skip"), item.get("story_key")
-        if item.get("_research_deferred"):
+        if item.get("_research_deferred") or item.get("_handled_by_open_draft"):
             continue
         if action not in ("draft", "update"):
             status = "skipped" if action == "skip" else "held"
@@ -409,7 +525,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             if status == "held":
                 result["held"] += 1
             continue
-        if action == "draft" and store.story_handled(con, story_key):
+        if action == "draft" and store.story_reader_covered(con, story_key):
             store.set_status(con, item["url_hash"], "skipped", story_key, "story already handled")
             store.finish_research_job(con, item["url_hash"])
             _finish_actions(con, item, "blocked", "story already handled")
@@ -436,12 +552,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         # Model labels cannot set evidence class. It derives from the final receipt.
         klass = _evidence_class(resolution)
         effective["class"] = klass
-        effective_ts = store.effective_post_ts_sql()
-        covered = [row["body"].split("\n")[0][:200] for row in con.execute(
-            "SELECT body FROM posts WHERE story_key=?"
-            " AND mode IN ('IMMEDIATE','UNCERTAIN')"
-            f" ORDER BY {effective_ts} DESC LIMIT 2",
-            (story_key,)).fetchall()]
+        covered = [body.split("\n")[0][:200]
+                   for body in store.recent_story_bodies(con, story_key, limit=2)]
         try:
             draft = brain.draft(effective, article_text, handles, already_covered=covered)
         except Exception as exc:  # noqa: BLE001

@@ -102,6 +102,25 @@ class TypefullyTests(unittest.TestCase):
         self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
         self.assertIn("503", ref)
 
+    @patch.object(tf, "_confirm", return_value=tf.PublishOutcome.CONFIRMED)
+    @patch.object(tf.httpx, "patch")
+    def test_existing_draft_is_scheduled_in_place(self, patch_, confirm):
+        patch_.return_value = response({"id": "draft-7", "status": "scheduled"})
+        outcome = tf.schedule_draft("draft-7")
+        self.assertIs(outcome, tf.PublishOutcome.CONFIRMED)
+        self.assertIn("publish_at", patch_.call_args.kwargs["json"])
+        confirm.assert_called_once_with("draft-7")
+
+    @patch.object(tf.httpx, "delete")
+    def test_delete_draft_accepts_deleted_and_already_missing(self, delete):
+        deleted = response({})
+        deleted.status_code = 204
+        missing = response({})
+        missing.status_code = 404
+        delete.side_effect = [deleted, missing]
+        self.assertTrue(tf.delete_draft("draft-8"))
+        self.assertTrue(tf.delete_draft("draft-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
