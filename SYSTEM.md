@@ -127,8 +127,9 @@ before search. If no linked page qualifies, NBN makes one bounded SerpAPI query,
 eligible results by the NBN source ladder, and independently fetches and assesses up to
 three. Search snippets never count as evidence. Only after that path is exhausted may the
 single-use hosted-search fallback run.
-If a batch response omits any item, NBN retries only the omitted subset. A still-omitted
-ordinary item is held, while a still-omitted guide lead fails into research—never skip.
+An omitted or structurally invalid triage response gets one smaller recovery call. If
+that also fails, ordinary items fail closed as held while guide leads still enter source
+research—never skip; a model formatting failure does not crash the worker cycle.
 
 Triage has no target quota. Factual Bitcoin market state—defined-period price moves,
 flows, leverage, funding, open interest, volatility, liquidity, holder activity, and

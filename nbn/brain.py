@@ -62,7 +62,11 @@ def _json_from(response, lenient_draft: bool = False) -> dict:
         # A prose non-answer from the drafting call = "no post" — degrade to a
         # clean hold ("thin source") instead of an exception in the retry path.
         return {"post": None, "needs_second_source": False}
-    raise ValueError(f"no JSON in response: {text[:200]}")
+    block_types = ",".join(str(getattr(block, "type", "unknown")) for block in response.content)
+    raise ValueError(
+        f"no JSON in response (stop={response.stop_reason}, blocks={block_types}): "
+        f"{text[:200]}"
+    )
 
 
 TRIAGE_SYSTEM = f"""You are the intake editor for Next Block News, a Bitcoin news wire on X.
@@ -186,7 +190,11 @@ def _triage_payload(items: list, recent_keys: list, open_keys: list) -> dict:
 def triage(items: list, recent_keys: list, open_keys: list = None) -> list:
     payload = _triage_payload(items, recent_keys, open_keys or [])
     resp = _create(config.TRIAGE_MODEL, TRIAGE_SYSTEM, json.dumps(payload), max_tokens=4000)
-    verdicts = _json_from(resp)
+    try:
+        verdicts = _json_from(resp)
+    except Exception as exc:  # noqa: BLE001 - omitted-item recovery handles the batch.
+        log.warning("triage response invalid; retrying full batch: %s", exc)
+        verdicts = []
     if not isinstance(verdicts, list):
         verdicts = []
     by_hash = {v["url_hash"]: v for v in verdicts if isinstance(v, dict) and "url_hash" in v}

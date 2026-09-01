@@ -81,6 +81,41 @@ class BrainJsonTests(unittest.TestCase):
         self.assertEqual(out[1]["action"], "draft")
         self.assertEqual(out[1]["story_key"], "second-story")
 
+    def test_empty_initial_triage_response_uses_recovery_batch(self):
+        item = {
+            "url_hash": "one", "source": "CoinDesk", "title": "First",
+            "url": "https://coindesk.com/one", "published": "", "summary": "",
+        }
+        replies = [
+            response(""),
+            response('[{"url_hash":"one","action":"draft","story_key":"first",'
+                     '"class":"secondary","reason":"recovered"}]'),
+        ]
+        with patch.object(brain, "_create", side_effect=replies) as create:
+            out = brain.triage([item], [], [])
+        self.assertEqual(create.call_count, 2)
+        self.assertEqual(out[0]["action"], "draft")
+        self.assertEqual(out[0]["story_key"], "first")
+
+    def test_two_empty_triage_responses_fail_closed_except_guide_research(self):
+        items = [
+            {
+                "url_hash": "ordinary", "source": "CoinDesk", "title": "First",
+                "url": "https://coindesk.com/one", "published": "", "summary": "",
+            },
+            {
+                "url_hash": "guide1234567890abcd", "source": "X guide @BitcoinArchive",
+                "title": "Second", "url": "https://x.com/BitcoinArchive/status/2",
+                "published": "", "summary": "",
+            },
+        ]
+        with patch.object(brain, "_create", return_value=response("")) as create:
+            out = brain.triage(items, [], [])
+        self.assertEqual(create.call_count, 2)
+        self.assertEqual(out[0]["action"], "hold")
+        self.assertEqual(out[1]["action"], "draft")
+        self.assertEqual(out[1]["reason"], "guide lead recovery")
+
     def test_omitted_guide_verdict_fails_into_research_not_skip(self):
         item = {
             "url_hash": "abcdef1234567890ffff", "source": "X guide @BitcoinNewsCom",
