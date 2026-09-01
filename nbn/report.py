@@ -220,6 +220,16 @@ def _kv_float(con, key: str) -> float:
         return 0
 
 
+def _kv_iso_ts(con, key: str) -> float:
+    value = store.kv_get(con, key)
+    if not value:
+        return 0
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0
+
+
 def _freshness_pills(con, now_ts: float) -> str:
     worker = _kv_float(con, "worker:last_success")
     if worker:
@@ -246,14 +256,20 @@ def _freshness_pills(con, now_ts: float) -> str:
         node_html = "<span class=pill>Node discovery off</span>"
     else:
         node_error = store.kv_get(con, "node:last_error")
-        node_success = _kv_float(con, "node:last_success")
+        pulse_generated = _kv_iso_ts(con, "node:last_pulse_generated")
         if node_error:
             node_html = (f"<span class='pill off' title='{_esc(node_error)}'>"
                          "Node discovery error</span>")
-        elif node_success:
-            stale_class = " off" if now_ts - node_success > 18 * 3600 else ""
-            node_html = (f"<span class='pill{stale_class}'>"
-                         f"Node intel {_age(node_success, now_ts)}</span>")
+        elif pulse_generated:
+            stale_class = " off" if now_ts - pulse_generated > config.NODE_PULSE_MAX_AGE_SECONDS \
+                else ""
+            run_id = store.kv_get(con, "node:last_pulse_run_id")
+            status = store.kv_get(con, "node:last_pulse_status")
+            count = store.kv_get(con, "node:last_pulse_candidates") or "0"
+            providers = store.kv_get(con, "node:last_pulse_providers")
+            node_html = (f"<span class='pill{stale_class}' title='{_esc(providers)}'>"
+                         f"Node pulse #{_esc(run_id)} {_esc(status)} · {count} leads · "
+                         f"{_age(pulse_generated, now_ts)}</span>")
         else:
             node_html = "<span class='pill warn'>Node discovery pending</span>"
     return worker_html + publisher_html + node_html
@@ -388,6 +404,8 @@ def render(con, day: str = None) -> str:
         f"<div class=pills>{auto}"
         f"{_freshness_pills(con, now_ts)}"
         f"<span class=pill>source policy: {_esc(config.SOURCE_POLICY_MODE)}</span>"
+        f"<span class=pill>direct Perception: {'on' if config.PERCEPTION_DIRECT_ENABLED else 'off'}</span>"
+        f"<span class=pill>X detectors: {'on' if config.X_DETECTOR_ENABLED else 'off'}</span>"
         f"<span class=pill>fresh {store.current_max_age_hours():g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
         f" @ high</span>"
@@ -697,7 +715,6 @@ def _need_card(color, verb, meta, body_html, actions, extra=""):
         for label, url, secondary in actions:
             if not url:
                 continue
-            cls = " class=sec" if (secondary and not primary) or label.startswith(("receipt", "source")) and not primary else ""
             links.append(f"<a{' class=sec' if not primary else ''} "
                          f"href='{html.escape(url)}'>{html.escape(label)}</a>")
             primary = False

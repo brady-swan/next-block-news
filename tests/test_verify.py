@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import patch
 
@@ -46,6 +47,55 @@ class VerifyTests(unittest.TestCase):
             result = verify.resolve_source(
                 story("https://cryptoslate.com/story", "CryptoSlate"), "Bitcoin test source")
         self.assertTrue(result.held)
+
+    def test_node_ranked_refs_are_reclassified_and_capped_at_three(self):
+        row = story("https://cryptoslate.com/tip", "CryptoSlate")
+        row["discovery_context"] = json.dumps({
+            "schema_version": "wire-pulse-v2",
+            "untrusted_discovery_context": True,
+            "source_refs": [
+                {"rank": 1, "url": "https://unknown.example/one", "publisher": "SEC"},
+                {"rank": 2, "url": "https://coindesk.com/two", "publisher": "Unknown"},
+                {"rank": 3, "url": "https://reuters.com/three", "publisher": "Reuters"},
+                {"rank": 4, "url": "https://sec.gov/newsroom/press-releases/four",
+                 "publisher": "SEC"},
+                {"rank": 5, "url": "https://theblock.co/five", "publisher": "The Block"},
+            ],
+        })
+        refs = verify._node_ranked_refs(row)
+        self.assertEqual([ref["rank"] for ref in refs], [2, 3, 4])
+        self.assertEqual(len(refs), 3)
+
+    def test_first_qualified_node_ref_stops_before_web_search(self):
+        row = story("https://cryptoslate.com/tip", "CryptoSlate")
+        row["discovery_context"] = json.dumps({
+            "schema_version": "wire-pulse-v2",
+            "untrusted_discovery_context": True,
+            "source_refs": [
+                {"rank": 1, "url": "https://coindesk.com/report", "publisher": "CoinDesk"},
+                {"rank": 2, "url": "https://reuters.com/report", "publisher": "Reuters"},
+            ],
+        })
+        verdict = {
+            "directly_supports": True,
+            "originality": "original_reporting",
+            "subject_is_actor": False,
+        }
+        fetched = {
+            "text": "Independent Bitcoin reporting",
+            "final_url": "https://coindesk.com/report",
+            "canonical_url": "https://coindesk.com/report",
+            "byline": "Reporter",
+            "outcome": "ok",
+        }
+        with patch.object(verify, "_model_json", return_value=verdict) as model, \
+                patch("nbn.sources.fetch_article", return_value=fetched) as fetch:
+            result = verify.resolve_source(row, "CryptoSlate detector text")
+        self.assertFalse(result.held)
+        self.assertEqual(result.selected.source_id, "coindesk")
+        self.assertIn("Node ranked ref 1", result.note)
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(fetch.call_count, 1)
 
     def test_ineligible_model_candidate_is_rejected_before_fetch(self):
         verdict = {

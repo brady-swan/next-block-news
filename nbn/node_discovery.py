@@ -19,6 +19,8 @@ log = logging.getLogger("nbn.node_discovery")
 
 THROTTLE_SECONDS = 300
 ACCEPTED_STATUSES = {"accepted", "partial"}
+V2_SCHEMA = "wire-pulse-v2"
+V2_EVENT_KEY_VERSION = "wire-event-v1"
 
 
 class InvalidNodeEnvelope(ValueError):
@@ -44,6 +46,253 @@ def _candidate_id(run_id: int, source_id: str | None, discovery_key: str) -> str
         normalized = "-"
     material = f"v1\n{run_id}\n{normalized}\n{discovery_key}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+
+
+def _ref_id(discovery_key: str) -> str:
+    return hashlib.sha256(f"wire-ref-v1\n{discovery_key}".encode()).hexdigest()[:24]
+
+
+def _v2_candidate_id(run_id: int, event_version: str, ref_id: str,
+                     discovery_key: str) -> str:
+    material = f"{V2_SCHEMA}\n{run_id}\n{event_version}\n{ref_id}\n{discovery_key}"
+    return hashlib.sha256(material.encode()).hexdigest()[:32]
+
+
+def _iso_datetime(value, field: str) -> datetime.datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidNodeEnvelope(f"{field} missing")
+    try:
+        parsed = datetime.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise InvalidNodeEnvelope(f"{field} invalid") from exc
+    if parsed.tzinfo is None:
+        raise InvalidNodeEnvelope(f"{field} lacks timezone")
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def _bounded_list(value, limit: int, item_limit: int, field: str) -> list[str]:
+    if not isinstance(value, list) or len(value) > limit:
+        raise InvalidNodeEnvelope(f"{field} outside contract")
+    return [_short_text(item, item_limit, required=True) for item in value]
+
+
+def _v2_context_json(raw: dict, run: dict, refs: list[dict]) -> str:
+    value = {
+        "untrusted_discovery_context": True,
+        "origin": "marketing_node_wire_pulse_v2",
+        "schema_version": V2_SCHEMA,
+        "node_pulse_run_id": run["run_id"],
+        "generated_at": run["generated_at"],
+        "completed_at": run["completed_at"],
+        "event_key_hint": raw["event_key_hint"],
+        "event_key_version": raw["event_key_version"],
+        "event_date": raw.get("event_date"),
+        "disclosure_date": raw.get("disclosure_date"),
+        "reporting_period": raw.get("reporting_period"),
+        "cluster_headline": raw["cluster_headline"],
+        "cluster_summary": raw.get("cluster_summary"),
+        "why_surfaced": raw["why_surfaced"],
+        "bitcoin_relevance": raw["bitcoin_relevance"],
+        "relevance_reasons": list(raw["relevance_reasons"]),
+        "theme_ids": list(raw["theme_ids"]),
+        "novelty_hint": raw["novelty_hint"],
+        "confidence_hint": raw["confidence_hint"],
+        "source_refs": list(refs),
+    }
+    optional_text = ["cluster_summary", "why_surfaced", "cluster_headline"]
+    while True:
+        encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+        if len(encoded.encode("utf-8")) <= 8192:
+            return encoded
+        if len(value["source_refs"]) > 1:
+            value["source_refs"].pop()
+        elif value["relevance_reasons"]:
+            value["relevance_reasons"].pop()
+        elif value["theme_ids"]:
+            value["theme_ids"].pop()
+        elif optional_text:
+            key = optional_text.pop(0)
+            value[key] = None
+        else:
+            raise InvalidNodeEnvelope("primary pulse context exceeds bound")
+
+
+def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[dict]]:
+    if not isinstance(payload, dict) or payload.get("schema_version") != V2_SCHEMA:
+        raise InvalidNodeEnvelope("v2 schema version mismatch")
+    run_raw = payload.get("run")
+    if not isinstance(run_raw, dict):
+        raise InvalidNodeEnvelope("v2 run metadata missing")
+    run_id = run_raw.get("run_id")
+    if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
+        raise InvalidNodeEnvelope("v2 run id invalid")
+    status = run_raw.get("status")
+    if status not in ACCEPTED_STATUSES:
+        raise InvalidNodeEnvelope("v2 run status is not consumable")
+    generated = _iso_datetime(run_raw.get("generated_at"), "generated_at")
+    completed = _iso_datetime(run_raw.get("completed_at"), "completed_at")
+    age = now - generated.timestamp()
+    if age < -300 or age > config.NODE_PULSE_MAX_AGE_SECONDS:
+        raise InvalidNodeEnvelope("v2 pulse is stale")
+
+    provider_rows = payload.get("provider_diagnostics")
+    if not isinstance(provider_rows, list) or len(provider_rows) > 3:
+        raise InvalidNodeEnvelope("v2 provider diagnostics outside contract")
+    providers = []
+    provider_names = set()
+    for row in provider_rows:
+        if not isinstance(row, dict) or row.get("provider") not in {"perception", "rss", "twitter"}:
+            raise InvalidNodeEnvelope("v2 provider diagnostic invalid")
+        if row["provider"] in provider_names:
+            raise InvalidNodeEnvelope("v2 provider diagnostic duplicated")
+        provider_names.add(row["provider"])
+        if not isinstance(row.get("attempted"), bool) or not isinstance(row.get("success"), bool):
+            raise InvalidNodeEnvelope("v2 provider state invalid")
+        item_count, error_count = row.get("item_count"), row.get("error_count")
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (item_count, error_count)):
+            raise InvalidNodeEnvelope("v2 provider counts invalid")
+        providers.append({
+            "provider": row["provider"], "attempted": row["attempted"],
+            "success": row["success"], "item_count": item_count,
+            "error_count": error_count,
+        })
+    if provider_names != {"perception", "rss", "twitter"}:
+        raise InvalidNodeEnvelope("v2 provider diagnostics incomplete")
+
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list) or len(candidates) > 24:
+        raise InvalidNodeEnvelope("v2 candidate list outside contract")
+    items, all_key_hashes, primary_key_hashes = [], set(), set()
+    timestamp_counts = {"parseable": 0, "unknown": 0, "unparseable": 0}
+    rejected = 0
+    for position, raw in enumerate(candidates, 1):
+        try:
+            if not isinstance(raw, dict) or raw.get("order") != position:
+                raise ValueError("v2 candidate order invalid")
+            refs_raw = raw.get("source_refs")
+            if not isinstance(refs_raw, list) or not 1 <= len(refs_raw) <= 6:
+                raise ValueError("v2 source refs outside contract")
+            refs, keys = [], []
+            for rank, ref_raw in enumerate(refs_raw, 1):
+                if not isinstance(ref_raw, dict) or ref_raw.get("rank") != rank:
+                    raise ValueError("v2 source ref rank invalid")
+                url = ref_raw.get("url")
+                if not isinstance(url, str) or not url.strip() or len(url) > 2000:
+                    raise ValueError("v2 source ref URL invalid")
+                sources._assert_public_http_url(url)
+                key = store.canonical_discovery_key(url)
+                expected_ref_id = _ref_id(key)
+                if ref_raw.get("ref_id") != expected_ref_id or expected_ref_id in {
+                    ref["ref_id"] for ref in refs
+                }:
+                    raise ValueError("v2 source ref identity invalid")
+                source_id = ref_raw.get("source_id")
+                if source_id is not None and (
+                    not isinstance(source_id, str) or len(" ".join(source_id.split())) > 120
+                ):
+                    raise ValueError("v2 source id invalid")
+                timestamp_value = ref_raw.get("published_at") or ref_raw.get("observed_at")
+                if timestamp_value:
+                    try:
+                        _iso_datetime(timestamp_value, "source_ref timestamp")
+                    except InvalidNodeEnvelope as exc:
+                        timestamp_counts["unparseable"] += 1
+                        raise ValueError("v2 source ref timestamp invalid") from exc
+                    timestamp_counts["parseable"] += 1
+                else:
+                    timestamp_counts["unknown"] += 1
+                ref = {
+                    "ref_id": expected_ref_id,
+                    "rank": rank,
+                    "source_id": " ".join(source_id.split()) if source_id else None,
+                    "publisher": _short_text(ref_raw.get("publisher"), 120, required=True),
+                    "title": _short_text(ref_raw.get("title"), 240, required=True),
+                    "url": url.strip(),
+                    "published_at": str(ref_raw.get("published_at") or "")[:100] or None,
+                    "observed_at": str(ref_raw.get("observed_at") or "")[:100] or None,
+                }
+                refs.append(ref)
+                keys.append(key)
+            primary = refs[0]
+            if raw.get("primary_ref_id") != primary["ref_id"]:
+                raise ValueError("v2 primary ref mismatch")
+            event_version = raw.get("event_key_version")
+            if event_version != V2_EVENT_KEY_VERSION:
+                raise ValueError("v2 event key version invalid")
+            expected_id = _v2_candidate_id(
+                run_id, event_version, primary["ref_id"], keys[0]
+            )
+            if raw.get("candidate_id") != expected_id:
+                raise ValueError("v2 candidate id mismatch")
+            cluster_headline = _short_text(raw.get("cluster_headline"), 240, required=True)
+            cluster_summary = _short_text(raw.get("cluster_summary"), 1200) or None
+            why = _short_text(raw.get("why_surfaced"), 500, required=True)
+            event_key = _short_text(raw.get("event_key_hint"), 180, required=True)
+            reasons = _bounded_list(raw.get("relevance_reasons", []), 6, 240,
+                                    "relevance_reasons")
+            themes = _bounded_list(raw.get("theme_ids", []), 8, 120, "theme_ids")
+            relevance = raw.get("bitcoin_relevance")
+            if isinstance(relevance, bool) or not isinstance(relevance, int | float) \
+                    or not 0 <= relevance <= 1:
+                raise ValueError("v2 relevance invalid")
+            novelty = raw.get("novelty_hint")
+            confidence = raw.get("confidence_hint")
+            if novelty not in {"new", "developing", "unknown"} \
+                    or confidence not in {"low", "medium", "high"}:
+                raise ValueError("v2 hint enums invalid")
+            normalized_raw = {
+                **raw,
+                "cluster_headline": cluster_headline,
+                "cluster_summary": cluster_summary,
+                "why_surfaced": why,
+                "event_key_hint": event_key,
+                "relevance_reasons": reasons,
+                "theme_ids": themes,
+                "bitcoin_relevance": float(relevance),
+                "novelty_hint": novelty,
+                "confidence_hint": confidence,
+            }
+            context_json = _v2_context_json(normalized_raw, {
+                "run_id": run_id,
+                "generated_at": generated.isoformat(),
+                "completed_at": completed.isoformat(),
+            }, refs)
+            items.append({
+                "source": primary["publisher"],
+                "title": primary["title"],
+                "url": primary["url"],
+                "published": primary["published_at"] or primary["observed_at"] or "",
+                "summary": "",
+                "discovery_origin": "marketing_node",
+                "discovery_candidate_id": expected_id,
+                "discovery_context": context_json,
+            })
+            all_key_hashes.update(store.url_hash(key) for key in keys)
+            primary_key_hashes.add(store.url_hash(keys[0]))
+        except (ValueError, InvalidNodeEnvelope, sources.UnsafeSourceURL) as exc:
+            rejected += 1
+            log.warning("Node v2 candidate rejected: %s", exc)
+
+    selected_date = generated.date().isoformat()
+    context = {
+        "schema_version": V2_SCHEMA,
+        "generated_at": generated.isoformat(),
+        "completed_at": completed.isoformat(),
+        "provider_diagnostics": providers,
+    }
+    diagnostics = {
+        "candidates_returned": len(candidates),
+        "nbn_rejected": rejected,
+        "validated_candidates": len(items),
+    }
+    return ({
+        "run_id": run_id, "status": status, "selected_date": selected_date,
+        "generated_at": generated.isoformat(), "completed_at": completed.isoformat(),
+        "all_key_hashes": sorted(all_key_hashes),
+        "primary_key_hashes": sorted(primary_key_hashes),
+        "timestamp_counts": timestamp_counts,
+    }, context, diagnostics, items)
 
 
 def _bounded_context(payload: dict, run: dict, selected_date: str) -> dict:
@@ -183,8 +432,43 @@ def _parse(payload: object, expected_date: str) -> tuple[dict, dict, dict, list[
     return {"run_id": run_id, "status": status}, context, diagnostics, items
 
 
+def _cache_v2_state(con, run: dict, context: dict, candidate_count: int) -> None:
+    value = {
+        "schema_version": V2_SCHEMA,
+        "run_id": run["run_id"],
+        "status": run["status"],
+        "generated_at": run["generated_at"],
+        "completed_at": run["completed_at"],
+        "all_key_hashes": run["all_key_hashes"][:144],
+        "primary_key_hashes": run["primary_key_hashes"][:24],
+        "candidate_count": candidate_count,
+        "provider_diagnostics": context["provider_diagnostics"],
+        "timestamp_counts": run["timestamp_counts"],
+    }
+    store.kv_set(con, "node:latest_pulse", json.dumps(value, separators=(",", ":")))
+    store.kv_set(con, "node:last_pulse_generated", run["generated_at"])
+    store.kv_set(con, "node:last_pulse_run_id", str(run["run_id"]))
+    store.kv_set(con, "node:last_pulse_status", run["status"])
+    store.kv_set(con, "node:last_pulse_candidates", str(candidate_count))
+    store.kv_set(con, "node:last_pulse_providers", json.dumps(
+        context["provider_diagnostics"], separators=(",", ":")))
+
+
+def _ingest_v1(con, http: httpx.Client, *, selected_date: str) -> dict:
+    url = (config.NODE_BASE_URL.rstrip("/")
+           + f"/api/daily-intel/wire-candidates/by-date/{selected_date}")
+    response = http.get(url, headers={"Authorization": f"Bearer {config.NODE_READ_TOKEN}"})
+    response.raise_for_status()
+    run, context, diagnostics, items = _parse(response.json(), selected_date)
+    saved = store.ingest_node_discovery_run(
+        con, run_id=run["run_id"], selected_date=selected_date, status=run["status"],
+        context=context, diagnostics=diagnostics, items=items,
+    )
+    return {"attempted": True, "contract": "v1", "run_id": run["run_id"], **saved}
+
+
 def ingest(con, *, now: float | None = None, client: httpx.Client | None = None) -> dict:
-    """Poll at most once per five minutes and atomically consume a valid UTC-day run."""
+    """Poll v2 at most every five minutes; fall back to v1 only when v2 is unusable."""
     if not config.NODE_READ_TOKEN:
         return {"attempted": False, "reason": "disabled", "inserted": 0}
     current = time.time() if now is None else now
@@ -197,21 +481,33 @@ def ingest(con, *, now: float | None = None, client: httpx.Client | None = None)
     # Commit the throttle before any network request so restarts cannot hammer Node.
     store.kv_set(con, "node:last_attempt", str(current))
     selected_date = datetime.datetime.fromtimestamp(current, datetime.timezone.utc).date().isoformat()
-    url = (config.NODE_BASE_URL.rstrip("/")
-           + f"/api/daily-intel/wire-candidates/by-date/{selected_date}")
     owned = client is None
     http = client or httpx.Client(timeout=20)
     try:
-        response = http.get(url, headers={"Authorization": f"Bearer {config.NODE_READ_TOKEN}"})
-        response.raise_for_status()
-        run, context, diagnostics, items = _parse(response.json(), selected_date)
+        v2_url = config.NODE_BASE_URL.rstrip("/") + "/api/daily-intel/wire-candidates/v2/latest"
+        try:
+            response = http.get(
+                v2_url, headers={"Authorization": f"Bearer {config.NODE_READ_TOKEN}"}
+            )
+            response.raise_for_status()
+            run, context, diagnostics, items = _parse_v2(response.json(), now=current)
+        except (httpx.HTTPError, ValueError, InvalidNodeEnvelope, json.JSONDecodeError) as exc:
+            v2_error = f"{type(exc).__name__}: {exc}"[:300]
+            store.kv_set(con, "node:last_v2_error", v2_error)
+            result = _ingest_v1(con, http, selected_date=selected_date)
+            store.kv_set(con, "node:last_success", str(time.time()))
+            store.kv_set(con, "node:last_error", "")
+            return {**result, "v2_error": v2_error}
+
         saved = store.ingest_node_discovery_run(
-            con, run_id=run["run_id"], selected_date=selected_date, status=run["status"],
-            context=context, diagnostics=diagnostics, items=items,
+            con, run_id=run["run_id"], selected_date=run["selected_date"],
+            status=run["status"], context=context, diagnostics=diagnostics, items=items,
         )
+        _cache_v2_state(con, run, context, len(items))
         store.kv_set(con, "node:last_success", str(time.time()))
         store.kv_set(con, "node:last_error", "")
-        return {"attempted": True, "run_id": run["run_id"], **saved}
+        store.kv_set(con, "node:last_v2_error", "")
+        return {"attempted": True, "contract": "v2", "run_id": run["run_id"], **saved}
     except (httpx.HTTPError, ValueError, InvalidNodeEnvelope, json.JSONDecodeError) as exc:
         message = f"{type(exc).__name__}: {exc}"[:300]
         store.kv_set(con, "node:last_error", message)

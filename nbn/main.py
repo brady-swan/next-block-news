@@ -1,4 +1,5 @@
 """The loop: poll -> triage -> draft -> gate -> publish. Plus a /health endpoint."""
+import datetime
 import json
 import logging
 import threading
@@ -13,6 +14,103 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 log = logging.getLogger("nbn.main")
 
 STATE = {"started": time.time(), "cycles": 0, "last_cycle": None, "last_error": None}
+
+
+def _timestamp_quality(items: list[dict]) -> dict[str, int]:
+    import email.utils
+    counts = {"parseable": 0, "unknown": 0, "unparseable": 0}
+    for item in items:
+        value = str(item.get("published") or "").strip()
+        if not value:
+            counts["unknown"] += 1
+            continue
+        try:
+            email.utils.parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            try:
+                datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                counts["unparseable"] += 1
+                continue
+        counts["parseable"] += 1
+    return counts
+
+
+def _key_hashes(items: list[dict]) -> set[str]:
+    return {
+        store.url_hash(store.canonical_discovery_key(item.get("url", "")))
+        for item in items if item.get("url")
+    }
+
+
+def _record_source_overlap(con, run_id: str, perception_items: list[dict],
+                           x_items: list[dict], now: float) -> None:
+    raw = store.kv_get(con, "node:latest_pulse")
+    try:
+        pulse = json.loads(raw) if raw else {}
+        generated = datetime.datetime.fromisoformat(
+            str(pulse.get("generated_at") or "").replace("Z", "+00:00")
+        ).timestamp()
+    except (TypeError, ValueError):
+        pulse, generated = {}, 0
+    fresh = bool(generated and -300 <= now - generated <= config.NODE_PULSE_MAX_AGE_SECONDS)
+    all_refs = set(pulse.get("all_key_hashes") or []) if fresh else set()
+    primary_refs = set(pulse.get("primary_key_hashes") or []) if fresh else set()
+    detector_items = [
+        item for item in x_items if str(item.get("source") or "").startswith("X detector")
+    ]
+
+    def lane(items: list[dict]) -> dict:
+        keys = _key_hashes(items)
+        return {
+            "items": len(items),
+            "url_keys": len(keys),
+            "any_ref_overlap": len(keys & all_refs),
+            "primary_ref_overlap": len(keys & primary_refs),
+            "timestamps": _timestamp_quality(items),
+        }
+
+    metadata = {
+        "metric": "latest_pulse_url_overlap",
+        "definition": "URL overlap with latest fresh pulse; not story coverage completeness",
+        "pulse": {
+            "fresh": fresh,
+            "run_id": pulse.get("run_id") if fresh else None,
+            "status": pulse.get("status") if fresh else None,
+            "age_seconds": int(max(0, now - generated)) if fresh else None,
+            "candidate_count": pulse.get("candidate_count") if fresh else 0,
+            "all_ref_keys": len(all_refs),
+            "primary_ref_keys": len(primary_refs),
+            "timestamps": pulse.get("timestamp_counts") if fresh else {},
+        },
+        "direct_perception": lane(perception_items),
+        "broad_detector_x": lane(detector_items),
+    }
+    store.record_pipeline_event(
+        con, run_id, f"overlap:{run_id}", "source_overlap", None,
+        "latest_pulse_url_overlap", metadata,
+    )
+
+
+def _record_node_story_key_hint(con, item: dict) -> None:
+    if not item.get("story_key"):
+        return
+    try:
+        context = json.loads(item.get("discovery_context") or "")
+    except (TypeError, ValueError):
+        return
+    if not isinstance(context, dict) or context.get("schema_version") != "wire-pulse-v2":
+        return
+    hint = str(context.get("event_key_hint") or "")[:180]
+    if not hint:
+        return
+    store.record_pipeline_event(
+        con, item.get("_run_id", ""), item["url_hash"], "node_event_key_mapped",
+        item["story_key"], "discovery", {
+            "event_key_hint": hint,
+            "event_key_version": str(context.get("event_key_version") or "")[:40],
+        },
+    )
 
 
 def _action_ids(item) -> list[int]:
@@ -120,15 +218,20 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     run_started = time.time()
     pipeline_run_id = f"cycle:{int(run_started)}:{lease_owner[:8]}"
     node_result = node_discovery.ingest(con)
+    rss_items = sources.fetch_feeds()
+    edgar_items = sources.fetch_edgar()
+    perception_items = sources.fetch_perception()
+    x_items = sources.fetch_x(con)
     item_groups = (
-        ("rss", sources.fetch_feeds()),
-        ("edgar", sources.fetch_edgar()),
-        ("perception", sources.fetch_perception()),
-        ("x", sources.fetch_x(con)),
+        ("rss", rss_items),
+        ("edgar", edgar_items),
+        ("perception", perception_items),
+        ("x", x_items),
     )
     items = []
     for origin, group in item_groups:
         items.extend({**item, "discovery_origin": origin} for item in group)
+    _record_source_overlap(con, pipeline_run_id, perception_items, x_items, run_started)
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
         raise RuntimeError("cycle lease lost after fetch")
     inserted = store.upsert_new_items(con, items)
@@ -184,7 +287,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         retry_verdicts.append(retry)
     node_summary = {
         key: node_result[key] for key in (
-            "attempted", "reason", "run_id", "consumed", "inserted", "deduped", "error"
+            "attempted", "reason", "contract", "run_id", "consumed", "inserted",
+            "deduped", "context_attached", "error", "v2_error"
         ) if key in node_result
     }
     result = {"fetched": len(items) + int(node_result.get("inserted", 0)),
@@ -200,6 +304,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     verdicts = (brain.triage(fresh, store.recent_story_keys(con), store.open_story_keys(con))
                 if fresh else [])
     verdicts.extend(retry_verdicts)
+    for item in verdicts:
+        _record_node_story_key_hint(con, item)
     for item in verdicts:
         action = overrides.get(item["url_hash"])
         if not action:

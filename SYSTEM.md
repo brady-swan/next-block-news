@@ -47,18 +47,37 @@ yesterday — corporate Bitcoin news before journalists write it. Free, unmetere
 Marketing Node (one key per Perception account) — the interval is a budget decision;
 `/feed` 429s in either system's logs mean widen `NBN_PERCEPTION_POLL_SECONDS` first.
 
-**Marketing Node curated discovery (5 min, UTC-day run):** NBN consumes the Node's
-authenticated `/api/daily-intel/wire-candidates/by-date/{date}` projection. It is a
-bounded, ordered list of source links from `DailyBrief.more_reads`, plus theme/must-know
-context. A valid accepted/partial run is consumed exactly once, including a zero-item
-run; malformed candidates are skipped individually. The two projects remain separate
-codebases and databases. The API is their explicit contract.
+**Marketing Node wire pulse (NBN polls every 5 min; Node runs weekdays at 8am, 10am,
+noon, 2pm, 4pm, 6pm, and 8pm Central):** the Node runs a deliberately narrow,
+source-only Scout → Curator profile over an eight-hour window. It gathers only its
+curated Perception core, RSS, and curated-X evidence, relates that evidence to active
+Node themes, clusters it, and publishes at most 24 discovery candidates. It does not
+run a Writer, Editor, or publishing step for this product.
 
-Node prose is discovery context, never source evidence. It is stored separately from an
-item summary, labeled `detector_context_untrusted`, and shown only to triage. It never
-reaches source resolution, Writer, claim checks, lint, or Editor. NBN independently
-DNS-checks each public URL and verifies the Node's deterministic candidate ID before
-ingestion.
+NBN consumes the authenticated
+`/api/daily-intel/wire-candidates/v2/latest` `wire-pulse-v2` contract. A pulse must be
+complete, schema-valid, no more than three hours old, and internally consistent. Every
+reference has a deterministic `ref_id`; the rank-1 reference must be the declared
+primary; and the candidate ID commits to the run, event-key version, primary reference,
+and canonical primary URL. A fresh accepted/partial pulse is consumed exactly once,
+including a zero-candidate pulse. A fresh empty or already-consumed v2 response is valid
+and does not invoke the legacy API. NBN falls back to the legacy by-date projection only
+when v2 is missing, stale, incomplete, transport-failed, or invalid.
+
+Node headlines, summaries, source labels, relevance scores, themes, and event keys are
+**untrusted discovery hints**, not evidence or NBN editorial decisions. Ordinary intake
+fields come only from the primary source reference, and the item summary is intentionally
+empty. NBN independently checks URL safety, re-fetches the page, reclassifies the source
+against its own source registry, and independently assesses support/originality. It will
+try at most three Node-ranked references that NBN itself classifies P0/Tier 1/Tier 2,
+stopping at the first qualified receipt; otherwise its normal web upgrade search runs.
+The Node event key is a heuristic cluster hint (artifact ID/reporting period/exact event
+date/undated entity-event fingerprint), not the NBN story key. Their mapping is logged.
+
+When the same URL already exists in NBN as `new`, the pulse may attach its context and
+candidate ID; it may not overwrite title, source, summary, status, or provenance. It
+never changes a processed row. The two projects remain separate codebases and databases;
+this versioned API is their explicit boundary.
 
 **X recent-search (3 min), `since_id`-gated** — critical: X bills ~$0.005 per post
 *returned*, and search re-returns matches unless you ask for "only new"; quiet polls
@@ -154,6 +173,12 @@ supporting, artifact-scoped P0 official page may justify `primary`; deterministi
 vetoes `primary` on anything else. Every candidate for one exact story key finishes source
 and provider resolution before the strongest final receipt is chosen, so feed order cannot
 change the receipt or class and the worker emits at most one post per story group.
+
+Node-ranked references are a prepared search path inside this same resolver, not a bypass.
+Their source tiers and role labels are discarded and recomputed locally; fetched metadata
+and the existing receipt gates remain authoritative. This reduces duplicated searching
+without delegating triage, source policy, factual support, writing, or publication to the
+Node.
 
 Actionable triage decisions are frozen into a durable `research_jobs` record before the
 first external fetch. A timeout, transport error, rate limit, 5xx, or source-search outage
@@ -303,6 +328,14 @@ actual `published_at` timestamp. Unknown Typefully-only posts are not imported.
 (`NBN_HEARTBEAT_URL`); ~15 min of silence pages Brady. `/health` returns 500 when the
 last cycle is >10 min old. X notifications on the handle announce publishes.
 
+Every cycle also stores one `latest_pulse_url_overlap` telemetry event comparing that
+cycle's direct-Perception and broad detector-X URL keys with every reference and every
+primary reference in the latest fresh Node pulse. It records timestamp quality and pulse
+age. This is an overlap/cost signal only—not a measure of story coverage completeness.
+Direct Perception and detector-X have independent switches. Detector-X stays on; direct
+Perception may be turned off only after a healthy manual Node pulse, a healthy scheduled
+Node Perception pulse, and successful NBN consumption have been observed.
+
 **Switches:** `NBN_AUTOPOST_ENABLED=false` = master kill (everything stages as
 drafts). Pause the Railway service to stop even drafting. Tape reads:
 `railway ssh "cat /data/tapes/tape-YYYY-MM-DD.md"`.
@@ -322,10 +355,13 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_MAX_AGE_HOURS_ACTIVE/QUIET` | `2.5` / `6` | freshness schedule (fixed `NBN_MAX_AGE_HOURS` overrides) |
 | `NBN_POLL_SECONDS` | `60` | RSS/EDGAR cadence |
 | `NBN_X_POLL_SECONDS` / `NBN_X_LIST_ID` / `NBN_X_LIST_REFRESH_SECONDS` | `180` / set / `3600` | X poller + list roster |
-| `NBN_PERCEPTION_API_KEY` / `NBN_PERCEPTION_POLL_SECONDS` | set (shared) / `900` | Perception source |
+| `NBN_X_DETECTOR_ENABLED` | `true` | broad detector-X lane; independent of curated primary/research X |
+| `NBN_PERCEPTION_API_KEY` / `NBN_PERCEPTION_POLL_SECONDS` | set (shared) / `900` | direct Perception fallback lane |
+| `NBN_PERCEPTION_DIRECT_ENABLED` | `true` until production cutover gate passes | lets Node own Perception discovery once safely proven |
 | `NBN_MODEL` / `NBN_TRIAGE_MODEL` | `claude-sonnet-5` | writer + triage (effort = API default high) |
 | `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | the editor seat |
-| `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | curated one-off discovery + Blocks |
+| `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | v2 wire pulse, legacy fallback, and Blocks |
+| `NBN_NODE_PULSE_MAX_AGE_SECONDS` | `10800` | maximum accepted v2 pulse age (3h) |
 | `NBN_BRIEFING_UTC` | `14:40,Morning;21:15,Afternoon` | Block schedule |
 | `NBN_AUDIT_UTC` | `09:00` | self-audit |
 | `NBN_REPORT_TOKEN` | set | Desk access (rotate to invalidate the bookmark) |

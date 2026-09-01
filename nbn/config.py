@@ -44,6 +44,9 @@ TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
 NODE_BASE_URL = os.environ.get("NBN_NODE_BASE_URL",
                                "https://swan-marketing-node-production.up.railway.app")
 NODE_READ_TOKEN = os.environ.get("NBN_NODE_READ_TOKEN", "")
+NODE_PULSE_MAX_AGE_SECONDS = int(
+    os.environ.get("NBN_NODE_PULSE_MAX_AGE_SECONDS", "10800")
+)
 # "HH:MM,Title;HH:MM,Title" in UTC — after the Node's EIC (14:00) and PM intel (20:30) runs
 BRIEFING_SCHEDULE = [
     tuple(x.split(",")) for x in
@@ -54,6 +57,9 @@ BRIEFING_SCHEDULE = [
 # so /feed polling in either service consumes the same account budget. Activates when set.
 PERCEPTION_API_KEY = os.environ.get("NBN_PERCEPTION_API_KEY", "")
 PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "900"))
+PERCEPTION_DIRECT_ENABLED = (
+    os.environ.get("NBN_PERCEPTION_DIRECT_ENABLED", "true").lower() == "true"
+)
 
 # X read access — SHARED with the Marketing Node's bearer (Brady's call 2026-08-30);
 # recent-search rate limits are per app, Node's 2x/day pulse + our throttled poll fit easily.
@@ -64,6 +70,7 @@ X_POLL_SECONDS = int(os.environ.get("NBN_X_POLL_SECONDS", "180"))
 # never the list timeline itself (that endpoint lacks since_id and re-bills reads).
 X_LIST_ID = os.environ.get("NBN_X_LIST_ID", "")
 X_LIST_REFRESH_SECONDS = int(os.environ.get("NBN_X_LIST_REFRESH_SECONDS", "3600"))
+X_DETECTOR_ENABLED = os.environ.get("NBN_X_DETECTOR_ENABLED", "true").lower() == "true"
 
 # Classes allowed to auto-publish when AUTOPOST_ENABLED. Secondary never auto-publishes,
 # even if an environment variable includes it.

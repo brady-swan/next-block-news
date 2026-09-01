@@ -489,7 +489,7 @@ def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: s
     if len(context_json.encode("utf-8")) > 16384:
         context_json = json.dumps({"context_omitted": "size"}, separators=(",", ":"))
     diagnostic = dict(diagnostics)
-    inserted = deduped = 0
+    inserted = deduped = context_attached = 0
     fresh = []
     try:
         con.execute("BEGIN IMMEDIATE")
@@ -499,11 +499,22 @@ def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: s
         for it in items:
             key = canonical_discovery_key(it["url"])
             existing = con.execute(
-                "SELECT url_hash FROM items WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
+                "SELECT url_hash,status FROM items WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
                 (key,),
             ).fetchone()
             if existing:
                 deduped += 1
+                context_value = str(it.get("discovery_context") or "")[:8192]
+                if (existing["status"] == "new"
+                        and '"schema_version":"wire-pulse-v2"' in context_value):
+                    con.execute(
+                        "UPDATE items SET discovery_context=?,discovery_candidate_id=?"
+                        " WHERE url_hash=? AND status='new'",
+                        (context_value,
+                         str(it.get("discovery_candidate_id") or "")[:32] or None,
+                         existing["url_hash"]),
+                    )
+                    context_attached += 1
                 continue
             h = url_hash(key or it["url"])
             cur = con.execute(
@@ -520,7 +531,10 @@ def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: s
                 fresh.append({**it, "url_hash": h})
             else:
                 deduped += 1
-        diagnostic.update({"inserted": inserted, "deduped": deduped})
+        diagnostic.update({
+            "inserted": inserted, "deduped": deduped,
+            "context_attached": context_attached,
+        })
         diagnostics_json = json.dumps(
             diagnostic, separators=(",", ":"), ensure_ascii=False
         )
@@ -535,6 +549,7 @@ def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: s
         )
         con.commit()
         return {"consumed": False, "inserted": inserted, "deduped": deduped,
+                "context_attached": context_attached,
                 "items": fresh, "diagnostics": diagnostic}
     except Exception:
         con.rollback()

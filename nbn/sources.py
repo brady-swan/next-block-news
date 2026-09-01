@@ -128,7 +128,7 @@ def fetch_perception() -> list:
     global _last_perception_poll
     import datetime
     import time as _time
-    if not config.PERCEPTION_API_KEY:
+    if not config.PERCEPTION_DIRECT_ENABLED or not config.PERCEPTION_API_KEY:
         return []
     if _time.time() - _last_perception_poll < config.PERCEPTION_POLL_SECONDS:
         return []
@@ -211,7 +211,7 @@ def fetch_edgar() -> list:
 # The PRIMARY roster comes from the public X List (membership fetched hourly, compiled
 # into search queries); the bundles below stay hardcoded because they are deliberately
 # NOT on the wire's public list (companies = association optics, detectors = tips only).
-X_STATIC_QUERIES = [
+X_PRIMARY_QUERIES = [
     # Watched officials not on the public list
     '(from:SenLummis OR from:RepTomEmmer) -is:retweet',
     # Company newsrooms (primary for their own announcements)
@@ -219,14 +219,18 @@ X_STATIC_QUERIES = [
     ' OR from:BlackRock OR from:DigitalAssets OR from:BitwiseInvest OR from:Grayscale'
     ' OR from:River OR from:Strike OR from:unchainedcom OR from:CasaHODL OR from:Swan)'
     ' -is:retweet',
+]
+X_RESEARCH_QUERIES = [
     # Tier 2 research signal monitored directly, eligible only for its own analysis.
     '(from:KobeissiLetter) -is:retweet',
+]
+X_DETECTOR_QUERIES = [
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
     # source-resolution hunt that finds an eligible receipt.
     '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:BitcoinMagazine'
     ' OR from:BitcoinNewsCom OR from:TFTC21 OR from:BitcoinArchive) -is:retweet',
 ]
-X_DETECTOR_QUERY_MARKER = "WatcherGuru"
+X_STATIC_QUERIES = X_PRIMARY_QUERIES + X_RESEARCH_QUERIES + X_DETECTOR_QUERIES
 
 _list_cache = {"members": [], "fetched": 0.0}
 
@@ -280,7 +284,9 @@ def fetch_x(con=None) -> list:
     out = []
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
-        queries = _list_member_queries(client) + X_STATIC_QUERIES
+        queries = _list_member_queries(client) + X_PRIMARY_QUERIES + X_RESEARCH_QUERIES
+        if config.X_DETECTOR_ENABLED:
+            queries += X_DETECTOR_QUERIES
         for qi, q in enumerate(queries):
             try:
                 params = {
@@ -312,7 +318,7 @@ def fetch_x(con=None) -> list:
                 for t in data.get("data", []):
                     user = users.get(t["author_id"], {})
                     uname = user.get("username", "unknown")
-                    label = "X detector" if X_DETECTOR_QUERY_MARKER in q else "X"
+                    label = "X detector" if q in X_DETECTOR_QUERIES else "X"
                     tweet_url = f"https://x.com/{uname}/status/{t['id']}"
                     # A tweet is usually a POINTER: when a primary/roster account links
                     # out (FRED graph, press release, filing), THAT page is the story —

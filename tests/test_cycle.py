@@ -603,6 +603,40 @@ class CycleTests(unittest.TestCase):
             review.assert_called_once()
             self.assertEqual(publish.call_args.args[0], revised)
 
+    def test_source_overlap_is_one_durable_latest_pulse_url_metric_per_cycle(self):
+        now = 1788192000
+        shared = "https://example.com/shared?utm_source=direct"
+        primary = "https://reuters.com/primary"
+        pulse = {
+            "run_id": 501,
+            "status": "partial",
+            "generated_at": "2026-08-31T16:00:00+00:00",
+            "candidate_count": 2,
+            "all_key_hashes": [
+                store.url_hash(store.canonical_discovery_key(shared)),
+                store.url_hash(store.canonical_discovery_key(primary)),
+            ],
+            "primary_key_hashes": [store.url_hash(store.canonical_discovery_key(primary))],
+            "timestamp_counts": {"parseable": 2, "unknown": 0, "unparseable": 0},
+        }
+        direct = [{"url": shared, "published": "2026-08-31T15:55:00Z"}]
+        detectors = [{"source": "X detector @CoinDesk", "url": primary, "published": ""}]
+        with temporary_store() as con:
+            store.kv_set(con, "node:latest_pulse", json.dumps(pulse))
+            main._record_source_overlap(con, "cycle-1", direct, detectors, now)
+            main._record_source_overlap(con, "cycle-1", direct, detectors, now)
+            rows = con.execute(
+                "SELECT category,metadata FROM pipeline_events WHERE event='source_overlap'"
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["category"], "latest_pulse_url_overlap")
+        metadata = json.loads(rows[0]["metadata"])
+        self.assertTrue(metadata["pulse"]["fresh"])
+        self.assertEqual(metadata["direct_perception"]["any_ref_overlap"], 1)
+        self.assertEqual(metadata["direct_perception"]["primary_ref_overlap"], 0)
+        self.assertEqual(metadata["broad_detector_x"]["primary_ref_overlap"], 1)
+        self.assertEqual(metadata["broad_detector_x"]["timestamps"]["unknown"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

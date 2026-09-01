@@ -159,6 +159,23 @@ class AuditTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
+    def test_node_freshness_uses_pulse_generation_not_last_poll(self):
+        now = 1788192000
+        generated = datetime.datetime.fromtimestamp(
+            now - 7200, datetime.timezone.utc).isoformat()
+        with temporary_store() as con, \
+                patch.object(config, "REPORT_TOKEN", "test-token"), \
+                patch.object(config, "NODE_READ_TOKEN", "read-token"), \
+                patch.object(report.time, "time", return_value=now):
+            store.kv_set(con, "node:last_attempt", str(now - 5))
+            store.kv_set(con, "node:last_pulse_generated", generated)
+            store.kv_set(con, "node:last_pulse_run_id", "501")
+            store.kv_set(con, "node:last_pulse_status", "partial")
+            store.kv_set(con, "node:last_pulse_candidates", "4")
+            store.kv_set(con, "node:last_pulse_providers", "[]")
+            html = report.render(con)
+        self.assertIn("Node pulse #501 partial · 4 leads · 2h ago", html)
+
     def test_desk_uses_distinct_lifecycle_actions(self):
         with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
             for mode in ("IMMEDIATE", "DRAFT", "UNCERTAIN", "FAILED", "TAPE"):
