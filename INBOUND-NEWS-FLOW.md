@@ -99,8 +99,9 @@ The watch has four parts:
 When a primary or research account links to exactly one external public page, NBN uses
 that page as the candidate URL and retains the X post as context. Guide posts remain
 distinct leads so they cannot disappear behind an already-ingested RSS URL; their linked
-pages are retained as untrusted research hints. Detector and guide posts enter source
-resolution before they can become receipts.
+pages are retained as untrusted research hints. Eligible P0/Tier 1/Tier 2 links receive
+a bounded direct fetch/assessment before broad web search. Detector and guide posts enter
+source resolution before they can become receipts.
 
 ### Direct Perception — every 15 minutes
 

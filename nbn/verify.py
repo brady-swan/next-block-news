@@ -347,17 +347,50 @@ def _node_ranked_refs(item: dict) -> list[dict]:
     return accepted
 
 
-def _try_node_ranked_refs(
+def _guide_ranked_refs(item: dict) -> list[dict]:
+    """Return guide-linked pages that qualify for direct bounded assessment."""
+    raw_context = item.get("discovery_context") or ""
+    try:
+        context = json.loads(raw_context)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(context, dict) or context.get("guide_account_signal") is not True \
+            or context.get("untrusted_discovery_context") is not True:
+        return []
+    raw_urls = context.get("outbound_urls")
+    if not isinstance(raw_urls, list):
+        return []
+    accepted, seen = [], set()
+    for raw in raw_urls[:4]:
+        url = str(raw or "").strip()
+        normalized = source_policy.normalize_url(url)
+        if not normalized or normalized in seen:
+            continue
+        ref = source_policy.classify(url, "")
+        if not ref.base_receipt_eligible or ref.tier not in {"p0", "t1", "t2"}:
+            continue
+        seen.add(normalized)
+        accepted.append({
+            "url": url, "outlet": ref.display_name, "rank": len(accepted) + 1,
+        })
+        if len(accepted) >= 3:
+            break
+    return accepted
+
+
+def _try_prepared_refs(
     item: dict,
     original: source_policy.SourceRef,
     source_text: str,
+    rows: list[dict],
+    label: str,
 ) -> ResolutionResult | None:
-    """Try at most three NBN-qualified pulse refs before the normal web upgrade search."""
+    """Try already-discovered eligible refs before the normal web upgrade search."""
     from . import sources
 
     direct = _synthetic_candidate(original, source_text)
     original_normalized = source_policy.normalize_url(original.url)
-    for row in _node_ranked_refs(item):
+    for row in rows:
         try:
             sources._assert_public_http_url(row["url"])
         except sources.UnsafeSourceURL:
@@ -385,7 +418,7 @@ def _try_node_ranked_refs(
                 source_text=text[:8000],
             ), web=False, max_tokens=1000)
         except Exception as exc:  # noqa: BLE001 - ordinary search remains the fallback.
-            log.warning("prepared Node source assessment failed: %s", exc)
+            log.warning("prepared %s source assessment failed: %s", label, exc)
             continue
         assessed = dict(raw)
         assessed.update({
@@ -415,10 +448,32 @@ def _try_node_ranked_refs(
             primary_artifact_fingerprint=ev.primary_artifact_fingerprint,
             content_fingerprint=ev.content_fingerprint,
             earliest_coverage_date=None,
-            note=f"Node ranked ref {row['rank']} independently fetched and qualified",
+            note=f"{label} ranked ref {row['rank']} independently fetched and qualified",
             evidence=evidence,
         )
     return None
+
+
+def _try_node_ranked_refs(
+    item: dict,
+    original: source_policy.SourceRef,
+    source_text: str,
+) -> ResolutionResult | None:
+    """Try at most three NBN-qualified pulse refs before normal web search."""
+    return _try_prepared_refs(
+        item, original, source_text, _node_ranked_refs(item), "Node",
+    )
+
+
+def _try_guide_ranked_refs(
+    item: dict,
+    original: source_policy.SourceRef,
+    source_text: str,
+) -> ResolutionResult | None:
+    """Try guide-linked eligible pages before normal web search."""
+    return _try_prepared_refs(
+        item, original, source_text, _guide_ranked_refs(item), "Guide",
+    )
 
 
 def resolve_source(item: dict, original_text: str, con=None,
@@ -457,6 +512,10 @@ def resolve_source(item: dict, original_text: str, con=None,
         return result
 
     prepared = _try_node_ranked_refs(item, original, source_text)
+    if prepared is not None:
+        _url_cache[cache_key] = (time.time(), prepared)
+        return prepared
+    prepared = _try_guide_ranked_refs(item, original, source_text)
     if prepared is not None:
         _url_cache[cache_key] = (time.time(), prepared)
         return prepared

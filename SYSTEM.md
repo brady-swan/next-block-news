@@ -120,6 +120,8 @@ corroboration promotion).
 Guide-account leads are ordered ahead of ordinary FIFO intake and must reach source
 research when they contain a plausible factual news claim or story link; terseness,
 link-only presentation, hype, or lack of in-post corroboration is not a reason to skip.
+Eligible P0/Tier 1/Tier 2 pages linked by the guide are fetched and assessed directly
+before the slower broad web-search upgrade path.
 If a batch response omits any item, NBN retries only the omitted subset. A still-omitted
 ordinary item is held, while a still-omitted guide lead fails into research—never skip.
 

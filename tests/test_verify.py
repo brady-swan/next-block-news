@@ -97,6 +97,43 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(model.call_count, 1)
         self.assertEqual(fetch.call_count, 1)
 
+    def test_first_qualified_guide_link_stops_before_web_search(self):
+        row = story(
+            "https://x.com/BitcoinArchive/status/1", "X guide @BitcoinArchive",
+        )
+        row["discovery_context"] = json.dumps({
+            "untrusted_discovery_context": True,
+            "guide_account_signal": True,
+            "outbound_urls": [
+                "https://news.bitcoin.com/relay",
+                "https://reuters.com/world/bitcoin-policy",
+            ],
+        })
+        self.assertEqual(
+            [ref["url"] for ref in verify._guide_ranked_refs(row)],
+            ["https://reuters.com/world/bitcoin-policy"],
+        )
+        verdict = {
+            "directly_supports": True,
+            "originality": "original_reporting",
+            "subject_is_actor": False,
+        }
+        fetched = {
+            "text": "Independent Bitcoin policy reporting",
+            "final_url": "https://reuters.com/world/bitcoin-policy",
+            "canonical_url": "https://reuters.com/world/bitcoin-policy",
+            "byline": "Reporter",
+            "outcome": "ok",
+        }
+        with patch.object(verify, "_model_json", return_value=verdict) as model, \
+                patch("nbn.sources.fetch_article", return_value=fetched) as fetch:
+            result = verify.resolve_source(row, "Bitcoin Archive tip")
+        self.assertFalse(result.held)
+        self.assertEqual(result.selected.source_id, "reuters")
+        self.assertIn("Guide ranked ref 1", result.note)
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(fetch.call_count, 1)
+
     def test_ineligible_model_candidate_is_rejected_before_fetch(self):
         verdict = {
             "original": {"directly_supports": True, "originality": "original_reporting",
