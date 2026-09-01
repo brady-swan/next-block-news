@@ -237,8 +237,13 @@ receipt quality:
 - **Unknown/lower:** not autonomously receipt-eligible.
 
 A Tier 3 or weak source triggers an upgrade search for a primary source or stronger
-reporter. Web search is therefore a research step, not a raw inbound feed. A second-tier
-publication can alert NBN to an event without becoming the link in the final post.
+reporter. NBN first tries eligible pages already supplied by the Node or linked by a guide
+account. It then sends one deterministic claim query directly to SerpAPI, reclassifies the
+Google organic results against NBN's source registry, and fetches and assesses up to three
+eligible pages. The search snippets are never evidence. Claude's hosted search remains a
+single-use, 45-second fallback only. Search is therefore a research step, not a raw
+inbound feed. A second-tier publication can alert NBN to an event without becoming the
+link in the final post.
 
 Retryable network failures are persisted and retried after five minutes. Editorial holds
 are kept separate from infrastructure failures.

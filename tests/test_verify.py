@@ -134,6 +134,66 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(model.call_count, 1)
         self.assertEqual(fetch.call_count, 1)
 
+    def test_serpapi_query_removes_wire_prefix_url_and_caps_words(self):
+        row = story("https://x.com/BitcoinArchive/status/1", "X guide @BitcoinArchive")
+        row["title"] = "BREAKING: " + " ".join(f"word{i}" for i in range(40)) \
+                       + " https://t.co/example"
+        query = verify._serpapi_query(row)
+        self.assertFalse(query.lower().startswith("breaking"))
+        self.assertNotIn("https://", query)
+        self.assertEqual(len(query.split()), 32)
+
+    def test_serpapi_results_are_source_ranked_and_capped(self):
+        row = story("https://cryptoslate.com/tip", "CryptoSlate")
+        results = [
+            {"rank": 1, "url": "https://news.bitcoin.com/relay", "outlet": "Bitcoin.com"},
+            {"rank": 2, "url": "https://coindesk.com/report", "outlet": "CoinDesk"},
+            {"rank": 3, "url": "https://reuters.com/report", "outlet": "Reuters"},
+            {"rank": 4, "url": "https://sec.gov/newsroom/press-releases/test", "outlet": "SEC"},
+            {"rank": 5, "url": "https://theblock.co/report", "outlet": "The Block"},
+        ]
+        with patch("nbn.search.google", return_value=results):
+            refs = verify._serpapi_ranked_refs(row)
+        self.assertEqual(
+            [ref["url"] for ref in refs],
+            [
+                "https://sec.gov/newsroom/press-releases/test",
+                "https://reuters.com/report",
+                "https://coindesk.com/report",
+            ],
+        )
+
+    def test_first_qualified_serpapi_ref_stops_before_hosted_search(self):
+        row = story("https://cryptoslate.com/tip", "CryptoSlate")
+        result_rows = [{
+            "rank": 1,
+            "url": "https://reuters.com/world/bitcoin-policy",
+            "outlet": "Reuters",
+        }]
+        verdict = {
+            "directly_supports": True,
+            "originality": "original_reporting",
+            "subject_is_actor": False,
+        }
+        fetched = {
+            "text": "Independent Bitcoin policy reporting",
+            "final_url": "https://reuters.com/world/bitcoin-policy",
+            "canonical_url": "https://reuters.com/world/bitcoin-policy",
+            "byline": "Reporter",
+            "outcome": "ok",
+        }
+        with patch("nbn.search.google", return_value=result_rows) as search, \
+                patch.object(verify, "_model_json", return_value=verdict) as model, \
+                patch("nbn.sources.fetch_article", return_value=fetched) as fetch:
+            result = verify.resolve_source(row, "CryptoSlate detector text")
+        self.assertFalse(result.held)
+        self.assertEqual(result.selected.source_id, "reuters")
+        self.assertIn("SerpAPI ranked ref 1", result.note)
+        self.assertEqual(search.call_count, 1)
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(model.call_count, 1)
+        self.assertFalse(model.call_args.kwargs["web"])
+
     def test_ineligible_model_candidate_is_rejected_before_fetch(self):
         verdict = {
             "original": {"directly_supports": True, "originality": "original_reporting",

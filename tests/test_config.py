@@ -34,6 +34,11 @@ print(json.dumps({
     'delay': config.PUBLISH_DELAY_SECONDS,
     'autopost': config.AUTOPOST_ENABLED,
     'source_policy_mode': config.SOURCE_POLICY_MODE,
+    'serpapi': bool(config.SERPAPI_KEY),
+    'serpapi_timeout': config.SERPAPI_TIMEOUT_SECONDS,
+    'serpapi_results': config.SERPAPI_MAX_RESULTS,
+    'hosted_search': config.HOSTED_SEARCH_ENABLED,
+    'hosted_search_timeout': config.HOSTED_SEARCH_TIMEOUT_SECONDS,
 }))
 """
     result = subprocess.run(
@@ -60,6 +65,11 @@ class ConfigTests(unittest.TestCase):
             "delay": 30,
             "autopost": False,
             "source_policy_mode": "enforce",
+            "serpapi": False,
+            "serpapi_timeout": 15.0,
+            "serpapi_results": 5,
+            "hosted_search": True,
+            "hosted_search_timeout": 45.0,
         })
 
     def test_overlap_lanes_can_be_disabled_independently(self):

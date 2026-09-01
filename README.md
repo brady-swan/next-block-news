@@ -21,6 +21,7 @@ poll -> intake -> tier annotation -> triage -> resolve source/evidence -> draft 
 | `nbn/brain.py` | Claude triage and single-post drafting |
 | `config/source_tiers.toml` | Canonical P0/T1/T2/T3/T4 source registry |
 | `nbn/source_policy.py` | Validated source classification, normalization, and ranking |
+| `nbn/search.py` | Bounded model-free SerpAPI discovery; returned links are untrusted pointers |
 | `nbn/verify.py` | Typed source resolution, evidence qualification, and claim support |
 | `nbn/lint.py` | Scope, style, mention, URL, attribution, and number-integrity vetoes |
 | `nbn/editor.py` | Last-mile reader-value and feed-context judgment for autonomous posts |

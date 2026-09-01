@@ -97,8 +97,10 @@ cost zero. Three tiers:
   their post is never evidence and NBN still replaces it with an eligible receipt.
 - **Broad detectors** (WatcherGuru, CoinDesk, TheBlockCo) — ordinary tips, never sources.
 
-**Web search (on demand):** Claude's server-side web_search, used by verification (§3)
-and the self-audit.
+**Web search (on demand):** NBN calls SerpAPI directly for bounded Google organic
+discovery. No model participates in retrieval. Returned URLs and snippets are untrusted
+pointers: NBN reclassifies them, fetches eligible pages, and uses Sonnet only to assess
+the fetched evidence. Claude's server-side search is a one-use, 45-second last resort.
 
 ## 2. Intake gates (deterministic, pre-model)
 
@@ -121,7 +123,10 @@ Guide-account leads are ordered ahead of ordinary FIFO intake and must reach sou
 research when they contain a plausible factual news claim or story link; terseness,
 link-only presentation, hype, or lack of in-post corroboration is not a reason to skip.
 Eligible P0/Tier 1/Tier 2 pages linked by the guide are fetched and assessed directly
-before the slower broad web-search upgrade path.
+before search. If no linked page qualifies, NBN makes one bounded SerpAPI query, ranks
+eligible results by the NBN source ladder, and independently fetches and assesses up to
+three. Search snippets never count as evidence. Only after that path is exhausted may the
+single-use hosted-search fallback run.
 If a batch response omits any item, NBN retries only the omitted subset. A still-omitted
 ordinary item is held, while a still-omitted guide lead fails into research—never skip.
 
@@ -392,12 +397,16 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `TYPEFULLY_API_KEY` / `TYPEFULLY_SOCIAL_SET_ID` | set / `329191` | the rail |
 | `NBN_X_BEARER_TOKEN` | set (shared w/ Node) | X reads — ⚠️ regeneration queued (partial chat exposure 8/30) |
 | `NBN_MAX_LLM_CALLS_PER_HOUR` | `60` | runaway-cost guard |
+| `SERPAPI_KEY` | set (shared account w/ Node) | model-free Google organic source discovery |
+| `NBN_SERPAPI_TIMEOUT_SECONDS` / `NBN_SERPAPI_MAX_RESULTS` | `15` / `5` | bounded direct-search request |
+| `NBN_HOSTED_SEARCH_ENABLED` / `NBN_HOSTED_SEARCH_TIMEOUT_SECONDS` | `true` / `45` | tightly bounded last-resort model search |
 
 ## 12. Costs (order of magnitude)
 
 Railway ~$5-10/mo · Typefully ~$10/mo · X Premium on the handle · LLM: Sonnet triage/
-drafting + Fable editor + web-search verification ≈ $2-5/day typical · X reads ≈
-$10-20/mo (since_id makes quiet polls free) · Perception rides the shared key.
+drafting/evidence assessment + Fable editor ≈ $2-5/day typical · SerpAPI search usage
+rides the Node's shared account · X reads ≈ $10-20/mo (since_id makes quiet polls free) ·
+Perception rides the shared key.
 Run rate ≈ **$100-180/mo all-in**.
 
 ## 13. Failure modes

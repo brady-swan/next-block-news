@@ -17,6 +17,10 @@ log = logging.getLogger("nbn.verify")
 # closed and let the worker continue; the SDK's default 10-minute timeout plus retries
 # can otherwise hold the single worker lease for half an hour.
 client = anthropic.Anthropic(timeout=120.0, max_retries=0)
+web_client = anthropic.Anthropic(
+    timeout=config.HOSTED_SEARCH_TIMEOUT_SECONDS,
+    max_retries=0,
+)
 
 ORIGINALITY = {
     "primary_artifact", "original_reporting", "original_research", "technical_original",
@@ -139,11 +143,14 @@ def _model_json(prompt: str, web: bool = False, max_tokens: int = 2400) -> dict:
     kwargs = dict(model=config.ANTHROPIC_MODEL, max_tokens=max_tokens,
                   messages=[{"role": "user", "content": prompt}])
     if web:
-        kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}]
+        if not config.HOSTED_SEARCH_ENABLED:
+            raise RuntimeError("hosted web search disabled")
+        kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 1}]
     messages = kwargs["messages"]
-    for _ in range(4):
+    active_client = web_client if web else client
+    for _ in range(2 if web else 4):
         kwargs["messages"] = messages
-        response = client.messages.create(**kwargs)
+        response = active_client.messages.create(**kwargs)
         if response.stop_reason != "pause_turn":
             break
         messages = messages + [{"role": "assistant", "content": response.content}]
@@ -378,6 +385,57 @@ def _guide_ranked_refs(item: dict) -> list[dict]:
     return accepted
 
 
+_WIRE_PREFIX_RE = re.compile(
+    r"^(?:(?:just\s+in|breaking|new|watch|update|exclusive)\s*[:\-—|]\s*)+",
+    re.IGNORECASE,
+)
+
+
+def _serpapi_query(item: dict) -> str:
+    """Build one bounded literal search query from the news claim."""
+    title = re.sub(r"https?://\S+", " ", str(item.get("title") or ""))
+    title = _WIRE_PREFIX_RE.sub("", " ".join(title.split())).strip(" -—:|\n\t")
+    words = title.split()
+    if len(words) > 32:
+        title = " ".join(words[:32])
+    if title:
+        return title[:400]
+    story_key = str(item.get("story_key") or "").replace("-", " ").strip()
+    return story_key[:400]
+
+
+def _serpapi_ranked_refs(item: dict) -> list[dict]:
+    """Discover and policy-rank eligible sources without model-driven search."""
+    from . import search
+
+    query = _serpapi_query(item)
+    if not query:
+        return []
+    try:
+        rows = search.google(query)
+    except search.SearchError as exc:
+        log.warning("SerpAPI source discovery failed: %s", exc)
+        return []
+    eligible, seen = [], set()
+    for row in rows:
+        url = str(row.get("url") or "").strip()
+        normalized = source_policy.normalize_url(url)
+        if not normalized or normalized in seen:
+            continue
+        ref = source_policy.classify(url, str(row.get("outlet") or ""))
+        if not ref.base_receipt_eligible or ref.tier not in {"p0", "t1", "t2"}:
+            continue
+        seen.add(normalized)
+        eligible.append({
+            "url": url,
+            "outlet": ref.display_name,
+            "rank": int(row.get("rank") or len(eligible) + 1),
+            "tier_rank": source_policy.TIER_RANK[ref.tier],
+        })
+    eligible.sort(key=lambda row: (row["tier_rank"], row["rank"]))
+    return eligible[:3]
+
+
 def _try_prepared_refs(
     item: dict,
     original: source_policy.SourceRef,
@@ -476,6 +534,17 @@ def _try_guide_ranked_refs(
     )
 
 
+def _try_serpapi_ranked_refs(
+    item: dict,
+    original: source_policy.SourceRef,
+    source_text: str,
+) -> ResolutionResult | None:
+    """Try model-free Google discoveries before hosted model-driven search."""
+    return _try_prepared_refs(
+        item, original, source_text, _serpapi_ranked_refs(item), "SerpAPI",
+    )
+
+
 def resolve_source(item: dict, original_text: str, con=None,
                    use_persisted: bool = True, force_refresh: bool = False) -> ResolutionResult:
     """Return a typed, non-destructive resolution for one actionable item."""
@@ -516,6 +585,10 @@ def resolve_source(item: dict, original_text: str, con=None,
         _url_cache[cache_key] = (time.time(), prepared)
         return prepared
     prepared = _try_guide_ranked_refs(item, original, source_text)
+    if prepared is not None:
+        _url_cache[cache_key] = (time.time(), prepared)
+        return prepared
+    prepared = _try_serpapi_ranked_refs(item, original, source_text)
     if prepared is not None:
         _url_cache[cache_key] = (time.time(), prepared)
         return prepared

@@ -1,0 +1,89 @@
+"""Bounded model-free public web search for source discovery."""
+
+from __future__ import annotations
+
+from typing import Any
+from urllib.parse import urlsplit
+
+import httpx
+
+from . import config
+
+_SEARCH_URL = "https://serpapi.com/search.json"
+
+
+class SearchError(Exception):
+    """A retryable SerpAPI transport or response failure."""
+
+
+def google(query: str, *, max_results: int | None = None) -> list[dict]:
+    """Return bounded Google organic results without model judgment.
+
+    Results are discovery pointers only. Callers must independently validate the URL,
+    fetch the page, and determine whether the page supports the story.
+    """
+    if not config.SERPAPI_KEY:
+        return []
+    normalized_query = " ".join(str(query or "").split()).strip()
+    if not normalized_query:
+        return []
+    limit = max(1, min(int(max_results or config.SERPAPI_MAX_RESULTS), 8))
+    params = {
+        "engine": "google",
+        "q": normalized_query[:400],
+        "gl": "us",
+        "hl": "en",
+        "num": limit,
+        "no_cache": "false",
+        "api_key": config.SERPAPI_KEY,
+    }
+    try:
+        response = httpx.get(
+            _SEARCH_URL,
+            params=params,
+            timeout=config.SERPAPI_TIMEOUT_SECONDS,
+            follow_redirects=False,
+        )
+    except httpx.HTTPError as exc:
+        raise SearchError(f"serpapi transport error: {type(exc).__name__}") from exc
+    if not response.is_success:
+        raise SearchError(f"serpapi HTTP {response.status_code}")
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise SearchError("serpapi returned invalid JSON") from exc
+    if not isinstance(body, dict) or body.get("error"):
+        raise SearchError("serpapi returned an error response")
+    metadata_status = (body.get("search_metadata") or {}).get("status")
+    if metadata_status and metadata_status != "Success":
+        raise SearchError("serpapi search did not complete")
+    return _organic_results(body, limit)
+
+
+def _organic_results(body: dict[str, Any], limit: int) -> list[dict]:
+    results: list[dict] = []
+    rows = body.get("organic_results") or []
+    if not isinstance(rows, list):
+        return results
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        url = str(raw.get("link") or "").strip()
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            continue
+        publisher = str(raw.get("source") or "").strip()
+        if not publisher:
+            publisher = parsed.hostname.lower().removeprefix("www.")
+        results.append(
+            {
+                "rank": int(raw.get("position") or len(results) + 1),
+                "url": url,
+                "outlet": publisher,
+                "title": str(raw.get("title") or "").strip()[:300],
+                "snippet": str(raw.get("snippet") or "").strip()[:1200],
+            }
+        )
+        if len(results) >= limit:
+            break
+    return results

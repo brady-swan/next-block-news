@@ -13,6 +13,18 @@ EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-fable-5")
 EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "low")
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
+# Model-free Google organic discovery. The credential is shared with the Marketing
+# Node account, but NBN calls SerpAPI directly and applies its own source policy.
+SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
+SERPAPI_TIMEOUT_SECONDS = float(os.environ.get("NBN_SERPAPI_TIMEOUT_SECONDS", "15"))
+SERPAPI_MAX_RESULTS = int(os.environ.get("NBN_SERPAPI_MAX_RESULTS", "5"))
+HOSTED_SEARCH_ENABLED = os.environ.get(
+    "NBN_HOSTED_SEARCH_ENABLED", "true"
+).lower() == "true"
+HOSTED_SEARCH_TIMEOUT_SECONDS = float(
+    os.environ.get("NBN_HOSTED_SEARCH_TIMEOUT_SECONDS", "45")
+)
+
 # Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
 REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")
 
