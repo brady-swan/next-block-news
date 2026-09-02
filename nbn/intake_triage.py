@@ -206,8 +206,13 @@ def route_cycle(con, inserted: list[dict], *, run_id: str) -> dict:
         recovery_hours=config.INTAKE_TRIAGE_RECOVERY_HOURS,
     )
     if not work:
-        return {"mode": mode, "work": 0, "reconciled": reconciliation,
-                "reservation": None}
+        diagnostics = {"mode": mode, "work": 0, "reconciled": reconciliation,
+                       "reservation": None}
+        store.kv_set(con, "intake_triage:last_run", json.dumps(
+            {key: value for key, value in diagnostics.items() if key != "reservation"},
+            separators=(",", ":"),
+        ))
+        return diagnostics
 
     model_rows, overflow_rows, packet = _bounded_batch(work)
     batch_id = f"{run_id}:intake:{uuid.uuid4().hex[:8]}"

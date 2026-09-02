@@ -28,6 +28,16 @@ def response_for(rows):
 
 
 class IntakeTriageTests(unittest.TestCase):
+    def test_empty_enforce_cycle_updates_status_without_calling_model(self):
+        with temporary_store() as con, \
+                patch.object(config, "INTAKE_TRIAGE_MODE", "enforce"), \
+                patch.object(intake_triage.client.messages, "create") as create:
+            result = intake_triage.route_cycle(con, [], run_id="empty")
+            create.assert_not_called()
+            self.assertEqual(result["work"], 0)
+            self.assertIn('"mode":"enforce"',
+                          store.kv_get(con, "intake_triage:last_run"))
+
     def test_observe_persists_without_removing_background_from_desk(self):
         with temporary_store() as con:
             inserted = store.upsert_new_items(con, [
