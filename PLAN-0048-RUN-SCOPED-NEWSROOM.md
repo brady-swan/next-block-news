@@ -491,3 +491,18 @@ paused automatically.
 - A single Railway switch restores the proven legacy path without a code rollback.
 - Production health, Node ingestion, Typefully state, the Desk, and both audit mechanisms
   are healthy after deployment.
+
+## Deployment evidence — 2026-09-01
+
+- Independent lead review: approved after all six blocking findings were resolved.
+- Tests: 261 local tests pass; 31 focused newsroom/config tests pass in the production image.
+- Protocol: every stage-specific strict Anthropic tool grammar compiled against the live API;
+  one isolated complete session and one independent Fable support review succeeded.
+- Shadow: one natural two-item run completed with exact skip accounting. Early safe fallbacks
+  exposed and led to fixes for unsupported schema bounds, candidate/pointer ID ambiguity, and
+  blocked-page repeat behavior.
+- Draft: one natural run researched a The Block X ETF-flow tip, fetched Farside as the primary
+  receipt, recognized the exact event as already covered, and created no duplicate draft.
+- Live: Railway deployment `852cee28-5052-435e-8016-6f0edce7b584` completed; its first
+  non-empty run completed in three rounds with no error or publication. Health, Desk rendering,
+  Node v2 consumption, lease/heartbeat, and the external 15-minute audit were verified.

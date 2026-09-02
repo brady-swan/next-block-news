@@ -5,8 +5,10 @@ The deeper owner's manual is `SYSTEM.md`; this file is orientation and the rules
 not break.*
 
 **Operational update, 2026-09-01:** production reports `NBN_AUTOPOST_ENABLED=true` and
-`NBN_YIELD_IDENTITY_NORMALIZER_ENABLED=true`. The latter is a narrow, deterministic vetoed
-same-day U.S. 10-year-yield identity aid; it is not a general market-story merge rule.
+`NBN_RUN_NEWSROOM_MODE=live`. The run-scoped Sonnet newsroom is now the primary one-off
+news path; `NBN_RUN_NEWSROOM_FALLBACK=legacy` remains available only before a dossier is
+materialized. `NBN_YIELD_IDENTITY_NORMALIZER_ENABLED=true` is a narrow, deterministic
+vetoed same-day U.S. 10-year-yield identity aid, not a general market-story merge rule.
 
 ## What this is
 
@@ -29,16 +31,19 @@ snapshot on the Desk. Themes are broad subjects, not event keys or evidence. The
 establish corroboration, force/suppress a post, lower gates, or create quotas. Missing
 historical tags are explicitly unknown.
 
-**Deployment:** Plan 0047 conversion recovery is live. Node commit `891d27a` is on Railway
-deployment `88ae0188-7e15-47d7-9d36-5ca99074350b`; NBN commit `dd77690` is on final
-configuration deployment `8adc6afc-df6c-4b8e-bfba-fbedaa24599a`. Production wire run
-`177450` returned 12 candidates, repaired 4 upstream clusters, removed 8 unrelated refs,
-and kept every candidate headline aligned with rank 1. NBN consumed that exact run. Its
-production-image isolated suite passed 18 tests; a bounded recovery requeued 19 still-fresh
-timeout jobs; two observed worker cycles completed without runtime error or publication.
-Three receipts selected after deploy all had semantic support and receipt eligibility;
-zero fallback-supported receipts were found. The Desk shows exact resolver path/outcome,
-typed failure, guide-advance, completion, Node downgrade/reject, and recovery counts.
+**Deployment:** Plan 0048's run-scoped newsroom is live at NBN commit `aff659c`; the final
+Railway configuration deployment is `852cee28-5052-435e-8016-6f0edce7b584`. The staged
+rollout caught and fixed Anthropic schema-size compatibility, model-visible candidate-ID
+ambiguity, blocked-page retry behavior, and mandatory dossier-round accounting before live
+cutover. The local suite passes 261 tests; the production image passes the 31 focused
+newsroom/config tests. A natural shadow run accounted for two noise candidates; a natural
+draft run replaced a The Block X tip with Farside primary data and withheld the already
+covered ETF-flow event; the first non-empty live run completed normally. `/health` is clean,
+the Desk renders newsroom diagnostics, and the external 15-minute audit remains active.
+
+**Prior integration deployment:** Plan 0047 conversion recovery remains in the history.
+Node commit `891d27a` produced production wire run `177450`, whose versioned pulse is still
+consumed normally by NBN.
 
 ## The pipeline (read `nbn/main.py:cycle` and `nbn/newsroom.py`)
 
