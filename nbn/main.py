@@ -515,7 +515,8 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         for index, member in enumerate(members):
             store.set_status(con, member["url_hash"], status if index == 0 else "skipped",
                              resolution.story_key,
-                             None if index == 0 else "same story materialized from pooled evidence")
+                             "" if index == 0 else "same story materialized from pooled evidence",
+                             stage="delivery", category="output")
             _finish_actions(con, member, "completed", f"delivery result: {mode}")
         store.log_post(
             con, resolution.story_key, members[0]["url_hash"], klass, str(post),

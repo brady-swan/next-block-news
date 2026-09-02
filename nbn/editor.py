@@ -89,6 +89,8 @@ For each candidate, use practical editorial judgment:
 - judge rounding and numerical differences for materiality. Roughly 3% may describe 2.99%.
   Do not reject 159.95 versus 160.1 unless it changes the actual claim;
 - use recent coverage to prevent genuine repetition while allowing useful later developments;
+- if revision removes the actual new development and leaves only a static total or background
+  fact, drop the story rather than publish a fact with no news peg;
 - preserve or improve effective structure and length. Do not add facts absent from evidence.
 
 Return ONLY JSON:
