@@ -210,6 +210,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
             "selected_receipt": row.get("selected_receipt", {}),
             "inspected_evidence": row.get("inspected_evidence", [])[:8],
             "elevated_claim": bool(row.get("elevated_claim")),
+            "code_notes_to_fix_before_delivery": row.get("hard_rail_notes_for_revision", []),
         } for row in candidates],
         "recent_feed_newest_first": [{
             "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),

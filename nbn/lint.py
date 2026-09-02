@@ -160,7 +160,8 @@ def check_v2(post: str, meta: dict, item: dict) -> list:
     # Verbatim quotations must occur in at least one inspected receipt. Paraphrases,
     # rounded figures, and immaterial numerical presentation differences are editorial.
     source_text = str(meta.get("_source_text") or "")
-    for quote in re.findall(r'["“]([^"”]{8,})["”]', post):
+    quotes = re.findall(r'“([^”]{2,})”', post) + re.findall(r'"([^"\n]{2,})"', post)
+    for quote in quotes:
         if " ".join(quote.split()).casefold() not in " ".join(source_text.split()).casefold():
             errors.append(f"verbatim quote not in inspected evidence: {quote[:80]!r}")
     if len(post) > 2800:

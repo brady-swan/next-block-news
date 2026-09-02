@@ -32,6 +32,14 @@ class EditorialV2Tests(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
+    def test_short_separate_quotes_are_checked_independently(self):
+        errors = lint.check_v2(
+            'Inflation "stalled" in 2025. The Fed can "take a bit more time."',
+            {"_source_text": 'Inflation progress stalled in 2025. The Fed can take a bit more time.'},
+            {},
+        )
+        self.assertEqual(errors, [])
+
     def test_one_bad_story_does_not_sink_valid_story_and_omissions_defer(self):
         with temporary_store() as con:
             rows = [candidate("candidate-1"), candidate("candidate-2"), candidate("candidate-3")]

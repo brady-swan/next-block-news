@@ -422,15 +422,6 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         post = str(draft.get("post") or "").strip()
         source_text = str(draft.get("_source_text") or resolution.selected_text or "")
         hard_errors = lint.check_v2(post, {"_source_text": source_text}, anchor)
-        if hard_errors:
-            note = "defer:hard_rail:" + "; ".join(hard_errors)
-            for member in members:
-                store.defer_item(con, member["url_hash"], note[:300],
-                                 story_key=resolution.story_key, stage="hard_rail",
-                                 category="technical_defer")
-            result["held"] += len(members)
-            store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held")
-            continue
         evidence_ids = list(draft.get("evidence_fetch_ids") or [])
         fetches = [outcome.fetches[value] for value in evidence_ids
                    if value in outcome.fetches]
@@ -462,6 +453,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                     "url": record.final_url,
                                     "text": record.text[:8000]} for record in fetches],
             "elevated_claim": bool(draft.get("needs_second_source")),
+            "hard_rail_notes_for_revision": hard_errors,
         }
         candidates.append(row)
         candidate_rows[story_id] = {
