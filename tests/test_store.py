@@ -617,6 +617,76 @@ class StoreTests(unittest.TestCase):
         next_day_late = datetime.datetime(2026, 9, 1, 3, 0, tzinfo=utc)
         self.assertTrue(store.event_is_stale("2026-08-31", 2.5, next_day_late))
 
+    def test_newsroom_story_memory_is_bounded_prunable_and_corrupt_safe(self):
+        with temporary_store() as con:
+            now = time.time()
+            for index in range(15):
+                store.save_newsroom_story_attempt(
+                    con, "memory-story", "research_pending", {
+                        "story_id": f"attempt-{index}",
+                        "members": [f"member-{value}" for value in range(40)],
+                        "headlines": ["Bitcoin memory story"],
+                        "proposed_post": "P" * 12000,
+                        "failure": "defer:elevated_claim_needs_primary_or_two_reports",
+                        "objective": "O" * 1000,
+                        "evidence": [{
+                            "inspected_at": now, "final_url": f"https://example.com/{value}",
+                            "content_fingerprint": f"fp-{value}", "text": "E" * 12000,
+                        } for value in range(12)],
+                    }, now=now + index,
+                )
+            row = con.execute(
+                "SELECT attempts_json FROM newsroom_story_memory WHERE canonical_key='memory-story'"
+            ).fetchone()
+            attempts = json.loads(row["attempts_json"])
+            self.assertLessEqual(len(attempts), 12)
+            self.assertLessEqual(len(row["attempts_json"].encode()), 96 * 1024)
+            self.assertLessEqual(len(attempts[-1]["members"]), 25)
+            self.assertLessEqual(len(attempts[-1]["evidence"]), 8)
+
+            store.save_newsroom_delivery(
+                con, "memory-story", mode="DRAFT", backend_ref="typefully-1",
+            )
+            full = con.execute(
+                "SELECT * FROM newsroom_story_memory WHERE canonical_key='memory-story'"
+            ).fetchone()
+            serialized_bytes = sum(len(str(full[field] or "").encode()) for field in (
+                "canonical_key", "state", "attempts_json", "editor_json", "delivery_json"
+            ))
+            self.assertLessEqual(serialized_bytes, 96 * 1024)
+            memory = store.newsroom_story_memories(con)[0]
+            self.assertEqual(memory["state"], "delivered")
+            self.assertFalse(memory["delivery"]["reader_covered"])
+
+            con.execute(
+                "UPDATE newsroom_story_memory SET attempts_json='not-json'"
+                " WHERE canonical_key='memory-story'"
+            )
+            con.commit()
+            self.assertEqual(store.newsroom_story_memories(con), [])
+            con.execute(
+                "UPDATE newsroom_story_memory SET attempts_json='[]',expires_at=?"
+                " WHERE canonical_key='memory-story'", (now - 1,)
+            )
+            con.commit()
+            self.assertEqual(store.prune_newsroom_story_memory(con, now=now), 1)
+
+    def test_pending_item_carries_bounded_prior_decision_fields(self):
+        with temporary_store() as con:
+            saved = store.upsert_new_items(con, [item()])[0]
+            store.defer_item(
+                con, saved["url_hash"], "defer:needs one more source",
+                delay_seconds=1, story_key="same-event", stage="newsdesk",
+                category="editorial_defer",
+            )
+            con.execute("UPDATE items SET defer_until=0 WHERE url_hash=?", (saved["url_hash"],))
+            con.commit()
+            pending = store.pending_items(con, 1)[0]
+            self.assertEqual(pending["story_key"], "same-event")
+            self.assertEqual(pending["note"], "defer:needs one more source")
+            self.assertEqual(pending["decision_stage"], "newsdesk")
+            self.assertEqual(pending["decision_category"], "editorial_defer")
+
 
 if __name__ == "__main__":
     unittest.main()

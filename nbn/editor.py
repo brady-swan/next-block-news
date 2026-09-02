@@ -88,6 +88,10 @@ For each candidate, use practical editorial judgment:
   link readers get, not a demand that one page reproduce every harmless detail;
 - judge rounding and numerical differences for materiality. Roughly 3% may describe 2.99%.
   Do not reject 159.95 versus 160.1 unless it changes the actual claim;
+- test apparent contradictions across actor, place or facility, time, and scope. A newer
+  facility-specific action is not contradicted by an older statement of general company
+  intent. When current evidence supports a narrower accurate version, revise to that scope
+  instead of dropping useful news;
 - use recent coverage to prevent genuine repetition while allowing useful later developments;
 - if revision removes the actual new development and leaves only a static total or background
   fact, drop the story rather than publish a fact with no news peg;
@@ -257,7 +261,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 continue
             decisions[story_id] = {
                 "verdict": verdict, "post": final,
-                "reason": str(row.get("reason") or "")[:300],
+                "reason": str(row.get("reason") or "")[:500],
             }
         return {"ok": True, "decisions": decisions}
     except Exception as exc:  # noqa: BLE001 - preserve good desk work as drafts

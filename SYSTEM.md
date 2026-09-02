@@ -15,6 +15,12 @@ Typefully's batched analytics endpoint adds impressions, likes, reposts, comment
 and snapshot time when available. These are explicitly weak, age-dependent craft signals—not
 evidence, importance scores, or a mandate to chase popular subject matter.
 
+Fresh model context no longer means discarded reporting work. A bounded 72-hour editorial
+workbench carries canonical exact-event identity, the prior proposed post, the precise
+unresolved research objective, revalidated inspected evidence, and independent-editor
+feedback into later sessions. The workbench is informational: it never marks a story covered,
+suppresses a new candidate, or publishes anything by itself.
+
 The product stance is practical: publish useful, well-supported Bitcoin coverage and learn
 from production. This is an early, low-visibility account, not the New York Times. The
 system keeps consequential safety and idempotency rails, but freshness, semantic novelty,
@@ -90,6 +96,19 @@ One clean retry is allowed for a run-level model/transport failure. If that also
 items remain pending with a typed technical defer. V2 never automatically falls into the
 legacy triage/writer/resolver stack.
 
+Before evidence validation, v2 arbitrates exact-event identity. One canonical family already
+attached to the member items wins; conflicting families hold without merging. Sonnet may also
+select an exact key exposed by the coverage or continuity board. Only then may code register
+the newly proposed slug as an alias. There is no fuzzy automatic merge, and Node theme IDs
+remain too broad to serve as event keys.
+
+When research is incomplete, v2 retains the canonical key, proposed post, inspected evidence,
+and a code-mapped objective such as “find one independent second report.” The next fresh desk
+sees this on `continuity_board` and can continue rather than rediscovering the story. Stored
+evidence is citable for at most 24 hours and only after its fingerprint, public URL, current
+source classification, eligibility, and independence are recomputed. It receives a fresh
+run-owned `memory_*` fetch ID; stale or corrupt evidence cannot satisfy a gate.
+
 ## Editorial doctrine
 
 - Bitcoin includes the network, asset, and monetary project. Protocol, mining, custody,
@@ -156,6 +175,12 @@ If the editor API is unavailable, otherwise safe desk work is preserved as Typef
 it is never autonomously published, discarded, or routed through legacy models. An omitted
 editor decision is also staged as a draft.
 
+The editor compares apparent conflicts by actor, place or facility, time, and scope. A newer
+specific action is not contradicted by an older general intention; when current evidence
+supports a narrower accurate version, the editor should revise rather than drop useful news.
+Its bounded verdict, reason, and copy are retained as context for later related candidates.
+That feedback is not a hidden rejection rule.
+
 ## Delivery classes and safety
 
 When autopost is enabled, `primary`, `secondary`, and `corroborated` editor-approved v2
@@ -191,6 +216,8 @@ and stages corrections for human review.
 ## Operations
 
 - Database: `/data/nbn.db`; tape: `/data/tapes/`.
+- Cross-run story workbench: `newsroom_story_memory`, 72-hour row TTL, 24-hour evidence
+  eligibility, 12 attempts and roughly 96 KiB maximum serialized row size per event.
 - Health: `/health`; status: `/status`; owner Desk: token-gated `/report`.
 - Deploy: `railway up --detach` from this linked repository.
 - Important knobs: `NBN_EDITORIAL_ENGINE=v2`, `NBN_DESK_INTERVAL_SECONDS=900`,

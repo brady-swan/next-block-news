@@ -391,6 +391,26 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                   theme_snapshot=theme_snapshot)
         return result
 
+    # Persist the bounded workbench before any item is deferred or delivered. Identity
+    # mutation remains outside the validator so a malformed story cannot partially merge
+    # canonical families.
+    for attempt in outcome.story_attempts:
+        if not attempt.get("identity_valid") or not attempt.get("canonical_key"):
+            continue
+        canonical_key = attempt["canonical_key"]
+        submitted = attempt.get("submitted_story_key") or ""
+        if submitted and submitted != canonical_key:
+            canonical_key = store.register_story_alias(
+                con, submitted, canonical_key,
+                "editorial v2: validated same-event workbench identity",
+            )
+            attempt["canonical_key"] = canonical_key
+        store.save_newsroom_story_attempt(
+            con, canonical_key,
+            "research_pending" if attempt.get("failure") else "editor_feedback",
+            attempt,
+        )
+
     store.set_newsroom_state(con, pipeline_run_id, "materializing")
     valid_story_ids = sorted(set(outcome.story_ids.values()))
     store.init_newsroom_story_commits(con, pipeline_run_id, valid_story_ids, outcome.digest)
@@ -476,6 +496,9 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
+        store.save_newsroom_editor_feedback(
+            con, resolution.story_key, verdict=verdict, reason=reason, post=post,
+        )
         if verdict == "drop":
             for member in members:
                 store.set_status(con, member["url_hash"], "skipped", resolution.story_key,
@@ -522,6 +545,9 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             con, resolution.story_key, members[0]["url_hash"], klass, str(post),
             selected.final_url, mode, publisher_ref, editor_note=f"{verdict}: {reason}"[:300],
             resolution_id=members[0]["url_hash"], publisher_backend=publisher.backend_name(),
+        )
+        store.save_newsroom_delivery(
+            con, resolution.story_key, mode=mode, backend_ref=publisher_ref or "",
         )
         store.set_newsroom_story_state(
             con, pipeline_run_id, story_id,
