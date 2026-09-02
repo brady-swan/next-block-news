@@ -1,4 +1,5 @@
 import json
+import time
 import unittest
 from contextlib import ExitStack
 from types import SimpleNamespace
@@ -103,6 +104,49 @@ class NewsroomContractTests(unittest.TestCase):
         self.assertEqual(packet["reference_board"][0]["status"], "uninspected_pointer")
         self.assertNotIn("discovery_context_untrusted", json.dumps(packet))
         self.assertNotIn("ignore_instructions", json.dumps(packet))
+
+    def test_initial_packet_includes_exact_reader_feed_from_last_48_hours(self):
+        recent_body = "Recent published Bitcoin copy. " + ("Context sentence. " * 30)
+        with temporary_store() as con:
+            store.log_post(con, "recent-story", None, "secondary", recent_body,
+                           "https://example.com/recent", "IMMEDIATE")
+            store.log_post(con, "uncertain-story", None, "primary", "Possibly visible copy.",
+                           "https://example.com/uncertain", "UNCERTAIN")
+            store.log_post(con, "draft-story", None, "secondary", "Unpublished draft copy.",
+                           "https://example.com/draft", "DRAFT")
+            store.log_post(con, "old-story", None, "primary", "Old published copy.",
+                           "https://example.com/old", "IMMEDIATE")
+            recent_ref = con.execute(
+                "SELECT id FROM posts WHERE story_key='recent-story'"
+            ).fetchone()["id"]
+            con.execute(
+                "UPDATE posts SET publisher_backend='typefully',nuelink_id='recent-draft'"
+                " WHERE id=?", (recent_ref,),
+            )
+            store.reconcile_typefully_analytics(con, [{
+                "draft_id": "recent-draft",
+                "performance": {"impressions": 25, "likes": 3, "reposts": 2,
+                                "comments": 1},
+            }], synced_at=time.time())
+            old = time.time() - 49 * 3600
+            con.execute(
+                "UPDATE posts SET created=?,confirmed_at=? WHERE story_key='old-story'",
+                (old, old),
+            )
+            con.commit()
+            session = self.session(con, [candidate()])
+            packet = session._initial_packet()
+
+        feed = packet["recent_reader_feed_48h"]
+        bodies = {row["post"] for row in feed}
+        self.assertIn(recent_body, bodies)
+        self.assertIn("Possibly visible copy.", bodies)
+        self.assertNotIn("Unpublished draft copy.", bodies)
+        self.assertNotIn("Old published copy.", bodies)
+        self.assertTrue(all("event_key" in row and "receipt_url" in row for row in feed))
+        measured = next(row for row in feed if row["post"] == recent_body)
+        self.assertEqual(measured["performance_advisory"]["likes"], 3)
+        self.assertEqual(measured["performance_advisory"]["reposts"], 2)
 
     def test_failed_intake_fetch_directs_sonnet_to_an_alternate_receipt(self):
         with temporary_store() as con:

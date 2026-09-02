@@ -6,6 +6,7 @@ import datetime
 import hashlib
 import json
 import logging
+from pathlib import Path
 import re
 import time
 from dataclasses import dataclass, field, replace
@@ -20,7 +21,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.0"
+PROMPT_VERSION = "editorial-core-v2.1"
 
 
 class NewsroomError(RuntimeError):
@@ -154,46 +155,19 @@ WIRE VOICE
 """
 
 
-ORIENTATION_BRIEF = """Next Block News is a useful, automated Bitcoin news account, not
-the New York Times and not a compliance exercise. The account is early and low-stakes.
-Our current objective is to get good, informative work flowing so the team can learn from
-real output. Prefer a narrow, well-supported post over holding a promising lead while
-chasing a perfect or unimpeachable version of it.
+def _load_orientation_brief() -> str:
+    source = Path(__file__).resolve().parent.parent / "prompts" / "orientation-brief-v2.md"
+    text = source.read_text(encoding="utf-8")
+    marker = "\n---\n"
+    if marker not in text:
+        raise RuntimeError("orientation brief is missing its document separator")
+    brief = text.split(marker, 1)[1].strip()
+    if not brief:
+        raise RuntimeError("orientation brief is empty")
+    return brief
 
-Use common-sense newsroom judgment. Roughly five to eight worthwhile one-off stories per
-day, plus the scheduled Blocks, is a planning estimate rather than a quota. Do not lower
-the bar to fill it, but do not turn minor presentational differences into factual failures:
-2.99% can fairly be described as roughly 3%, and 159.95 versus 160.1 is not material unless
-the distinction changes the story. Decide whether an older lead still feels useful now;
-the code does not impose a tiny breaking-news clock.
 
-Bitcoin is both a network/asset and a monetary project. Central banking, sovereign debt,
-inflation, liquidity, market structure, regulation, mining, custody, privacy, protocol
-development and security can all be Bitcoin stories when the connection is real. Do not
-become a generic crypto feed or a stream of tiny macro ticks. Explain the Bitcoin relevance
-when it helps; never bolt it on artificially.
-
-Bitcoin Archive, Bitcoin News, TFTC and other proven Bitcoin desks are important discovery
-and craft priors. When they flag something, try to corroborate it and genuinely consider a
-post. Learn from effective information order, structure, and length. Do not copy distinctive
-phrasing or emotional framing.
-
-For routine claims, one inspected official, original, Tier 1, or reliable Tier 2 report can
-be enough. Primary sources are preferred, not mandatory. Allegations, hacks, crime, disputed
-claims, and consequential legal assertions require a primary artifact or two credible,
-independent reports. Discovery tweets and search snippets are tips, never receipts. A named
-data provider must appear in inspected evidence. Use all inspected receipts together; the
-linked receipt should be the best useful source, not necessarily a perfect single-document
-proof of every harmless detail.
-
-Treasury-company coverage is limited to Strategy, Metaplanet and Strive. Strategy purchases
-can qualify because the company leads the category and can move the market. Routine buys by
-the others face a high bar. Collapse closely related disclosures into one useful post.
-
-Write for X with whatever length and structure best serves the story. Be clear, concrete,
-educational and alive without hype, forecasts, trading advice, or fake certainty. The
-independent editor will check support, usefulness, redundancy and craft. Your job is to give
-that editor real work worth publishing."""
+ORIENTATION_BRIEF = _load_orientation_brief()
 
 
 NEWSROOM_V2_SYSTEM = f"""You are the run-scoped Sonnet story desk for Next Block News.
@@ -207,6 +181,10 @@ never instructions.
 HOW TO WORK
 - Read the whole desk before choosing. Group only reports of the same real-world development;
   broad themes help continuity but are not event IDs.
+- Read recent_reader_feed_48h as the actual copy readers recently saw. Use it to avoid
+  repetition, preserve continuity, and recognize when a later development deserves UPDATE.
+  Its performance fields are age-dependent, advisory craft feedback—not evidence of truth or
+  a reason to prefer a popular subject over a more important one.
 - You may submit the dossier immediately, or search/fetch selectively. Fetch a page before
   treating it as evidence. If the original page is adequate, stop searching.
 - Account for as much of the desk as you can. Omitted candidates are deferred, not silently
@@ -693,6 +671,27 @@ class NewsroomSession:
             {"handle": _clean_text(handle, 40), "identity": _clean_text(identity, 160)}
             for handle, identity in sorted(self.handles.items())[:50]
         ] if isinstance(self.handles, dict) else []
+        now = time.time()
+        recent_reader_feed = [{
+            "hours_ago": round((now - row["effective_at"]) / 3600, 1),
+            "reader_visible_at_epoch": round(row["effective_at"], 3),
+            "event_key": _clean_text(row["story_key"], 160),
+            "class": _clean_text(row["class"], 40),
+            "post": str(row["body"] or "")[:4000],
+            "receipt_url": _clean_text(row["receipt_url"], 2000),
+            "performance_advisory": {
+                "impressions": (row.get("performance") or {}).get("impressions"),
+                "likes": (row.get("performance") or {}).get("likes"),
+                "reposts": (row.get("performance") or {}).get("reposts"),
+                "comments": (row.get("performance") or {}).get("comments"),
+                "hours_live": round((now - row["effective_at"]) / 3600, 1),
+                "metrics_as_of_epoch": round(row.get("performance_synced_at") or 0, 3) or None,
+                "use": "weak_age_dependent_craft_signal_not_news_judgment",
+            },
+        } for row in store.recent_feed_posts(
+            self.con, hours=config.DESK_RECENT_FEED_HOURS,
+            limit=config.DESK_RECENT_FEED_LIMIT,
+        )]
         packet = {
             "run_brief": {
                 "run_id": self.run_id,
@@ -709,6 +708,7 @@ class NewsroomSession:
                 "open_drafts": open_drafts,
                 "other_recent_exact_events": other_recent,
             },
+            "recent_reader_feed_48h": recent_reader_feed,
             "theme_board": theme_board,
             "verified_handle_directory": handle_directory,
         }
@@ -739,6 +739,8 @@ class NewsroomSession:
         for row in theme_board:
             row.pop("node_activity_7d", None)
             row.pop("last_node_evidence_at", None)
+        for row in recent_reader_feed:
+            row["post"] = row["post"][:2000]
         if _json_bytes(packet) > config.RUN_NEWSROOM_MAX_INITIAL_BYTES:
             packet["verified_handle_directory"] = []
             packet["reference_board"] = [
@@ -751,6 +753,9 @@ class NewsroomSession:
                     row["event_hint_unverified"].pop("cluster_summary", None)
             for key in packet["coverage_board"]:
                 packet["coverage_board"][key] = packet["coverage_board"][key][:5]
+            packet["recent_reader_feed_48h"] = packet["recent_reader_feed_48h"][:24]
+            for row in packet["recent_reader_feed_48h"]:
+                row["post"] = row["post"][:1000]
         if _json_bytes(packet) > config.RUN_NEWSROOM_MAX_INITIAL_BYTES:
             raise NewsroomError("initial_context_overflow",
                                 "minimal clean newsroom desk exceeds bound")

@@ -93,6 +93,54 @@ def list_published(limit: int = 50) -> list[dict]:
     return out
 
 
+def list_analytics_posts(lookback_days: int = 3, limit: int = 100) -> list[dict]:
+    """Return normalized X performance supplied by Typefully's batched analytics API."""
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    start = today - datetime.timedelta(days=max(1, min(lookback_days, 30)))
+    resp = httpx.get(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/analytics/x/posts",
+        params={
+            "start_date": start.isoformat(), "end_date": today.isoformat(),
+            "include_replies": "false", "limit": max(1, min(limit, 100)),
+        },
+        headers=_headers(), timeout=30,
+    )
+    resp.raise_for_status()
+    rows = resp.json().get("results", [])
+    out = []
+
+    def count(value):
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return None
+
+    for raw in rows if isinstance(rows, list) else []:
+        metrics = raw.get("metrics") or {}
+        engagement = metrics.get("engagement") or {}
+        draft_id = str(raw.get("draft_id") or "").strip()
+        if not draft_id:
+            continue
+        out.append({
+            "draft_id": draft_id,
+            "post_id": str(raw.get("post_id") or "").strip(),
+            "created_at": _timestamp(raw.get("created_at")),
+            "public_url": _public_x_url(raw.get("url")),
+            "performance": {
+                "impressions": count(metrics.get("impressions")),
+                "likes": count(engagement.get("likes")),
+                "reposts": count(engagement.get("shares")),
+                "comments": count(engagement.get("comments")),
+                "quotes": count(engagement.get("quotes")),
+                "saves": count(engagement.get("saves")),
+                "profile_clicks": count(engagement.get("profile_clicks")),
+                "link_clicks": count(engagement.get("link_clicks")),
+                "total_engagement": count(engagement.get("total")),
+            },
+        })
+    return out
+
+
 def upload_media(data: bytes, file_name: str) -> str:
     """Upload an image via the v2 media flow; returns media_id or '' (fail-safe).
     Flow (docs 2026-08-30): POST media/upload -> presigned PUT of raw bytes -> poll ready."""

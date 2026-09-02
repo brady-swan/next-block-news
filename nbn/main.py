@@ -642,6 +642,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     )
 
     if config.EDITORIAL_ENGINE == "v2" and config.RUN_NEWSROOM_MODE != "off":
+        from . import newsroom
         # Intake, publication reconciliation, health, Blocks, and audits still run each
         # minute. Only the expensive editorial seats are cadence-gated.
         force_desk = bool(overrides or retry_verdicts)
@@ -649,13 +650,13 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         if not due:
             result["newsroom"] = {
                 "mode": config.RUN_NEWSROOM_MODE, "status": "waiting",
-                "prompt_version": "editorial-core-v2.0",
+                "prompt_version": newsroom.PROMPT_VERSION,
             }
             return result
         if not fresh and not retry_verdicts:
             result["newsroom"] = {
                 "mode": config.RUN_NEWSROOM_MODE, "status": "empty",
-                "prompt_version": "editorial-core-v2.0",
+                "prompt_version": newsroom.PROMPT_VERSION,
             }
             return result
         inventory = fresh + retry_verdicts

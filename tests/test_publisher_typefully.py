@@ -37,6 +37,27 @@ class TypefullyTests(unittest.TestCase):
         self.assertEqual(tf._public_x_url("https://x.com.evil.example/status/1"), "")
         self.assertEqual(tf._public_x_url("javascript:alert(1)"), "")
 
+    @patch.object(tf.httpx, "get")
+    def test_analytics_posts_are_normalized_without_x_reads(self, get):
+        get.return_value = response({"results": [{
+            "draft_id": 42, "post_id": "2095",
+            "created_at": "2026-09-02T12:00:00Z",
+            "url": "https://x.com/nextblocknews_/status/2095",
+            "metrics": {"impressions": 120, "engagement": {
+                "total": 9, "likes": 4, "comments": 2, "shares": 3,
+                "quotes": 1, "saves": 1, "profile_clicks": 2,
+                "link_clicks": None,
+            }},
+        }]})
+        rows = tf.list_analytics_posts()
+        self.assertEqual(rows[0]["draft_id"], "42")
+        self.assertEqual(rows[0]["performance"]["impressions"], 120)
+        self.assertEqual(rows[0]["performance"]["likes"], 4)
+        self.assertEqual(rows[0]["performance"]["reposts"], 3)
+        self.assertIsNone(rows[0]["performance"]["link_clicks"])
+        self.assertIn("/analytics/x/posts", get.call_args.args[0])
+        self.assertEqual(get.call_args.kwargs["params"]["include_replies"], "false")
+
     @patch.object(tf.httpx, "post")
     def test_human_draft_is_staged(self, post):
         post.return_value = response({"id": "draft-1"})

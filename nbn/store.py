@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS posts (
   body TEXT, receipt_url TEXT, mode TEXT, nuelink_id TEXT,
   editor_note TEXT, resolution_id TEXT,
   confirmed_at REAL, public_url TEXT, publisher_status TEXT,
-  publisher_synced_at REAL, publisher_backend TEXT
+  publisher_synced_at REAL, publisher_backend TEXT,
+  performance_json TEXT, performance_synced_at REAL
 );
 CREATE TABLE IF NOT EXISTS source_resolutions (
   item_hash TEXT PRIMARY KEY,
@@ -219,6 +220,8 @@ POST_COLUMNS = {
     "publisher_status": "TEXT",
     "publisher_synced_at": "REAL",
     "publisher_backend": "TEXT",
+    "performance_json": "TEXT",
+    "performance_synced_at": "REAL",
 }
 
 ITEM_COLUMNS = {
@@ -1462,6 +1465,43 @@ def effective_post_ts_sql(alias: str = "") -> str:
             f" ELSE {prefix}created END")
 
 
+def recent_feed_posts(con, *, hours: float = 48.0, limit: int = 40,
+                      modes: tuple[str, ...] = ("IMMEDIATE", "UNCERTAIN")) -> list[dict]:
+    """Bounded exact recent copy for newsroom/editor feed awareness."""
+    allowed = tuple(mode for mode in modes if mode in {"IMMEDIATE", "UNCERTAIN", "DRAFT"})
+    if not allowed:
+        return []
+    placeholders = ",".join("?" for _ in allowed)
+    effective = effective_post_ts_sql()
+    rows = con.execute(
+        "SELECT story_key,class,body,receipt_url,mode,performance_json,performance_synced_at,"
+        f" {effective} AS effective_at FROM posts"
+        f" WHERE mode IN ({placeholders}) AND {effective}>=?"
+        " AND COALESCE(publisher_status,'')<>'deleted'"
+        " ORDER BY effective_at DESC LIMIT ?",
+        (*allowed, time.time() - max(1.0, hours) * 3600, max(1, min(limit, 100))),
+    ).fetchall()
+    out = []
+    for row in rows:
+        try:
+            performance = json.loads(row["performance_json"] or "null")
+        except (TypeError, ValueError):
+            performance = None
+        if not isinstance(performance, dict):
+            performance = None
+        out.append({
+            "story_key": canonical_story_key(con, row["story_key"]),
+            "class": row["class"],
+            "body": row["body"] or "",
+            "receipt_url": row["receipt_url"] or "",
+            "mode": row["mode"],
+            "effective_at": float(row["effective_at"] or 0),
+            "performance": performance,
+            "performance_synced_at": float(row["performance_synced_at"] or 0),
+        })
+    return out
+
+
 def recent_story_keys(con, days: float = 3.0) -> list:
     """Canonical keys readers saw or may have seen (authorizes UPDATE handling)."""
     effective = effective_post_ts_sql()
@@ -2025,6 +2065,46 @@ def reconcile_typefully_publications(con, records: list, synced_at: float = None
         con.execute(
             "INSERT INTO kv(k,v) VALUES ('publisher:last_counts',?)"
             " ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(stats, sort_keys=True),))
+    return stats
+
+
+def reconcile_typefully_analytics(con, records: list, synced_at: float = None) -> dict:
+    """Attach Typefully's normalized X analytics to locally known output rows."""
+    synced_at = synced_at or time.time()
+    stats = {"fetched": len(records), "matched": 0, "updated": 0,
+             "unknown": 0, "duplicates": 0}
+    with con:
+        for record in records:
+            ref = str(record.get("draft_id") or "").strip()
+            performance = record.get("performance")
+            if not ref or not isinstance(performance, dict):
+                stats["unknown"] += 1
+                continue
+            rows = con.execute(
+                "SELECT id,performance_json FROM posts"
+                " WHERE publisher_backend='typefully' AND nuelink_id=?",
+                (ref,),
+            ).fetchall()
+            if len(rows) > 1:
+                stats["duplicates"] += 1
+                continue
+            if not rows:
+                stats["unknown"] += 1
+                continue
+            encoded = json.dumps(performance, sort_keys=True, separators=(",", ":"))
+            changed = rows[0]["performance_json"] != encoded
+            con.execute(
+                "UPDATE posts SET performance_json=?,performance_synced_at=? WHERE id=?",
+                (encoded, synced_at, rows[0]["id"]),
+            )
+            stats["matched"] += 1
+            stats["updated"] += int(changed)
+        con.execute(
+            "INSERT INTO kv(k,v) VALUES ('publisher:analytics_last_success',?)"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(synced_at),))
+        con.execute(
+            "INSERT INTO kv(k,v) VALUES ('publisher:analytics_last_error','')"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v")
     return stats
 
 

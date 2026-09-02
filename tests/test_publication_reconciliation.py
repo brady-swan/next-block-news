@@ -22,6 +22,30 @@ def published(ref, created, confirmed, text="NEW: Bitcoin publication reconcilia
 
 
 class ReconciliationTests(unittest.TestCase):
+    def test_analytics_attach_to_known_typefully_post_and_recent_feed(self):
+        now = time.time()
+        performance = {
+            "impressions": 120, "likes": 4, "reposts": 3, "comments": 2,
+            "quotes": 1, "saves": 1, "profile_clicks": 2,
+            "link_clicks": None, "total_engagement": 9,
+        }
+        with temporary_store() as con:
+            store.log_post(
+                con, "measured", None, "secondary", "Bitcoin measured post.",
+                "https://example.com", "IMMEDIATE", "draft-42",
+                publisher_backend="typefully",
+            )
+            stats = store.reconcile_typefully_analytics(
+                con, [{"draft_id": "draft-42", "performance": performance}],
+                synced_at=now,
+            )
+            feed = store.recent_feed_posts(con)
+
+        self.assertEqual(stats["matched"], 1)
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(feed[0]["performance"], performance)
+        self.assertEqual(feed[0]["performance_synced_at"], now)
+
     def test_authoritative_publish_promotes_supported_modes_and_updates_item(self):
         now = time.time()
         with temporary_store() as con:
@@ -165,6 +189,18 @@ class ReconciliationTests(unittest.TestCase):
             self.assertEqual(second, {"rate_limited": 1})
             self.assertEqual(fetch.call_count, 1)
             self.assertEqual(store.kv_get(con, "publisher:last_attempt"), "1000")
+
+    def test_successful_publication_reconcile_refreshes_batched_analytics(self):
+        now = time.time()
+        with temporary_store() as con, \
+                patch.object(config, "TYPEFULLY_API_KEY", "key"), \
+                patch.object(config, "TYPEFULLY_SOCIAL_SET_ID", "set"), \
+                patch.object(publisher.time, "time", return_value=now), \
+                patch.object(publisher_typefully, "list_published", return_value=[]), \
+                patch.object(publisher_typefully, "list_analytics_posts", return_value=[]) as analytics:
+            result = publisher.reconcile_publications(con)
+        analytics.assert_called_once_with()
+        self.assertEqual(result["analytics"]["fetched"], 0)
 
 
 class MigrationTests(unittest.TestCase):

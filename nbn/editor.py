@@ -198,13 +198,12 @@ def review_newsroom(post: str, item: dict, con, *, source_text: str,
 def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                           reservation: str | None = None) -> dict:
     """One clean Sonnet editor call for the complete run; outage stages safe drafts."""
-    from . import brain
-    effective_ts = store.effective_post_ts_sql()
-    recent = con.execute(
-        f"SELECT body,class,{effective_ts} AS effective_at FROM posts"
-        " WHERE mode IN ('IMMEDIATE','DRAFT','UNCERTAIN')"
-        " ORDER BY effective_at DESC LIMIT 12"
-    ).fetchall()
+    from . import brain, newsroom
+    recent = store.recent_feed_posts(
+        con, hours=config.DESK_RECENT_FEED_HOURS,
+        limit=config.DESK_RECENT_FEED_LIMIT,
+        modes=("IMMEDIATE", "DRAFT", "UNCERTAIN"),
+    )
     payload = {
         "candidates": [{
             "story_id": row["story_id"], "post": row["post"],
@@ -217,12 +216,23 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         "recent_feed_newest_first": [{
             "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
             "class": r["class"], "post": r["body"][:1000],
+            "mode": r["mode"], "story_key": r["story_key"],
+            "performance_advisory": {
+                "impressions": (r.get("performance") or {}).get("impressions"),
+                "likes": (r.get("performance") or {}).get("likes"),
+                "reposts": (r.get("performance") or {}).get("reposts"),
+                "comments": (r.get("performance") or {}).get("comments"),
+                "metrics_as_of_epoch": r.get("performance_synced_at") or None,
+                "use": "weak_age_dependent_craft_signal_not_news_judgment",
+            },
         } for r in recent],
     }
     called_at = time.monotonic()
     try:
         resp = brain._create(
-            config.EDITOR_MODEL, BATCH_EDITOR_PROMPT, json.dumps(payload),
+            config.EDITOR_MODEL,
+            BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n" + newsroom.ORIENTATION_BRIEF,
+            json.dumps(payload),
             max_tokens=8000, effort=config.EDITOR_EFFORT, reservation=reservation,
         )
         store.record_model_usage(

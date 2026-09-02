@@ -50,12 +50,32 @@ def reconcile_publications(con) -> dict:
     try:
         records = publisher_typefully.list_published()
         stats = store.reconcile_typefully_publications(con, records, synced_at=time.time())
+        stats["analytics"] = _refresh_analytics(con, publisher_typefully, store, now)
         log.info("Typefully publication sync: %s", stats)
         return stats
     except Exception as exc:  # noqa: BLE001 - reconciliation must never stop intake
         message = str(exc)[:200]
         store.kv_set(con, "publisher:last_error", message)
         log.warning("Typefully publication sync failed: %s", message)
+        return {"error": message}
+
+
+def _refresh_analytics(con, publisher_typefully, store, now: float) -> dict:
+    """Refresh all recent post metrics in one Typefully request, independently cached."""
+    try:
+        last_attempt = float(store.kv_get(con, "publisher:analytics_last_attempt") or 0)
+    except ValueError:
+        last_attempt = 0
+    if now - last_attempt < config.PUBLISH_ANALYTICS_SECONDS:
+        return {"rate_limited": 1}
+    store.kv_set(con, "publisher:analytics_last_attempt", str(now))
+    try:
+        records = publisher_typefully.list_analytics_posts()
+        return store.reconcile_typefully_analytics(con, records, synced_at=time.time())
+    except Exception as exc:  # analytics are context, never a publishing dependency
+        message = str(exc)[:200]
+        store.kv_set(con, "publisher:analytics_last_error", message)
+        log.warning("Typefully analytics sync failed: %s", message)
         return {"error": message}
 
 

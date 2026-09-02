@@ -7,6 +7,14 @@ worker runs continuously on Railway. It ingests news every minute, opens a fresh
 story desk every 15 minutes when candidates exist, sends the complete run through a
 separate Sonnet editor, and delivers approved work through Typefully.
 
+Each desk receives the exact reader-visible post copy from the preceding 48 hours, newest
+first, with publication time, event key, class, and receipt. This is distinct from the compact
+event catalog and the open-draft board: the feed supplies voice and continuity context, while
+the other boards support event identity and prevent duplicate drafting.
+Typefully's batched analytics endpoint adds impressions, likes, reposts, comments, post age,
+and snapshot time when available. These are explicitly weak, age-dependent craft signals—not
+evidence, importance scores, or a mandate to chase popular subject matter.
+
 The product stance is practical: publish useful, well-supported Bitcoin coverage and learn
 from production. This is an early, low-visibility account, not the New York Times. The
 system keeps consequential safety and idempotency rails, but freshness, semantic novelty,
@@ -186,14 +194,15 @@ and stages corrections for human review.
 - Health: `/health`; status: `/status`; owner Desk: token-gated `/report`.
 - Deploy: `railway up --detach` from this linked repository.
 - Important knobs: `NBN_EDITORIAL_ENGINE=v2`, `NBN_DESK_INTERVAL_SECONDS=900`,
+  `NBN_DESK_RECENT_FEED_HOURS=48`, `NBN_PUBLISH_ANALYTICS_SECONDS=900`,
   `NBN_RUN_NEWSROOM_MODE=shadow|draft|live`, `NBN_AUTOPOST_ENABLED`,
   `NBN_AUTOPOST_CLASSES`, `NBN_EDITOR_MODEL`, and `NBN_SOURCE_POLICY_MODE`.
 - `NBN_EDITORIAL_ENGINE=v1` is a short-lived manual rollback switch only. It is never an
   automatic fallback. Remove it after the v2 observation window.
 - Never print credentials. Never delete an ambiguous Typefully/X output automatically.
 
-The Desk exposes the exact live orientation brief in a collapsible panel so Brady can review
-and tune it explicitly after launch.
+The production orientation source of truth is `prompts/orientation-brief-v2.md`; the Desk
+exposes that exact loaded brief in a collapsible panel so Brady can review it.
 
 Human-approved positive and negative examples accumulate in
 `prompts/orientation-examples.md`. That file is a review queue, not a runtime prompt include;

@@ -53,6 +53,8 @@ DESK_INTERVAL_SECONDS = int(os.environ.get("NBN_DESK_INTERVAL_SECONDS", "900"))
 DESK_CANDIDATE_MAX_AGE_HOURS = float(
     os.environ.get("NBN_DESK_CANDIDATE_MAX_AGE_HOURS", "24")
 )
+DESK_RECENT_FEED_HOURS = float(os.environ.get("NBN_DESK_RECENT_FEED_HOURS", "48"))
+DESK_RECENT_FEED_LIMIT = int(os.environ.get("NBN_DESK_RECENT_FEED_LIMIT", "40"))
 
 # Model-free Google organic discovery. The credential is shared with the Marketing
 # Node account, but NBN calls SerpAPI directly and applies its own source policy.
@@ -141,6 +143,7 @@ AUTOPOST_CLASSES = {
 # drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)
 PUBLISH_DELAY_SECONDS = int(os.environ.get("NBN_PUBLISH_DELAY_SECONDS", "30"))
 PUBLISH_RECONCILE_SECONDS = int(os.environ.get("NBN_PUBLISH_RECONCILE_SECONDS", "300"))
+PUBLISH_ANALYTICS_SECONDS = int(os.environ.get("NBN_PUBLISH_ANALYTICS_SECONDS", "900"))
 
 # Source ladder. Enforcement is the safe code default. Observe mode records the
 # policy's decision but forces every delivery to a human draft/tape.
