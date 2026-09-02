@@ -157,6 +157,37 @@ CREATE TABLE IF NOT EXISTS pipeline_events (
   UNIQUE(item_hash, event)
 );
 CREATE INDEX IF NOT EXISTS idx_pipeline_events_at ON pipeline_events(at);
+CREATE TABLE IF NOT EXISTS newsroom_runs (
+  run_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  model TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  inventory_fingerprint TEXT NOT NULL,
+  inventory_json TEXT NOT NULL,
+  survey_json TEXT,
+  dossier_json TEXT,
+  dossier_digest TEXT,
+  counters_json TEXT NOT NULL DEFAULT '{}',
+  error_kind TEXT,
+  error_message TEXT,
+  created_at REAL NOT NULL,
+  updated_at REAL NOT NULL,
+  completed_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_newsroom_runs_status_created
+  ON newsroom_runs(status, created_at);
+CREATE TABLE IF NOT EXISTS newsroom_story_commits (
+  run_id TEXT NOT NULL,
+  story_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  dossier_digest TEXT NOT NULL,
+  delivery_ref TEXT,
+  updated_at REAL NOT NULL,
+  PRIMARY KEY(run_id, story_id)
+);
+CREATE INDEX IF NOT EXISTS idx_newsroom_story_state
+  ON newsroom_story_commits(state, updated_at);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
@@ -398,6 +429,11 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "selected_url": resolution["selected_url"] if resolution else "",
             "resolution_status": resolution["status"] if resolution else "",
             "output_mode": output["mode"] if output else "",
+            "newsroom_story_id": str(verdict.get("_newsroom_story_id") or "")[:80],
+            "newsroom_reader_value": str(
+                verdict.get("_newsroom_reader_value") or "")[:800],
+            "newsroom_unresolved": [str(value)[:300] for value in
+                                    list(verdict.get("_newsroom_unresolved") or [])[:8]],
             "theme_ids": packet["theme_ids"],
             "theme_signals": packet["theme_signals"],
         })
@@ -410,8 +446,21 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             return 0
 
     safe_result = dict(result)
+    newsroom = result.get("newsroom") if isinstance(result, dict) else None
+    if isinstance(newsroom, dict):
+        safe_result["newsroom"] = {
+            "mode": str(newsroom.get("mode") or "")[:12],
+            "status": str(newsroom.get("status") or "")[:24],
+            "prompt_version": str(newsroom.get("prompt_version") or "")[:40],
+            "error_kind": str(newsroom.get("error_kind") or "")[:80],
+            "error": str(newsroom.get("error") or "")[:500],
+            **{key: safe_count(newsroom.get(key, 0)) for key in (
+                "rounds", "tool_calls", "searches", "fetches", "fetch_chars",
+                "duration_seconds", "stories")},
+        }
     for field, allowed in (
-        ("resolver_paths", {"direct", "node_ref", "guide_ref", "serpapi", "hosted_web", "unknown"}),
+        ("resolver_paths", {"direct", "node_ref", "guide_ref", "serpapi", "hosted_web",
+                            "run_newsroom", "unknown"}),
         ("resolver_outcomes", {"selected", "support_assessment_timeout", "search_timeout",
                                "source_fetch", "exhausted", "unknown"}),
     ):
@@ -614,6 +663,249 @@ def record_pipeline_event(con, run_id: str, item_hash: str, event: str,
     con.commit()
 
 
+_NEWSROOM_STATES = {
+    "surveying", "researching", "validated", "materializing", "completed", "fallback",
+}
+
+
+def start_newsroom_run(con, run_id: str, mode: str, model: str, prompt_version: str,
+                       inventory_hashes: list[str]) -> str:
+    """Persist only the immutable inventory identity before the read-only model session."""
+    ordered = [str(value)[:64] for value in inventory_hashes]
+    encoded = json.dumps(ordered, separators=(",", ":"))
+    fingerprint = hashlib.sha256(encoded.encode()).hexdigest()
+    now = time.time()
+    con.execute(
+        "INSERT OR REPLACE INTO newsroom_runs(run_id,status,mode,model,prompt_version,"
+        "inventory_fingerprint,inventory_json,counters_json,created_at,updated_at)"
+        " VALUES (?,?,?,?,?,?,?,'{}',?,?)",
+        (run_id, "surveying", mode[:12], model[:80], prompt_version[:40], fingerprint,
+         encoded, now, now),
+    )
+    con.commit()
+    return fingerprint
+
+
+def checkpoint_newsroom_survey(con, run_id: str, survey: dict, counters: dict) -> None:
+    encoded = json.dumps(survey, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode()) > 24576:
+        raise ValueError("newsroom survey exceeds checkpoint bound")
+    con.execute(
+        "UPDATE newsroom_runs SET status='researching',survey_json=?,counters_json=?,"
+        "updated_at=? WHERE run_id=? AND status='surveying'",
+        (encoded, json.dumps(counters, separators=(",", ":"))[:4000], time.time(), run_id),
+    )
+    con.commit()
+
+
+def validate_newsroom_run(con, run_id: str, dossier: dict, digest: str,
+                          counters: dict) -> None:
+    encoded = json.dumps(dossier, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode()) > 98304:
+        raise ValueError("newsroom dossier exceeds checkpoint bound")
+    cur = con.execute(
+        "UPDATE newsroom_runs SET status='validated',dossier_json=?,dossier_digest=?,"
+        "counters_json=?,updated_at=? WHERE run_id=? AND status IN ('surveying','researching')",
+        (encoded, digest[:64], json.dumps(counters, separators=(",", ":"))[:4000],
+         time.time(), run_id),
+    )
+    if cur.rowcount != 1:
+        raise RuntimeError("newsroom run cannot transition to validated")
+    con.commit()
+
+
+def set_newsroom_state(con, run_id: str, status: str, *, error_kind: str = "",
+                       error_message: str = "", counters: dict | None = None) -> None:
+    if status not in _NEWSROOM_STATES:
+        raise ValueError("invalid newsroom state")
+    completed = time.time() if status in {"completed", "fallback"} else None
+    con.execute(
+        "UPDATE newsroom_runs SET status=?,error_kind=?,error_message=?,"
+        "counters_json=COALESCE(?,counters_json),updated_at=?,completed_at=? WHERE run_id=?",
+        (status, str(error_kind or "")[:80], str(error_message or "")[:500],
+         json.dumps(counters, separators=(",", ":"))[:4000] if counters is not None else None,
+         time.time(), completed, run_id),
+    )
+    con.commit()
+
+
+def init_newsroom_story_commits(con, run_id: str, story_ids: list[str], digest: str) -> None:
+    now = time.time()
+    for story_id in story_ids:
+        con.execute(
+            "INSERT OR IGNORE INTO newsroom_story_commits(run_id,story_id,state,"
+            "dossier_digest,updated_at) VALUES (?,?,'pending',?,?)",
+            (run_id, str(story_id)[:80], digest[:64], now),
+        )
+    con.commit()
+
+
+def set_newsroom_story_state(con, run_id: str, story_id: str, state: str,
+                             delivery_ref: str = "") -> None:
+    if state not in {"pending", "materialized", "delivered", "held"}:
+        raise ValueError("invalid newsroom story state")
+    con.execute(
+        "UPDATE newsroom_story_commits SET state=?,delivery_ref=?,updated_at=?"
+        " WHERE run_id=? AND story_id=?",
+        (state, str(delivery_ref or "")[:200], time.time(), run_id, story_id),
+    )
+    con.commit()
+
+
+def latest_newsroom_run(con):
+    return con.execute(
+        "SELECT * FROM newsroom_runs ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+
+
+def prune_newsroom_runs(con, days: float = 14.0) -> None:
+    cutoff = time.time() - max(1.0, days) * 86400
+    con.execute(
+        "UPDATE newsroom_runs SET inventory_json='[]',survey_json=NULL,dossier_json=NULL"
+        " WHERE status IN ('completed','fallback') AND created_at<?",
+        (cutoff,),
+    )
+    con.commit()
+
+
+def recover_incomplete_newsroom_runs(con) -> dict:
+    """Close interrupted runs without risking duplicate delivery.
+
+    Survey/research/validated runs have not crossed the materialization boundary, so their
+    untouched items remain available to a later cycle. Once materialization began, any
+    story without a durable terminal item state is held for operator inspection. A post
+    already recorded locally is treated as delivered; an unknown create outcome is never
+    retried automatically.
+    """
+    rows = con.execute(
+        "SELECT * FROM newsroom_runs WHERE status IN "
+        "('surveying','researching','validated','materializing') ORDER BY created_at"
+    ).fetchall()
+    summary = {"runs": len(rows), "pre_materialization": 0,
+               "materializing": 0, "items_held": 0, "stories_delivered": 0}
+    if not rows:
+        return summary
+    now = time.time()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        for run in rows:
+            if run["status"] != "materializing":
+                summary["pre_materialization"] += 1
+                con.execute(
+                    "UPDATE newsroom_runs SET status='fallback',error_kind=?,error_message=?,"
+                    "updated_at=?,completed_at=? WHERE run_id=?",
+                    ("interrupted_before_materialization",
+                     "worker restarted before materialization; inventory left untouched",
+                     now, now, run["run_id"]),
+                )
+                continue
+
+            summary["materializing"] += 1
+            try:
+                dossier = json.loads(run["dossier_json"] or "{}")
+            except (TypeError, ValueError):
+                dossier = {}
+            if not isinstance(dossier, dict):
+                dossier = {}
+            dossier_items = [
+                row for row in dossier.get("items") or []
+                if isinstance(row, dict) and row.get("url_hash")
+            ]
+            stories = {
+                str(row.get("story_id") or ""): row
+                for row in dossier.get("stories") or [] if isinstance(row, dict)
+            }
+            commit_rows = con.execute(
+                "SELECT story_id,state FROM newsroom_story_commits WHERE run_id=?",
+                (run["run_id"],),
+            ).fetchall()
+            commits = {row["story_id"]: row["state"] for row in commit_rows}
+            item_rows = {
+                row["url_hash"]: row for row in con.execute(
+                    "SELECT url_hash,status FROM items WHERE url_hash IN ("
+                    + ",".join("?" for _ in dossier_items) + ")",
+                    tuple(str(row["url_hash"]) for row in dossier_items),
+                ).fetchall()
+            } if dossier_items else {}
+
+            for story_id, story in stories.items():
+                members = [str(value) for value in story.get("member_hashes") or []]
+                states = {item_rows[value]["status"] for value in members if value in item_rows}
+                recorded = bool(states & {"posted", "drafted", "uncertain", "taped"})
+                commit_state = commits.get(story_id)
+                if commit_state == "delivered" or recorded:
+                    if commit_state != "delivered":
+                        con.execute(
+                            "UPDATE newsroom_story_commits SET state='delivered',updated_at=?"
+                            " WHERE run_id=? AND story_id=?",
+                            (now, run["run_id"], story_id),
+                        )
+                    summary["stories_delivered"] += 1
+                    continue
+                action = str(story.get("action") or "hold")
+                for item_hash in members:
+                    current = item_rows.get(item_hash)
+                    if not current or current["status"] not in {"new", "researching"}:
+                        continue
+                    status = "skipped" if action == "skip" else "held"
+                    note = ("newsroom recovery: interrupted after materialization began; "
+                            "delivery outcome requires inspection")
+                    con.execute(
+                        "UPDATE items SET status=?,note=?,decision_stage='newsroom_recovery',"
+                        "decision_category='infrastructure' WHERE url_hash=?",
+                        (status, note[:300], item_hash),
+                    )
+                    con.execute(
+                        "UPDATE research_jobs SET state='exhausted',next_attempt_at=NULL,"
+                        "error_kind='newsroom_recovery',error_message=?,claim_token=NULL,"
+                        "claimed_at=NULL,updated_at=? WHERE item_hash=?",
+                        (note[:300], now, item_hash),
+                    )
+                    con.execute(
+                        "UPDATE operator_actions SET state='blocked',completed_at=?,result=?"
+                        " WHERE item_hash=? AND state IN ('queued','processing')",
+                        (now, note[:300], item_hash),
+                    )
+                    summary["items_held"] += int(status == "held")
+                if commit_state not in {"delivered", "held"}:
+                    con.execute(
+                        "UPDATE newsroom_story_commits SET state='held',updated_at=?"
+                        " WHERE run_id=? AND story_id=?",
+                        (now, run["run_id"], story_id),
+                    )
+
+            # Null-story skip/hold rows do not have commit records but still need a
+            # terminal disposition if the worker stopped before reaching them.
+            for item in dossier_items:
+                if item.get("story_id") is not None:
+                    continue
+                item_hash = str(item.get("url_hash") or "")
+                current = item_rows.get(item_hash)
+                if not current or current["status"] not in {"new", "researching"}:
+                    continue
+                disposition = str(item.get("disposition") or "hold")
+                status = "skipped" if disposition == "skip" else "held"
+                con.execute(
+                    "UPDATE items SET status=?,note='newsroom recovery: terminal disposition'"
+                    " WHERE url_hash=?",
+                    (status, item_hash),
+                )
+                summary["items_held"] += int(status == "held")
+
+            con.execute(
+                "UPDATE newsroom_runs SET status='completed',error_kind=?,error_message=?,"
+                "updated_at=?,completed_at=? WHERE run_id=?",
+                ("interrupted_materialization",
+                 "worker restarted during materialization; unresolved stories held",
+                 now, now, run["run_id"]),
+            )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return summary
+
+
 def start_research_job(con, item: dict, run_id: str) -> dict:
     """Freeze and claim an actionable decision before its first external request."""
     now = time.time()
@@ -783,6 +1075,44 @@ def claim_due_research_jobs(con, limit: int = 2, lease_ttl: int = 900,
             ).fetchone()))
         con.commit()
         return claimed
+    except Exception:
+        con.rollback()
+        raise
+
+
+def due_research_jobs_snapshot(con, limit: int = 2, now: float = None) -> list[dict]:
+    """Read-only inventory for a newsroom; attempts are consumed only on materialization."""
+    current = time.time() if now is None else now
+    rows = con.execute(
+        "SELECT * FROM research_jobs WHERE state='pending' AND next_attempt_at<=?"
+        " ORDER BY next_attempt_at,item_hash LIMIT ?",
+        (current, max(0, int(limit))),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def claim_research_job_for_materialization(con, item_hash: str, now: float = None):
+    current = time.time() if now is None else now
+    token = f"newsroom:{item_hash}:{int(current)}"
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT * FROM research_jobs WHERE item_hash=? AND state='pending'",
+            (item_hash,),
+        ).fetchone()
+        if not row:
+            con.rollback()
+            return None
+        con.execute(
+            "UPDATE research_jobs SET state='processing',attempts=attempts+1,claim_token=?,"
+            "claimed_at=?,updated_at=? WHERE item_hash=? AND state='pending'",
+            (token, current, current, item_hash),
+        )
+        con.execute("UPDATE items SET status='researching' WHERE url_hash=?", (item_hash,))
+        con.commit()
+        return dict(con.execute(
+            "SELECT * FROM research_jobs WHERE item_hash=?", (item_hash,)
+        ).fetchone())
     except Exception:
         con.rollback()
         raise

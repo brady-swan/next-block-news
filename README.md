@@ -11,18 +11,19 @@ truth is `prompts/wire_voice.md`; the complete owner's manual is `SYSTEM.md`.
 ## Pipeline
 
 ```text
-poll -> intake -> tier annotation -> triage -> resolve source/evidence -> draft -> gates -> publish
+poll -> intake -> one run-scoped newsroom (survey/research/judge/write) -> gates -> publish
 ```
 
 | Module | Responsibility |
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
 | `nbn/store.py` | SQLite URL/story deduplication, item state, post log, runtime key/value state |
-| `nbn/brain.py` | Claude triage and single-post drafting |
+| `nbn/newsroom.py` | Run-scoped Sonnet newsroom, clean desk packet, bounded research tools, and atomic dossier |
+| `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
 | `config/source_tiers.toml` | Canonical P0/T1/T2/T3/T4 source registry |
 | `nbn/source_policy.py` | Validated source classification, normalization, and ranking |
 | `nbn/search.py` | Bounded model-free SerpAPI discovery; returned links are untrusted pointers |
-| `nbn/verify.py` | Typed source resolution, evidence qualification, and claim support |
+| `nbn/verify.py` | Typed source resolution/evidence qualification and legacy claim support |
 | `nbn/lint.py` | Scope, style, mention, URL, attribution, and number-integrity vetoes |
 | `nbn/editor.py` | Last-mile reader-value and feed-context judgment for autonomous posts |
 | `nbn/publisher.py` | Typefully-first output routing plus the daily tape |

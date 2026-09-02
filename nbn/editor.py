@@ -51,6 +51,26 @@ Return ONLY JSON:
  "post": "the final copy (original if publish, edited if revise, null if spike)",
  "reason": "one or two sentences you would say to the newsroom"}"""
 
+NEWSROOM_EDITOR_PROMPT = EDITOR_PROMPT.rsplit("Return ONLY JSON:", 1)[0] + """
+
+This candidate was produced by a run-scoped newsroom. You are also its independent,
+fail-closed semantic support editor. The payload includes the exact selected receipt text
+and code-owned provenance. Check every factual assertion in the final copy against ONLY
+that receipt. A changed actor, reversed direction, negation, date mismatch, unsupported
+paraphrase, inference, or fact found only in another source is unsupported. Search snippets,
+outside knowledge, and the newsroom's own claim labels are not evidence.
+
+You may revise only by cutting, reordering, merging, or sharpening material already in the
+candidate. The revised post itself must remain completely supported by the selected receipt.
+
+Return ONLY JSON:
+{"verdict": "publish" | "revise" | "spike",
+ "post": "final supported copy, or null if spike",
+ "reason": "one or two newsroom sentences",
+ "claims_supported": true | false,
+ "unsupported_claims": ["specific unsupported assertion"]}
+"""
+
 
 def review(post: str, item: dict, con) -> dict:
     """Returns {'verdict', 'post', 'reason'}; fails open to publish-as-is on errors."""
@@ -87,3 +107,63 @@ def review(post: str, item: dict, con) -> dict:
     store.kv_set(con, "editor:last", json.dumps(
         {"verdict": verdict, "reason": reason, "at": time.time()}))
     return {"verdict": verdict, "post": final, "reason": reason}
+
+
+def review_newsroom(post: str, item: dict, con, *, source_text: str,
+                    claims: list[dict], provenance: dict) -> dict:
+    """Independent semantic+craft review; any uncertainty fails closed."""
+    from . import brain
+    effective_ts = store.effective_post_ts_sql()
+    recent = con.execute(
+        f"SELECT body, class, {effective_ts} AS effective_at FROM posts"
+        " WHERE mode IN ('IMMEDIATE','DRAFT','UNCERTAIN')"
+        " ORDER BY effective_at DESC LIMIT 10").fetchall()
+    feed = [{"hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
+             "class": r["class"], "post": r["body"][:500]} for r in recent]
+    payload = {
+        "candidate_post": post,
+        "declared_material_claims_untrusted": list(claims or [])[:24],
+        "selected_receipt": {
+            **dict(provenance or {}),
+            "text": str(source_text or "")[:8000],
+        },
+        "class": item.get("class"),
+        "coverage_action": item.get("_coverage_action", "draft"),
+        "source_item_text": (item.get("title") or "")[:600],
+        "recent_feed_newest_first": feed,
+    }
+    try:
+        resp = brain._create(
+            config.EDITOR_MODEL, NEWSROOM_EDITOR_PROMPT, json.dumps(payload),
+            max_tokens=3000, effort=config.EDITOR_EFFORT,
+        )
+        out = brain._json_from(resp)
+        verdict = out.get("verdict")
+        supported = out.get("claims_supported") is True
+        unsupported = out.get("unsupported_claims")
+        if verdict not in {"publish", "revise", "spike"} or not isinstance(unsupported, list):
+            raise ValueError("malformed newsroom editor verdict")
+        if supported and unsupported:
+            raise ValueError("inconsistent newsroom support verdict")
+        if not supported:
+            verdict = "spike"
+        final = None if verdict == "spike" else out.get("post")
+        if not final and verdict != "spike":
+            raise ValueError("newsroom editor omitted final post")
+        reason = str(out.get("reason") or "")[:300]
+    except Exception as exc:  # noqa: BLE001 - newsroom support is deliberately fail closed
+        log.warning("newsroom editor unavailable; holding candidate: %s", exc)
+        return {
+            "verdict": "spike", "post": None,
+            "reason": f"newsroom editor unavailable: {exc}"[:300],
+            "claims_supported": False, "unsupported_claims": ["support unknown"],
+        }
+    store.kv_set(con, "editor:last", json.dumps({
+        "verdict": verdict, "reason": reason, "claims_supported": supported,
+        "at": time.time(),
+    }))
+    return {
+        "verdict": verdict, "post": final, "reason": reason,
+        "claims_supported": supported,
+        "unsupported_claims": [str(value)[:300] for value in unsupported[:12]],
+    }

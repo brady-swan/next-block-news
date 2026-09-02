@@ -14,6 +14,36 @@ EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-fable-5")
 EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "low")
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
+# One fresh Sonnet newsroom may own survey, research, judgment, and writing for a complete
+# intake run. Rollout is deliberately explicit: off -> shadow -> draft -> live.
+RUN_NEWSROOM_MODE = os.environ.get("NBN_RUN_NEWSROOM_MODE", "off").strip().lower()
+if RUN_NEWSROOM_MODE not in {"off", "shadow", "draft", "live"}:
+    raise RuntimeError("NBN_RUN_NEWSROOM_MODE must be off, shadow, draft, or live")
+RUN_NEWSROOM_FALLBACK = os.environ.get(
+    "NBN_RUN_NEWSROOM_FALLBACK", "legacy"
+).strip().lower()
+if RUN_NEWSROOM_FALLBACK not in {"legacy", "hold"}:
+    raise RuntimeError("NBN_RUN_NEWSROOM_FALLBACK must be legacy or hold")
+RUN_NEWSROOM_MAX_ROUNDS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_ROUNDS", "8"))
+RUN_NEWSROOM_MAX_TOOL_CALLS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_TOOL_CALLS", "24"))
+RUN_NEWSROOM_MAX_SEARCHES = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_SEARCHES", "8"))
+RUN_NEWSROOM_MAX_FETCHES = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_FETCHES", "16"))
+RUN_NEWSROOM_MAX_FETCH_CHARS = int(
+    os.environ.get("NBN_RUN_NEWSROOM_MAX_FETCH_CHARS", "8000")
+)
+RUN_NEWSROOM_MAX_FETCH_TOTAL_CHARS = int(
+    os.environ.get("NBN_RUN_NEWSROOM_MAX_FETCH_TOTAL_CHARS", "160000")
+)
+RUN_NEWSROOM_MAX_INITIAL_BYTES = int(
+    os.environ.get("NBN_RUN_NEWSROOM_MAX_INITIAL_BYTES", "98304")
+)
+RUN_NEWSROOM_MAX_HISTORY_BYTES = int(
+    os.environ.get("NBN_RUN_NEWSROOM_MAX_HISTORY_BYTES", "491520")
+)
+RUN_NEWSROOM_TIMEOUT_SECONDS = float(
+    os.environ.get("NBN_RUN_NEWSROOM_TIMEOUT_SECONDS", "240")
+)
+
 # Model-free Google organic discovery. The credential is shared with the Marketing
 # Node account, but NBN calls SerpAPI directly and applies its own source policy.
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")

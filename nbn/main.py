@@ -225,6 +225,9 @@ def _lease_run(con, scheduled: bool) -> dict:
         # Repair human-published Typefully drafts before any coverage/dedup decisions.
         publisher.reconcile_publications(con)
         result = _cycle_locked(con, owner)
+        # The newsroom reservation belongs only to the one-off news cycle. Release any
+        # remainder before independent scheduled Block/audit work asks for model capacity.
+        brain.release_active_model_reservation()
         if scheduled:
             if config.NODE_READ_TOKEN:
                 briefing.maybe_run(con)
@@ -233,6 +236,7 @@ def _lease_run(con, scheduled: bool) -> dict:
                 audit.maybe_run(con)
         return result
     finally:
+        brain.release_active_model_reservation()
         stop_heartbeat.set()
         heartbeat.join(timeout=max(1, config.CYCLE_LEASE_HEARTBEAT_SECONDS + 1))
         store.release_cycle_lease(con, owner)
@@ -267,12 +271,54 @@ def worker_iteration(con) -> dict:
     return _lease_run(con, scheduled=True)
 
 
+def _retry_inventory(con, jobs: list[dict], pipeline_run_id: str,
+                     *, materialize: bool) -> list[dict]:
+    """Decode due research rows; newsroom survey mode leaves attempts untouched."""
+    retry_verdicts = []
+    for raw_job in jobs:
+        job = raw_job
+        if materialize:
+            claimed = store.claim_research_job_for_materialization(con, job["item_hash"])
+            if claimed:
+                job = claimed
+        try:
+            retry = json.loads(job["context_json"])
+        except (TypeError, ValueError):
+            if materialize:
+                store.defer_research_job(
+                    con, job["item_hash"], "source_fetch", "invalid_context",
+                    "saved research context is invalid")
+            continue
+        if not isinstance(retry, dict) or retry.get("url_hash") != job["item_hash"]:
+            if materialize:
+                store.defer_research_job(
+                    con, job["item_hash"], "source_fetch", "invalid_context",
+                    "saved research context does not match item")
+            continue
+        retry.update({
+            "_research_retry": True,
+            "_manual_draft_only": bool(job["manual_draft_only"]),
+            "_run_id": pipeline_run_id,
+        })
+        action = store.pending_retry_action(con, retry["url_hash"])
+        if action:
+            if materialize:
+                store.start_operator_action(con, action["id"])
+            retry["_operator_action_id"] = action["id"]
+            retry["_operator_gate"] = "research"
+        retry_verdicts.append(retry)
+    return retry_verdicts
+
+
 def _cycle_locked(con, lease_owner: str) -> dict:
     """Resolve and prepare complete story groups before choosing one final receipt."""
     from . import verify
 
     run_started = time.time()
     pipeline_run_id = f"cycle:{int(run_started)}:{lease_owner[:8]}"
+    newsroom_recovery = store.recover_incomplete_newsroom_runs(con)
+    if newsroom_recovery["runs"]:
+        log.warning("recovered interrupted newsroom runs: %s", newsroom_recovery)
     node_result = node_discovery.ingest(con)
     rss_items = sources.fetch_feeds()
     edgar_items = sources.fetch_edgar()
@@ -316,31 +362,14 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
         it["_run_id"] = pipeline_run_id
         fresh.append(it)
-    retry_verdicts = []
-    for job in store.claim_due_research_jobs(con, limit=2):
-        try:
-            retry = json.loads(job["context_json"])
-        except (TypeError, ValueError):
-            store.defer_research_job(
-                con, job["item_hash"], "source_fetch", "invalid_context",
-                "saved research context is invalid")
-            continue
-        if not isinstance(retry, dict) or retry.get("url_hash") != job["item_hash"]:
-            store.defer_research_job(
-                con, job["item_hash"], "source_fetch", "invalid_context",
-                "saved research context does not match item")
-            continue
-        retry.update({
-            "_research_retry": True,
-            "_manual_draft_only": bool(job["manual_draft_only"]),
-            "_run_id": pipeline_run_id,
-        })
-        action = store.pending_retry_action(con, retry["url_hash"])
-        if action:
-            store.start_operator_action(con, action["id"])
-            retry["_operator_action_id"] = action["id"]
-            retry["_operator_gate"] = "research"
-        retry_verdicts.append(retry)
+    if config.RUN_NEWSROOM_MODE == "off":
+        retry_jobs = store.claim_due_research_jobs(con, limit=2)
+        retry_verdicts = _retry_inventory(
+            con, retry_jobs, pipeline_run_id, materialize=True)
+    else:
+        retry_jobs = store.due_research_jobs_snapshot(con, limit=2)
+        retry_verdicts = _retry_inventory(
+            con, retry_jobs, pipeline_run_id, materialize=False)
     node_summary = {
         key: node_result[key] for key in (
             "attempted", "reason", "contract", "run_id", "consumed", "inserted",
@@ -353,6 +382,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
               "pending": len(fresh) + len(retry_verdicts),
               "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
               "failed": 0, "taped": 0, "policy_held": 0}
+    if newsroom_recovery["runs"]:
+        result["newsroom_recovery"] = newsroom_recovery
     result["resolver_paths"] = {}
     result["resolver_outcomes"] = {}
     theme_snapshot = store.theme_coverage_snapshot(con, fresh)
@@ -386,15 +417,104 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             con, pending, [], result, run_started, theme_snapshot=theme_snapshot)
         return result
 
-    if fresh:
-        triage_args = (fresh, store.recent_story_keys(con), store.open_story_keys(con))
-        verdicts = (brain.triage(*triage_args, theme_coverage=theme_snapshot)
-                    if theme_snapshot else brain.triage(*triage_args))
-    else:
-        verdicts = []
-    verdicts.extend(retry_verdicts)
+    newsroom_outcome = None
+    newsroom_error = ""
+    newsroom_mode = config.RUN_NEWSROOM_MODE
+    inventory = fresh + retry_verdicts
+    handles = lint.verified_handles()
     cluster_context = store.story_cluster_context(
-        con, exclude_hashes={item["url_hash"] for item in verdicts})
+        con, exclude_hashes={item["url_hash"] for item in inventory})
+    if newsroom_mode != "off":
+        from . import newsroom
+        reserve_count = 8 + len(inventory)
+        reservation = brain.reserve_model_calls(reserve_count)
+        if reservation:
+            brain.activate_model_reservation(reservation)
+            store.start_newsroom_run(
+                con, pipeline_run_id, newsroom_mode, config.ANTHROPIC_MODEL,
+                newsroom.PROMPT_VERSION, [item["url_hash"] for item in inventory],
+            )
+            try:
+                session = newsroom.start_session(
+                    run_id=pipeline_run_id, inventory=inventory,
+                    recent_clusters=cluster_context, theme_snapshot=theme_snapshot,
+                    handles=handles, con=con, reservation=reservation,
+                )
+                newsroom_outcome = session.conduct()
+                result["newsroom"] = {
+                    "mode": newsroom_mode, "prompt_version": newsroom.PROMPT_VERSION,
+                    "status": "validated", **newsroom_outcome.counters,
+                    "stories": len(newsroom_outcome.dossier.get("stories") or []),
+                }
+            except Exception as exc:  # noqa: BLE001 - whole-batch fallback is intentional
+                newsroom_error = f"{type(exc).__name__}: {exc}"[:500]
+                kind = getattr(exc, "kind", type(exc).__name__)
+                store.set_newsroom_state(
+                    con, pipeline_run_id, "fallback", error_kind=kind,
+                    error_message=newsroom_error,
+                )
+                result["newsroom"] = {
+                    "mode": newsroom_mode, "status": "fallback",
+                    "error_kind": kind, "error": newsroom_error,
+                }
+                log.warning("run newsroom fell back before materialization: %s", newsroom_error)
+        else:
+            newsroom_error = "model call budget reservation unavailable"
+            result["newsroom"] = {
+                "mode": newsroom_mode, "status": "fallback",
+                "error_kind": "budget_unavailable", "error": newsroom_error,
+            }
+
+        if newsroom_outcome and newsroom_mode == "shadow":
+            store.set_newsroom_state(
+                con, pipeline_run_id, "completed", counters=newsroom_outcome.counters)
+            result["newsroom"]["status"] = "completed"
+            store.record_pipeline_event(
+                con, pipeline_run_id, f"newsroom:{pipeline_run_id}",
+                "newsroom_shadow_completed", None, "newsroom",
+                result["newsroom"],
+            )
+            newsroom_outcome = None
+        elif newsroom_outcome:
+            store.set_newsroom_state(con, pipeline_run_id, "materializing")
+            store.init_newsroom_story_commits(
+                con, pipeline_run_id,
+                [str(row.get("story_id") or "")
+                 for row in newsroom_outcome.dossier.get("stories") or []],
+                newsroom_outcome.digest,
+            )
+        elif config.RUN_NEWSROOM_FALLBACK == "hold" and newsroom_mode in {"draft", "live"}:
+            verdicts = []
+            for item in inventory:
+                held = {**item, "action": "hold", "story_key": item.get("story_key"),
+                        "class": "secondary", "reason": f"newsroom unavailable: {newsroom_error}"}
+                verdicts.append(held)
+                store.set_status(con, item["url_hash"], "held", held.get("story_key"),
+                                 held["reason"][:300])
+                result["held"] += 1
+            store.record_decision_run(
+                con, pending + retry_verdicts, verdicts, result, run_started,
+                theme_snapshot=theme_snapshot)
+            return result
+
+    # Research retries were read-only during newsroom/shadow work. Claim them only when
+    # an active dossier materializes or the identical inventory enters legacy fallback.
+    if newsroom_mode != "off" and retry_jobs:
+        retry_verdicts = _retry_inventory(
+            con, retry_jobs, pipeline_run_id, materialize=True)
+        retry_by_hash = {row["url_hash"]: row for row in retry_verdicts}
+        inventory = [retry_by_hash.get(row["url_hash"], row) for row in inventory]
+
+    if newsroom_outcome:
+        verdicts = newsroom_outcome.verdicts
+    else:
+        if fresh:
+            triage_args = (fresh, store.recent_story_keys(con), store.open_story_keys(con))
+            verdicts = (brain.triage(*triage_args, theme_coverage=theme_snapshot)
+                        if theme_snapshot else brain.triage(*triage_args))
+        else:
+            verdicts = []
+        verdicts.extend(retry_verdicts)
     for item in verdicts:
         if item.get("story_key"):
             item["story_key"] = store.canonical_story_key(con, item["story_key"])
@@ -410,8 +530,12 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         item["action"] = "draft"
         item["story_key"] = action["story_key"] or item.get("story_key")
         item["reason"] = (f"owner requested Typefully draft; overriding {action['gate']} hold")
-    handles = lint.verified_handles()
-    resolutions, original_texts = {}, {}
+    resolutions = dict(newsroom_outcome.resolutions) if newsroom_outcome else {}
+    original_texts = {
+        item_hash: resolution.selected_text
+        for item_hash, resolution in resolutions.items()
+    }
+    newsroom_drafts = dict(newsroom_outcome.drafts) if newsroom_outcome else {}
 
     # Persist exact keys, then resolve the complete actionable batch. An upsert moves
     # an item's evidence if triage corrects its key on a later cycle.
@@ -443,6 +567,24 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                 con, pipeline_run_id, item["url_hash"], "guide_lead_advanced",
                 story_key, "discovery", {},
             )
+        if newsroom_outcome:
+            resolution = resolutions.get(item["url_hash"])
+            if resolution is None:
+                _hold(con, item, result, "newsroom story lacks materializable receipt")
+                continue
+            result["resolver_paths"]["run_newsroom"] = (
+                result["resolver_paths"].get("run_newsroom", 0) + 1
+            )
+            result["resolver_outcomes"]["selected"] = (
+                result["resolver_outcomes"].get("selected", 0) + 1
+            )
+            store.persist_resolution(con, resolution, config.SOURCE_POLICY_MODE)
+            store.record_pipeline_event(
+                con, pipeline_run_id, item["url_hash"], "research_completed",
+                item.get("story_key"), "research",
+                {"status": resolution.status, "resolver_path": "run_newsroom"},
+            )
+            continue
         fetched = sources.fetch_article(item["url"])
         if fetched.get("outcome") == "infrastructure_retryable":
             result["resolver_paths"]["unknown"] = (
@@ -511,10 +653,10 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         enriched["_selected_source"] = resolution.selected.display_name
         enriched["_selected_text"] = resolution.selected_text
         cluster_items.append(enriched)
-    reconciled = {
+    reconciled = ({
         row["url_hash"]: row
         for row in brain.reconcile_story_keys(cluster_items, cluster_context)
-    } if cluster_items else {}
+    } if cluster_items else {}) if not newsroom_outcome else {}
     for item in verdicts:
         match = reconciled.get(item["url_hash"])
         if not match:
@@ -651,13 +793,19 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         effective["class"] = klass
         covered = [body.split("\n")[0][:200]
                    for body in store.recent_story_bodies(con, story_key, limit=2)]
-        try:
-            draft = brain.draft(effective, article_text, handles, already_covered=covered)
-        except Exception as exc:  # noqa: BLE001
-            store.set_status(con, item["url_hash"], "error", story_key, str(exc)[:200])
-            store.finish_research_job(con, item["url_hash"])
-            _finish_actions(con, item, "blocked", f"writer error: {exc}")
-            continue
+        if newsroom_outcome:
+            draft = newsroom_drafts.get(item["url_hash"])
+            if not draft:
+                _hold(con, item, result, "newsroom produced no draft for actionable story")
+                continue
+        else:
+            try:
+                draft = brain.draft(effective, article_text, handles, already_covered=covered)
+            except Exception as exc:  # noqa: BLE001
+                store.set_status(con, item["url_hash"], "error", story_key, str(exc)[:200])
+                store.finish_research_job(con, item["url_hash"])
+                _finish_actions(con, item, "blocked", f"writer error: {exc}")
+                continue
         post = draft.get("post")
         if not post:
             _hold(con, item, result, "thin source")
@@ -666,6 +814,10 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         provider_resolution = None
         provider = draft.get("data_provider")
         pre_provider = None
+        if (newsroom_outcome and provider
+                and not _provider_matches(provider, resolution.selected)):
+            _hold(con, item, result, "newsroom data-provider receipt mismatch")
+            continue
         if provider and not _provider_matches(provider, resolution.selected):
             pre_provider = {
                 "resolution": resolution, "effective": dict(effective),
@@ -734,6 +886,40 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             "pre_provider": pre_provider,
         })
 
+    if newsroom_outcome:
+        repair_requests = {}
+        for rows in prepared.values():
+            for candidate in rows:
+                errors = lint.check(
+                    candidate["post"],
+                    {**candidate["draft"], "_source_text": candidate["article_text"]},
+                    candidate["effective"],
+                )
+                story_id = candidate["draft"].get("newsroom_story_id")
+                if errors and story_id and story_id not in repair_requests:
+                    repair_requests[story_id] = {
+                        "story_id": story_id, "errors": errors,
+                        "current_post": candidate["post"],
+                    }
+        patches = {}
+        if repair_requests:
+            try:
+                patches = newsroom_outcome.session.repair(list(repair_requests.values()))
+            except Exception as exc:  # noqa: BLE001 - affected stories hold below
+                log.warning("newsroom aggregate lint repair failed: %s", exc)
+        for rows in prepared.values():
+            for candidate in rows:
+                story_id = candidate["draft"].get("newsroom_story_id")
+                patch = patches.get(story_id)
+                if not patch:
+                    continue
+                for key in (
+                    "post", "event_date", "disclosure_date", "underlying_period_end",
+                    "data_provider", "needs_second_source", "mentions_used", "numbers_used",
+                ):
+                    candidate["draft"][key] = patch.get(key)
+                candidate["post"] = patch["post"]
+
     # Provider substitutions are now final for every candidate. Run terminal gates,
     # then rank each complete story group independently of feed order.
     for story_key in sorted(prepared):
@@ -742,6 +928,11 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             item, resolution = candidate["item"], candidate["resolution"]
             effective, article_text = candidate["effective"], candidate["article_text"]
             draft, post = candidate["draft"], candidate["post"]
+            patched_provider = draft.get("data_provider")
+            if (newsroom_outcome and patched_provider
+                    and not _provider_matches(patched_provider, resolution.selected)):
+                _hold(con, item, result, "newsroom patched data-provider receipt mismatch")
+                continue
             freshness_date = draft.get("disclosure_date") or draft.get("event_date")
             if (store.event_is_stale(freshness_date, config.max_event_age_hours())
                     and not _override_allows(item, "freshness")):
@@ -755,7 +946,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                       f"stale event: earliest coverage {resolution.earliest_coverage_date}")
                 continue
             errors = lint.check(post, {**draft, "_source_text": article_text}, effective)
-            if errors:
+            if errors and not newsroom_outcome:
                 log.info("lint retry %s: %s", item["title"][:60], errors)
                 try:
                     draft = brain.draft(
@@ -846,10 +1037,27 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             continue
 
         editor_note = None
-        if config.SOURCE_POLICY_MODE == "enforce":
+        if config.SOURCE_POLICY_MODE == "enforce" or newsroom_outcome:
             from . import editor
-            ed = editor.review(post, effective, con)
+            if newsroom_outcome:
+                ed = editor.review_newsroom(
+                    post, effective, con, source_text=article_text,
+                    claims=draft.get("claims") or [],
+                    provenance={
+                        "url": resolution.selected.url,
+                        "source": resolution.selected.display_name,
+                        "source_id": resolution.selected.source_id,
+                        "tier": resolution.selected.tier,
+                        "originality": resolution.originality,
+                        "content_fingerprint": resolution.content_fingerprint,
+                    },
+                )
+            else:
+                ed = editor.review(post, effective, con)
             editor_note = f"{ed['verdict']}: {ed['reason']}"[:300]
+            if newsroom_outcome and ed.get("claims_supported") is not True:
+                _hold(con, item, result, f"editor support failed: {ed['reason'][:210]}")
+                continue
             if ed["verdict"] == "spike" and not _override_allows(item, "editor"):
                 _hold(con, item, result, f"editor spiked: {ed['reason'][:220]}")
                 continue
@@ -861,6 +1069,10 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                         revised_errors.append("editor revision unsupported by provider source")
                 if not revised_errors:
                     post = ed["post"]
+                elif newsroom_outcome:
+                    _hold(con, item, result,
+                          "newsroom editor revision failed deterministic gates")
+                    continue
                 else:
                     log.warning("editor revision failed final gates; original retained")
 
@@ -869,8 +1081,13 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             raise RuntimeError("cycle lease lost before delivery")
         chart = sources.chart_image(receipt_url)
         publisher_backend = publisher.backend_name()
+        newsroom_story_id = draft.get("newsroom_story_id")
+        if newsroom_outcome and newsroom_story_id:
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, newsroom_story_id, "materialized")
         mode, publisher_ref = publisher.publish(
-            post, receipt_url, klass, image=chart, force_draft=bool(_action_ids(item)))
+            post, receipt_url, klass, image=chart,
+            force_draft=bool(_action_ids(item)) or newsroom_mode == "draft")
         lifecycle = {
             "IMMEDIATE": ("posted", "posted"), "DRAFT": ("drafted", "drafted"),
             "UNCERTAIN": ("uncertain", "uncertain"), "FAILED": ("failed", "failed"),
@@ -883,7 +1100,21 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                        publisher_backend=publisher_backend)
         store.finish_research_job(con, item["url_hash"])
         _finish_actions(con, item, "completed", f"delivery result: {mode}")
+        if newsroom_outcome and newsroom_story_id:
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, newsroom_story_id,
+                "delivered" if mode != "FAILED" else "held", publisher_ref or "")
         result[counter] += 1
+    if newsroom_outcome:
+        con.execute(
+            "UPDATE newsroom_story_commits SET state='held',updated_at=?"
+            " WHERE run_id=? AND state='pending'",
+            (time.time(), pipeline_run_id),
+        )
+        con.commit()
+        store.set_newsroom_state(
+            con, pipeline_run_id, "completed", counters=newsroom_outcome.counters)
+        result["newsroom"]["status"] = "completed"
     store.record_decision_run(
         con, pending + retry_verdicts, verdicts, result, run_started,
         theme_snapshot=theme_snapshot)

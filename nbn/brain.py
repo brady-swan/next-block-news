@@ -2,7 +2,11 @@
 import json
 import logging
 import re
+import threading
 import time
+import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 import anthropic
@@ -15,19 +19,93 @@ client = anthropic.Anthropic()
 CHARTER = (Path(__file__).resolve().parent.parent / "prompts" / "wire_voice.md").read_text()
 
 _call_times: list = []
+_budget_lock = threading.Lock()
+_reservations: dict[str, int] = {}
+_active_reservation: ContextVar[str | None] = ContextVar(
+    "nbn_model_reservation", default=None
+)
+
+
+def _prune_calls(now: float) -> None:
+    while _call_times and _call_times[0] < now - 3600:
+        _call_times.pop(0)
 
 
 def _budget_ok() -> bool:
     now = time.time()
-    while _call_times and _call_times[0] < now - 3600:
-        _call_times.pop(0)
-    return len(_call_times) < config.MAX_LLM_CALLS_PER_HOUR
+    with _budget_lock:
+        _prune_calls(now)
+        return len(_call_times) + sum(_reservations.values()) \
+            < config.MAX_LLM_CALLS_PER_HOUR
 
 
-def _create(model: str, system: str, user: str, max_tokens: int = 4000, effort: str = None):
-    if not _budget_ok():
-        raise RuntimeError("LLM hourly call budget exhausted")
-    _call_times.append(time.time())
+def reserve_model_calls(count: int) -> str | None:
+    """Atomically protect call capacity for one run-scoped newsroom."""
+    requested = max(0, int(count))
+    if requested == 0:
+        return None
+    now = time.time()
+    with _budget_lock:
+        _prune_calls(now)
+        if len(_call_times) + sum(_reservations.values()) + requested \
+                > config.MAX_LLM_CALLS_PER_HOUR:
+            return None
+        token = uuid.uuid4().hex
+        _reservations[token] = requested
+        return token
+
+
+def reservation_remaining(token: str | None) -> int:
+    with _budget_lock:
+        return int(_reservations.get(token or "", 0))
+
+
+def release_model_reservation(token: str | None) -> None:
+    if not token:
+        return
+    with _budget_lock:
+        _reservations.pop(token, None)
+
+
+def activate_model_reservation(token: str | None) -> None:
+    _active_reservation.set(token)
+
+
+def release_active_model_reservation() -> None:
+    token = _active_reservation.get()
+    release_model_reservation(token)
+    _active_reservation.set(None)
+
+
+@contextmanager
+def use_model_reservation(token: str | None):
+    marker = _active_reservation.set(token)
+    try:
+        yield
+    finally:
+        _active_reservation.reset(marker)
+
+
+def consume_model_call(token: str | None = None) -> None:
+    """Consume one real API call without allowing callers to steal reservations."""
+    reservation = token or _active_reservation.get()
+    now = time.time()
+    with _budget_lock:
+        _prune_calls(now)
+        if reservation:
+            remaining = _reservations.get(reservation, 0)
+            if remaining <= 0:
+                raise RuntimeError("LLM call reservation exhausted")
+            _reservations[reservation] = remaining - 1
+        elif len(_call_times) + sum(_reservations.values()) \
+                >= config.MAX_LLM_CALLS_PER_HOUR:
+            raise RuntimeError("LLM hourly call budget exhausted")
+        _call_times.append(now)
+
+
+def _create(model: str, system: str, user: str, max_tokens: int = 4000,
+            effort: str = None, reservation: str | None = None):
+    consume_model_call(reservation)
     kwargs = dict(
         model=model,
         max_tokens=max_tokens,

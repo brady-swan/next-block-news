@@ -606,7 +606,8 @@ def render(con, day: str = None) -> str:
     run_result = decision_run.get("result", {}) if decision_run else {}
     path_labels = {
         "direct": "direct", "node_ref": "Node ref", "guide_ref": "guide ref",
-        "serpapi": "SerpAPI", "hosted_web": "hosted web", "unknown": "unknown",
+        "serpapi": "SerpAPI", "hosted_web": "hosted web",
+        "run_newsroom": "run newsroom", "unknown": "unknown",
     }
     outcome_labels = {
         "selected": "selected", "support_assessment_timeout": "support assessment timeout",
@@ -654,15 +655,37 @@ def render(con, day: str = None) -> str:
     out.append(f"<h2><span class=fill>Last decision run</span>"
                f"<span class='count o'>{len(decision_items)}</span></h2>")
     if decision_run:
+        newsroom_run = run_result.get("newsroom") if isinstance(run_result, dict) else None
+        newsroom_decisions = (
+            isinstance(newsroom_run, dict)
+            and newsroom_run.get("mode") in {"draft", "live"}
+            and newsroom_run.get("status") == "completed"
+        )
         completed = datetime.datetime.fromtimestamp(
             decision_run.get("completed", 0), TZ).strftime("%a %b %-d · %-I:%M %p Central")
         out.append(f"<div class=metaline>{_esc(completed)} · "
                    f"{run_result.get('fetched', 0)} fetched · "
                    f"{run_result.get('new', 0)} new · "
                    f"{run_result.get('considered', len(decision_items))} considered · "
-                   f"{run_result.get('pending', 0)} sent to triage</div>")
+                   f"{run_result.get('pending', 0)} sent to "
+                   f"{'newsroom' if newsroom_decisions else 'triage'}</div>")
+        if isinstance(newsroom_run, dict) and newsroom_run.get("mode"):
+            out.append(
+                "<div class=metaline><b>Run newsroom</b> · "
+                f"{_esc(newsroom_run.get('mode'))} · {_esc(newsroom_run.get('status'))} · "
+                f"{_esc(newsroom_run.get('prompt_version') or 'unknown prompt')} · "
+                f"{_bounded_count(newsroom_run.get('stories', 0))} stories · "
+                f"{_bounded_count(newsroom_run.get('rounds', 0))} model rounds · "
+                f"{_bounded_count(newsroom_run.get('tool_calls', 0))} research tools · "
+                f"{_bounded_count(newsroom_run.get('fetches', 0))} fetches"
+                + (f"<br><b>Fallback</b> · {_esc(newsroom_run.get('error_kind'))}: "
+                   f"{_esc(newsroom_run.get('error'))}"
+                   if newsroom_run.get("status") == "fallback" else "")
+                + "</div>"
+            )
         out.append("<div class=hstack>")
         for index, item in enumerate(decision_items):
+            decision_seat = "newsroom" if newsroom_decisions else "triage"
             triage_action = item.get("triage_action") or "intake skip"
             triage_reason = item.get("triage_reason") or item.get("final_note") or \
                 "No reason recorded."
@@ -683,10 +706,25 @@ def render(con, day: str = None) -> str:
             downstream = (f"<p>Final: {_esc(final_note)}</p>"
                           if final_note and final_note != triage_reason else "")
             theme_html = _decision_theme_context(item, coverage_by_id, now_ts)
+            newsroom_detail = ""
+            if item.get("newsroom_story_id"):
+                newsroom_detail += (
+                    f"<p>Newsroom story: {_esc(item.get('newsroom_story_id'))}</p>"
+                )
+            if item.get("newsroom_reader_value"):
+                newsroom_detail += (
+                    f"<p>Reader value: {_esc(item.get('newsroom_reader_value'))}</p>"
+                )
+            unresolved = item.get("newsroom_unresolved") or []
+            if unresolved:
+                newsroom_detail += (
+                    "<p>Unresolved: " + _esc(" · ".join(str(value) for value in unresolved[:8]))
+                    + "</p>"
+                )
             out.append(
                 f"<details class=decision{' open' if index == 0 else ''}>"
                 f"<summary><div class=route>"
-                f"<span class=chip>triage · {_esc(triage_action)}</span>"
+                f"<span class=chip>{decision_seat} · {_esc(triage_action)}</span>"
                 f"<span class='chip final'>final · {_esc(final_label)}</span></div>"
                 f"<div class=ttl>{_esc(item.get('title'))}</div>"
                 f"<div class=meta>{_esc(item.get('source'))} · "
@@ -694,7 +732,7 @@ def render(con, day: str = None) -> str:
                 f"{_esc(item.get('story_key') or 'no story key')}</div>"
                 f"{theme_html}</summary>"
                 f"<div class=body><p>Decision: {_esc(triage_reason)}</p>"
-                f"{downstream}{source_path}<p><a href='{_esc(item.get('url'))}'>"
+                f"{newsroom_detail}{downstream}{source_path}<p><a href='{_esc(item.get('url'))}'>"
                 f"discovery item ↗</a></p>"
                 f"{_item_controls(con, item.get('url_hash'), day)}</div></details>")
         out.append("</div>")

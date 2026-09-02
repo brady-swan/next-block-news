@@ -12,13 +12,12 @@ Typefully. Two products: breaking singles (anytime) and the Morning/Afternoon Bl
 ```
  every 60s ──────────────────────────────────────────────────────────────────────┐
  │                                                                               │
- │ WATCH          INTAKE GATES      TRIAGE           DRAFT          FACT GATES   │ EDITOR        PUBLISH
- │ 12 RSS feeds   dedup by URL      Sonnet 5:        Sonnet 5,      lint: scope, │ Fable 5 @low: Typefully,
- │ SEC EDGAR      freshness         draft/hold/skip  numbers only   hype, attrib,│ reader value, scheduled
- │ Perception     (2.5h day/6h      + story key      from FETCHED   mentions,    │ feed context, +30s (links
- │ X (list+       night/wknd)       + class          source text    numbers vs   │ craft; spike/ survive),
- │ bundles)       non-English                                       source (+1   │ revise/publish confirm-
- │ web search     gate                                              retry)       │               polled
+ │ WATCH          INTAKE GATES      ONE SONNET NEWSROOM              CODE GATES  │ EDITOR        PUBLISH
+ │ 12 RSS feeds   dedup by URL      clean run desk: all candidates   novelty,    │ Fable 5 @low: Typefully,
+ │ SEC EDGAR      freshness         survey -> selective fetch/search freshness,  │ reader value, scheduled
+ │ Perception     (2.5h day/6h      exact-event grouping + judgment  source,     │ exact-receipt +30s (links
+ │ X (list+       night/wknd)       + writing -> atomic dossier      numbers,    │ support +     survive),
+ │ bundles)       non-English       (fresh context every run)        scope/style │ craft         confirm-polled
  └───────────────────────────────────────────────────────────────────────────────┘
  weekdays 14:40 & 21:15 UTC: fresh Node EIC brief + wire's own catches → the Block
  daily 09:00 UTC: self-audit re-verifies yesterday's posts against their receipts
@@ -89,7 +88,7 @@ prove a claim, establish corroboration or event identity, lower any gate, or cre
 The Node may use building/peaked activity only after confidence, source role, source tier,
 and freshness are tied. NBN derives a bounded seven-day coverage snapshot from its own
 theme-tagged publications and open Typefully drafts. Missing tagged history is `unknown`,
-never “not covered.” The exact snapshot triage saw is preserved on the Desk.
+never “not covered.” The exact snapshot the newsroom saw is preserved on the Desk.
 
 When the same URL already exists in NBN as `new`, the pulse may attach its context and
 candidate ID; it may not overwrite title, source, summary, status, or provenance. It
@@ -135,65 +134,72 @@ the fetched evidence. Claude's server-side search is a one-use, 45-second last r
   one fixed value). EDGAR exempt (date-only stamps; its query bounds age instead).
 - **Non-English** (>30% non-Latin letters in the title) — skipped before any model call.
 
-## 3. Judgment (triage → source resolution)
+## 3. Judgment (one run-scoped Sonnet newsroom)
 
-**Triage** (Sonnet 5, medium effort, batch): action draft/update/hold/skip, a `story_key` naming the
-underlying story, and a proposed class. It receives both **posted** story keys (skip duplicates)
-and **open** ones (REUSE the key — that's what makes a second outlet's arrival trip the
-corroboration promotion).
+One fresh Sonnet 5 context receives the complete bounded intake run (up to 25 items) and
+owns survey, selective research, exact-event grouping, editorial judgment, and writing.
+The context closes after the run; durable memory remains in SQLite. There is no target
+quota. The newsroom may decide that nothing deserves coverage.
 
-After actionable pages are fetched, a separate low-effort Sonnet identity pass compares
-their verified article facts with a compact two-day catalog of recent event clusters. It
-does not approve stories or lower any gate. Only mappings at 0.85+ confidence to a key
-already present in the catalog or current batch are accepted. Accepted aliases persist
-for three days, so related keys converge across adjacent runs without merging recurring
-reports or corporate actions months apart. Failure is a no-op that preserves the triage
-key. Titles, article text, and Node hints in this pass remain untrusted content.
+The input is a clean editorial desk, not a database dump:
 
-Guide-account leads are ordered ahead of ordinary FIFO intake and must reach source
-research when they contain a plausible factual news claim or story link; terseness,
-link-only presentation, hype, or lack of in-post corroboration is not a reason to skip.
-Eligible P0/Tier 1/Tier 2 pages linked by the guide are fetched and assessed directly
-before search. If no linked page qualifies, NBN makes one bounded SerpAPI query, ranks
-eligible results by the NBN source ladder, and independently fetches and assesses up to
-three. Search snippets never count as evidence. Only after that path is exhausted may the
-single-use hosted-search fallback run.
-An omitted or structurally invalid triage response gets one smaller recovery call. If
-that also fails, a substantive factual guide claim enters secondary research while reply
-banter, link-only copy, promotion, and non-claim opinion become visible `triage incomplete`
-holds. This heuristic chooses research versus hold only; it never establishes evidence.
+- `run_brief`: assignment, as-of time, inventory count, and the evidence rule;
+- `intake_board`: one stable candidate card separating what arrived, why it surfaced,
+  registry source metadata, evidence status, unverified event hints, guide priors, and
+  operator/retry state;
+- `reference_board`: deduplicated, uninspected intake/Node/guide URLs;
+- `coverage_board`: separate exact-event lists for reader-covered stories, open Typefully
+  drafts, and other recent decisions;
+- `theme_board`: broad Node subjects cross-linked to current candidate IDs and NBN's
+  bounded recent coverage; and
+- `verified_handle_directory`: spelling/identity help only.
 
-Triage also receives the validated theme packet and the advisory coverage snapshot for the
-current batch. It may use them to notice a distinct development or repetitive coverage, but
-a shared theme never merges event keys, under-coverage never requires a post, and recent
-coverage never suppresses a genuinely material distinct event.
+Raw Node envelopes, provider plumbing, duplicate fields, and unrecognized discovery keys
+never reach Sonnet. Every candidate keeps one stable ID. What arrived is a lead; reference
+cards are pointers; themes are context. None becomes evidence until NBN fetches a page and
+issues a code-owned `fetch_id`.
 
-Triage has no target quota. Factual Bitcoin market state—defined-period price moves,
-flows, leverage, funding, open interest, volatility, liquidity, holder activity, and
-directly relevant rates/yields—is eligible when the underlying figures can be verified.
-It judges the factual payload beneath a headline and leaves the writer/editor to strip
-sentiment or narrative framing. Forecasts, price targets, trading advice, unsupported
-causal stories, and context-free price ticks still skip. A relevant official post linking
-only to a speech, hearing, release, or video advances to source resolution so the wire can
-find prepared remarks or a transcript; missing feed copy is not itself a rejection.
+The first forced tool call is `submit_survey`, which must account for every candidate.
+Sonnet can then fetch an intake item, query SerpAPI, and fetch eligible results through
+bounded read-only tools. URL safety, redirects, source-policy classification, page size,
+search/fetch counts, total context, rounds, time, and model budget are enforced in code.
+`finish_research` closes the research phase. A forced `submit_newsroom_dossier` must then
+give exactly one `draft`, `update`, `hold`, or `skip` disposition for every input plus each
+formed story's exact members, dated key, reader value, selected receipt, claim bindings,
+unresolved questions, and copy. Missing/duplicate items, invented fetch IDs, unsafe story
+groups, or malformed output reject the complete dossier before state changes.
 
-Measured Bitcoin reaction to a named event can qualify when the measurements are
-verifiable and the copy avoids speculative causality. Multi-asset policy or infrastructure
-news qualifies only when Bitcoin is materially affected and can be covered without token
-market reporting.
+Story keys identify exact events, not themes. Recurring purchases, filings, reports, and
+readings include their event/disclosure date (at least month/year when the exact day is
+unknown). Deterministic actor/entity, event type, date, direction, material-number, and
+narrow Treasury-yield guards can veto grouping. Existing aliases and exact reader-covered
+checks remain authoritative. `update` is valid only for a material development to an exact
+reader-covered event. An open Typefully draft is not reader coverage; later independent
+evidence enriches that cluster instead of creating a duplicate draft.
 
-Treasury-company intake is deliberately narrow: Strategy, Strive, and Metaplanet are the
-only routine candidates, but the allowlist is not approval. Strategy buys generally clear
-the materiality bar because the category leader moves the market; ordinary recurring buys,
-rankings, and stock-price reactions from Strive or Metaplanet skip absent a consequential
-development. Their official identities, plus Core Lightning's, have exact standalone P0
-registry entries rather than relying on a shared social identity.
+Guide-account posts carry a strong attention and craft prior, so plausible factual posts
+are researched rather than dismissed for terseness, hype, or link-only presentation. They
+remain tips, never receipts. Node themes can help Sonnet follow meaningful developments
+over time, but a shared theme never merges events, establishes support/corroboration,
+forces a post, or suppresses a distinct material event.
 
-`update` is a separate machine-readable triage action. It is valid only for a material
-development matching an exact reader-covered story key. Ordinary `draft` on an already
-reader-covered cluster still skips. A Typefully draft is deliberately not terminal:
-later outlets may add independent evidence to its cluster. Deterministic lint requires `NEW:` for first coverage and
-`UPDATE:` for an authorized update.
+Factual Bitcoin market state—defined-period price moves, flows, leverage, funding, open
+interest, volatility, liquidity, holder activity, and directly relevant rates/yields—is
+eligible when a selected receipt supports the figures. Forecasts, price targets, trading
+advice, unsupported causal stories, and context-free ticks skip. Relevant official media
+links can trigger a transcript/prepared-remarks search rather than failing for missing feed
+copy.
+
+Treasury-company intake remains narrow: Strategy, Strive, and Metaplanet are the only
+routine candidates, and the allowlist is not approval. Strategy purchases generally clear
+the materiality bar; ordinary recurring Strive/Metaplanet buys, rankings, and stock-price
+reactions skip absent a consequential development.
+
+The legacy triage → per-item resolver → identity clerk → Writer path remains intact only
+for feature-off, shadow comparison, or a failure before materialization. Once the dossier
+crosses into `materializing`, it cannot fall back or mix paths. A restart leaves an
+interrupted read-only inventory untouched and holds any unknown post-materialization
+delivery outcome rather than risking a duplicate.
 
 **Source tier and evidence class are separate:** `config/source_tiers.toml` is the
 validated canonical registry. P0 is an official artifact; Tier 1 premier reporting;
@@ -211,26 +217,20 @@ supports the story, is original, or is independent.
 | `data` | Pure market/chain data | in the allowed set; dormant until the wire computes its own numbers |
 | `briefing` | The Blocks | DRAFT until Brady promotes the class |
 
-**Active source resolution:** all actionable items receive a typed, persisted resolution
-before any item in the batch can promote. Official and research identities never prove
-artifact scope: broad-domain pages require a directly-supporting role verdict, fetched
-canonical/byline metadata wins over model metadata, and official-X is primary only for the
-account's own action or statement. Tier 1 is an acceptable receipt; Tier 2 reporting gets
-a bounded primary/Tier 1 upgrade search and may fall back only when original reporting is
-established. Tier 3, Tier 4, and unknown sources must be replaced by a directly supporting
-P0/Tier 1/Tier 2 page or they hold. Final-URL classification establishes source
-eligibility only. Except for exact artifacts carrying trusted first-party adapter provenance
-(currently EDGAR; there is no FRED discovery-adapter shortcut), every direct,
-Node, guide, and SerpAPI receipt passes the ordinary non-web semantic support assessor
-before it can support or corroborate a claim. Hosted web search runs only when those
-bounded paths found no assessed eligible receipt.
+**Evidence reconstruction:** the newsroom may recommend support/originality only from text
+it actually fetched. Code ignores model-supplied source identity and reconstructs every
+typed resolution from immutable fetch records: requested/final/canonical URL, redirect
+chain, registry source ID/tier/role/owner, adapter provenance, byline, content fingerprint,
+and bounded page text. Official/research identity never proves artifact scope; broad-domain
+pages still require the right actor/artifact relationship, and official X is primary only
+for the account's own action or statement. Tier 1 is receipt-eligible. Tier 2 must be its
+own reporting/research. Tier 3, Tier 4, discovery, aggregator, syndication, and unknown
+sources must be replaced by a supporting P0/Tier 1/Tier 2 page or the story holds.
 
-If semantic assessment times out, at most three sanitized eligible URLs and their resolver
-path are retained in the durable research context for the existing second attempt. They
-remain unsupported and ineligible for receipt/corroboration until assessment succeeds.
-`support_assessment_timeout` and `search_timeout` are separate typed outcomes. The explicit
-`scripts/requeue_source_timeouts.py` operator command is dry-run by default, capped, limited
-to fresh nonterminal exhausted timeout jobs, and never drafts or publishes directly.
+The selected receipt must independently support every factual assertion in the post;
+pooled evidence may help understand or corroborate a story but cannot fill a hole under the
+linked receipt. Search snippets are pointers only. Fable receives the exact selected text,
+code-owned provenance, and declared claim list for an independent fail-closed support check.
 
 The original tip and final receipt are stored separately. A detector plus the artifact it
 located is one evidence chain, not two. Eligible evidence persists across cycles for the
@@ -246,41 +246,41 @@ single-source Typefully draft already exists, later evidence never creates anoth
 it is pooled into the open cluster. When the cluster becomes primary or corroborated and
 autopost is enabled, NBN schedules that already-approved Typefully draft in place.
 
-Node-ranked references are a prepared search path inside this same resolver, not a bypass.
-Their source tiers and role labels are discarded and recomputed locally; fetched metadata
-and the existing receipt gates remain authoritative. This reduces duplicated searching
-without delegating triage, source policy, factual support, writing, or publication to the
-Node.
+Node-ranked references and guide outbound links are prepared cards on the same research
+desk, not a bypass. Their upstream source tiers and roles are discarded and recomputed
+locally after fetch. This reduces duplicated searching without delegating source policy,
+factual support, or publication authority to the Node or guide account.
 
-Actionable triage decisions are frozen into a durable `research_jobs` record before the
-first external fetch. A timeout, transport error, rate limit, 5xx, or source-search outage
-is an infrastructure outcome—not an editorial rejection—and receives exactly one later
-automatic retry (at most two due jobs per cycle). A crash-held claim is recovered after
-its lease; LLM budget exhaustion delays work without consuming an attempt. Definitive
-unsafe/4xx/no-evidence outcomes remain normal editorial holds. Provider-substitution
-failures remain terminal in this release rather than creating an unbounded retry graph.
+The complete inventory identity, opening survey, validated dossier/digest, and per-story
+materialization state are durable. Research retries are read-only inputs to the newsroom
+until the dossier starts materializing, so a pre-materialization fallback receives the
+identical inventory without spending a retry. Existing legacy retry jobs still distinguish
+timeouts/transport/rate-limit/5xx/search outages from editorial rejection and permit one
+later attempt. Definitive unsafe/4xx/no-evidence outcomes remain normal editorial holds.
 
 ## 4. Writing
 
-Sonnet 5 drafts from the FETCHED article text under the charter
-(`prompts/wire_voice.md`; compiled reference `PROMPTS.md`). The load-bearing seams:
+The same run-scoped Sonnet writes after seeing the complete batch, its exact-event groups,
+recent coverage, and selectively fetched evidence. This preserves research context while
+still forcing each post to one selected receipt under the charter
+(`prompts/wire_voice.md`; prompt index `PROMPTS.md`). The load-bearing seams:
 - Every number must appear verbatim in the fetched source text; no text → no post.
 - Freshness distinguishes a report's fresh `disclosure_date` from its older
   `underlying_period_end`; the latter must be stated as historical context.
 - The model never writes URLs — the system appends the verified receipt (the
   anti-fabrication seam).
-- If the wire already covered the story, drafting receives `already_covered` — lead
-  with what's new, never re-announce.
+- If the wire already covered the exact story, the dossier must use `update` and lead with
+  what's new, never re-announce.
 - Shape: narrative default in short scannable paragraphs; `•` bullets (max 4) only for
   genuinely enumerable stories; mixed allowed (one run ≤3) — bullets carry lists, prose
   carries the story. Attribute the source ONCE. Mentions only from `handles.json`
   (hand-verified), max 2.
-- For a guide-surfaced story, Writer also receives that guide post as explicitly
-  untrusted craft context. It may borrow information order, structure, and approximate
+- For a guide-surfaced story, Sonnet receives that post as explicitly untrusted craft
+  context. It may borrow information order, structure, and approximate
   length when useful, but not phrasing, emotional framing, or any fact absent from the
   selected receipt.
 
-## 5. The gates (deterministic; one retry with violations fed back)
+## 5. The gates (deterministic; one bounded same-session repair)
 
 `nbn/lint.py`: Bitcoin-only scope (no non-Bitcoin token ever; "crypto" only as a
 business adjective or inside a quoted official title), no hype/forecast/buy-timing
@@ -289,23 +289,24 @@ no model URLs, length caps. Block-specific: any "swan" mention rejected; receipt
 be URLs present in the Node's brief. These gates are the wire's identity — NOT Swan
 compliance; the wire is not Swan-affiliated content.
 
-If a draft names a data provider different from its selected receipt, the worker performs
-one targeted provider lookup and one redraft from the replacement text. A second mismatch,
-empty source, unsupported number/quote, or ambiguous adversarial claim-support verdict
-holds. It never swaps a receipt beneath already-written copy or loops back to the old one.
+Repairable newsroom lint failures are aggregated into one post-only repair request in the
+same Sonnet history. The patch may change copy and bounded draft metadata only; it cannot
+change action, story membership/key, source, evidence, or claims, and it cannot reopen
+research. A named data provider different from the selected receipt holds newsroom output;
+the system never swaps a receipt beneath already-written copy.
 
 ## 6. The Editor (last mile, before every delivery)
 
-`nbn/editor.py` — **Fable 5 at low effort** (Brady's call). After all gates, before
-publish, it reads the candidate against the wire's last 10 published posts — the two
-things rule-gates can't see: contextual duplication and craft. Verdicts:
-**publish** / **revise** (downward-only edits, re-linted, original stands on failure) /
-**spike** (held, reasoning shown in the Desk for Brady to agree or overrule). An editor
-outage fails OPEN — judgment problems never block news. Every verdict is recorded on
-the post (`editor_note`): the grading record. The Editor runs on every gate-passed
-candidate in enforced source-policy mode, whether the publisher will send it immediately
-or stage it in Typefully. `NBN_AUTOPOST_ENABLED` controls delivery mode only; it does not
-remove the Editor from the funnel.
+`nbn/editor.py` — **Fable 5 at low effort** (Brady's call). After all deterministic gates,
+before publish, it reads the candidate against the wire's last 10 posts for contextual
+duplication and craft. For newsroom output it also receives the exact selected receipt
+text and code-owned provenance and must explicitly confirm that every final factual
+assertion is supported by that receipt. Verdicts are **publish** / **revise**
+(downward-only, re-linted and rechecked) / **spike**. A newsroom Editor timeout, refusal,
+malformed response, or unknown/false support fails CLOSED to a hold. The migration-only
+legacy Editor retains its previous fail-open behavior. Every delivered verdict is recorded
+in `posts.editor_note`. The full Editor runs whether final delivery is immediate or a
+Typefully draft; `NBN_AUTOPOST_ENABLED` changes delivery mode only.
 
 ## 7. Publishing
 
@@ -420,14 +421,15 @@ Perception may be turned off only after a healthy manual Node pulse, a healthy s
 Node Perception pulse, and successful NBN consumption have been observed.
 
 **Switches:** `NBN_AUTOPOST_ENABLED=false` = master kill (everything stages as
-drafts). Pause the Railway service to stop even drafting. Tape reads:
+drafts). Production currently has it enabled; set it false to pause autonomous
+publication. Pause the Railway service to stop even drafting. Tape reads:
 `railway ssh "cat /data/tapes/tape-YYYY-MM-DD.md"`.
 
 ## 11. The knobs (Railway service variables)
 
-| Variable | Observed 2026-08-31 | Purpose |
+| Variable | Observed 2026-09-01 | Purpose |
 |---|---|---|
-| `NBN_AUTOPOST_ENABLED` | `false` | master kill switch; autonomy currently paused |
+| `NBN_AUTOPOST_ENABLED` | `true` | master kill switch; autonomy currently enabled |
 | `NBN_SOURCE_POLICY_MODE` | `enforce` (code default) | `observe` records decisions but forces DRAFT/TAPE |
 | `NBN_SOURCE_EVIDENCE_LOOKBACK_HOURS` | `24` | freshness bound for cross-cycle evidence |
 | `NBN_SOURCE_RESOLUTION_CACHE_SECONDS` | `3600` | persisted per-item resolution cache across restarts |
@@ -441,8 +443,14 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_X_DETECTOR_ENABLED` | `true` | broad detector-X lane; independent of curated primary/research X |
 | `NBN_PERCEPTION_API_KEY` / `NBN_PERCEPTION_POLL_SECONDS` | set (shared) / `900` | direct Perception fallback lane |
 | `NBN_PERCEPTION_DIRECT_ENABLED` | `true` until production cutover gate passes | lets Node own Perception discovery once safely proven |
-| `NBN_MODEL` / `NBN_TRIAGE_MODEL` / `NBN_TRIAGE_EFFORT` | `claude-sonnet-5` / `claude-sonnet-5` / `medium` | writer + bounded triage judgment |
-| `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | the editor seat |
+| `NBN_MODEL` / `NBN_TRIAGE_MODEL` / `NBN_TRIAGE_EFFORT` | `claude-sonnet-5` / `claude-sonnet-5` / `medium` | run newsroom; legacy fallback keeps the separate triage setting |
+| `NBN_RUN_NEWSROOM_MODE` / `NBN_RUN_NEWSROOM_FALLBACK` | `off` (pre-rollout) / `legacy` | `off → shadow → draft → live`; fallback only before materialization |
+| `NBN_RUN_NEWSROOM_MAX_ROUNDS` / `MAX_TOOL_CALLS` | `8` / `24` | bounded same-session model/tool loop |
+| `NBN_RUN_NEWSROOM_MAX_SEARCHES` / `MAX_FETCHES` | `8` / `16` | per-run retrieval bounds |
+| `NBN_RUN_NEWSROOM_MAX_FETCH_CHARS` / `MAX_FETCH_TOTAL_CHARS` | `8000` / `160000` | receipt text bounds |
+| `NBN_RUN_NEWSROOM_MAX_INITIAL_BYTES` / `MAX_HISTORY_BYTES` | `98304` / `491520` | clean-desk and total-context ceilings |
+| `NBN_RUN_NEWSROOM_TIMEOUT_SECONDS` | `240` | wall-clock ceiling before pre-materialization fallback |
+| `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | independent, fail-closed newsroom support/craft editor |
 | `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | v2 wire pulse, legacy fallback, and Blocks |
 | `NBN_NODE_PULSE_MAX_AGE_SECONDS` | `10800` | maximum accepted v2 pulse age (3h) |
 | `NBN_YIELD_IDENTITY_NORMALIZER_ENABLED` | `false` | narrow clerk-proposed, code-validated same-day U.S. 10-year-yield identity rule |
@@ -460,8 +468,9 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 
 ## 12. Costs (order of magnitude)
 
-Railway ~$5-10/mo · Typefully ~$10/mo · X Premium on the handle · LLM: Sonnet triage/
-drafting/evidence assessment + Fable editor ≈ $2-5/day typical · SerpAPI search usage
+Railway ~$5-10/mo · Typefully ~$10/mo · X Premium on the handle · LLM: one bounded Sonnet
+newsroom context per non-empty run + Fable per surviving story (measure during rollout;
+expected same order of magnitude as the fragmented path) · SerpAPI search usage
 rides the Node's shared account · X reads ≈ $10-20/mo (since_id makes quiet polls free) ·
 Perception rides the shared key.
 Run rate ≈ **$100-180/mo all-in**.
@@ -476,11 +485,15 @@ Run rate ≈ **$100-180/mo all-in**.
 | Typefully definitively fails | stored `FAILED`; URL fallback only on the known definitive policy rejection | Needs You (PUBLISH FAILED), logs |
 | Node discovery unavailable | intake continues from all other sources; status pill turns red; throttle prevents hammering | Desk, logs |
 | Node brief unavailable, stale, or from the wrong Daily Intel run/window | Block waits through its catch-up window, then skips without publishing | logs |
-| Out-of-charter copy | lint holds after one retry | Desk holds ("Style gate") |
+| Out-of-charter copy | one same-session post-only repair, then hold | Desk holds ("Style gate") |
 | Contextual dup / weak value | editor spikes with reasoning | Needs You (AGREE OR OVERRULE) |
+| Newsroom timeout/malformed dossier before materialization | identical frozen inventory enters legacy fallback (or holds if configured) | Desk last run, logs |
+| Worker restart during newsroom research | run marked fallback; untouched items remain available | Desk last run, logs |
+| Worker restart after materialization began | locally recorded deliveries stand; unknown outcomes hold and never auto-retry | Desk holds, newsroom run state |
+| Fable support unknown/false on newsroom copy | fail-closed hold; no autonomous delivery | Desk holds, editor note/logs |
 | Press story misclassed `primary` | **the one gate-proof failure** — daily class audit is the net | Self-audit (CLASS SUSPECT) |
 | Worker crash or hang | Railway restarts crashes; healthchecks pages on ANY ≥15-min silence; /health 500s when stale | phone |
-| Model API outage | cycle errors logged; loop survives; editor outage fails open | /health `last_error` |
+| Model API outage | newsroom falls back only before materialization; newsroom Editor fails closed; loop survives | Desk, /health `last_error` |
 
 Design principle throughout: **models propose, deterministic code vetoes, an editor
 judges, and every decision is reconstructible from the tape and the database.**

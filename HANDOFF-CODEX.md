@@ -24,7 +24,7 @@ discuss it in Swan channels.
 
 **2026-09-01 integration update:** `wire-pulse-v2` may carry bounded Node theme activity.
 NBN validates it as untrusted discovery context, computes a seven-day advisory coverage
-snapshot from its own tagged output, supplies that context to triage, and renders the exact
+snapshot from its own tagged output, supplies that context to the newsroom, and renders the exact
 snapshot on the Desk. Themes are broad subjects, not event keys or evidence. They cannot
 establish corroboration, force/suppress a post, lower gates, or create quotas. Missing
 historical tags are explicitly unknown.
@@ -40,12 +40,24 @@ Three receipts selected after deploy all had semantic support and receipt eligib
 zero fallback-supported receipts were found. The Desk shows exact resolver path/outcome,
 typed failure, guide-advance, completion, Node downgrade/reject, and recovery counts.
 
-## The pipeline (read `nbn/main.py:cycle` top to bottom — it's the whole story)
+## The pipeline (read `nbn/main.py:cycle` and `nbn/newsroom.py`)
 
 ```
-poll sources → intake gates → triage (Sonnet 5) → verify/corroborate → draft (Sonnet 5)
-→ deterministic lint (+1 retry) → Editor (Fable 5 @ low) → scheduled publish (Typefully)
+poll sources → intake gates → one run-scoped Sonnet newsroom
+(survey → selective research → exact-event judgment → writing → atomic dossier)
+→ deterministic gates/one post-only repair → Fable support+craft Editor → Typefully
 ```
+
+- **Newsroom** (`nbn/newsroom.py`): one fresh Sonnet context owns every non-empty
+  bounded run; it does not persist across runs. The model receives a clean editorial desk:
+  one stable intake card per item, a separate uninspected-reference board, exact recent
+  coverage/open-draft boards, a broad advisory theme board, and verified handle spellings.
+  Raw Node envelopes and unknown metadata are removed. What arrived is a lead; only a
+  code-issued `fetch_id` from an inspected page can become evidence.
+- **Protocol**: forced complete survey → bounded safe fetch/SerpAPI tools → explicit
+  research close → forced dossier covering every candidate exactly once. Unknown fetches,
+  unsafe grouping, omissions, or malformed output reject the whole batch before
+  materialization. Once materialization starts, legacy fallback is forbidden.
 
 - **Sources** (`nbn/sources.py`): 12 RSS feeds, SEC EDGAR full-text, Perception /feed,
   X recent-search (roster from a public X List, compiled hourly; detector accounts are
@@ -58,8 +70,9 @@ poll sources → intake gates → triage (Sonnet 5) → verify/corroborate → d
 - **Corroboration**: 2+ fresh, directly supporting, independent persisted evidence chains
   on one exact story_key. Same owners, syndication copies, and a shared primary artifact
   collapse. A detector plus the artifact it finds is one chain, not two.
-- **Editor** (`nbn/editor.py`): last-mile judgment before autonomous publish. Fails OPEN
-  (an editor outage must not block news). Verdicts logged to `posts.editor_note`.
+- **Editor** (`nbn/editor.py`): independent Fable last-mile judgment. Newsroom output
+  fails CLOSED unless Fable confirms every final assertion against the exact selected
+  receipt; revisions are re-linted. The migration-only legacy Editor still fails open.
 - **Publishing** (`nbn/publisher_typefully.py`): Typefully v2. `publish_at:"now"` REJECTS
   drafts containing URLs (X policy, draft-wide) — so "immediate" = scheduled +30s
   (`NBN_PUBLISH_DELAY_SECONDS`). Media: upload → presigned S3 PUT → poll ready →
@@ -133,7 +146,11 @@ PYTHONPATH=. NBN_DATA_DIR=/tmp/x railway run python3 test.py   # local pipeline 
   `DESK-REPORT-URL.txt` (gitignored). Day nav `?d=YYYY-MM-DD`, dismiss links, editor
   verdicts, held groups with reasons, and source-resolution status/note/evidence counts on
   draft cards. If you change pipeline behavior, keep the Desk honest.
-- **Test pattern for pipeline changes**: local rerun via `railway run` (draft+lint+editor,
+- **Test pattern for pipeline changes**: local full suite first, then staged newsroom
+  rollout `off → shadow → draft → live`. Shadow compares without materializing; draft runs
+  real gates but forces Typefully draft. A live prompt/tool change must survive a natural
+  non-empty run and production logs before promotion. For a focused legacy rerun via
+  `railway run` (draft+lint+editor,
   nothing publishes), then if Brady wants a live test, inject the item into `/data/nbn.db`
   via `railway ssh` (INSERT into items with status 'new') and let the worker's own cycle
   handle it. Regression-test lint with the actual offending copy (see git log for examples).

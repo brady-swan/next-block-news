@@ -295,6 +295,34 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Bitcoin &lt;script&gt;alert(1)&lt;/script&gt;", html)
         self.assertNotIn("<script>alert(1)</script>", html)
 
+    def test_desk_labels_completed_newsroom_decisions_and_escapes_diagnostics(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            pending = store.upsert_new_items(con, [{
+                "source": "SEC", "title": "Bitcoin action",
+                "url": "https://example.com/newsroom", "published": "", "summary": "",
+            }])
+            store.set_status(con, pending[0]["url_hash"], "held", "bitcoin-action",
+                             "editor spiked: too repetitive")
+            store.record_decision_run(
+                con, pending,
+                [{**pending[0], "action": "draft", "story_key": "bitcoin-action",
+                  "reason": "material policy action", "_newsroom_story_id": "story-1",
+                  "_newsroom_reader_value": "Useful <script>context</script>",
+                  "_newsroom_unresolved": ["Whether <b>timing</b> is final"]}],
+                {"fetched": 1, "new": 1, "considered": 1, "pending": 1,
+                 "newsroom": {"mode": "live", "status": "completed",
+                              "prompt_version": "run-newsroom-v1", "stories": 1,
+                              "rounds": 4, "tool_calls": 2, "fetches": 1}},
+                time.time(),
+            )
+            html = report.render(con)
+        self.assertIn("sent to newsroom", html)
+        self.assertIn("newsroom · draft", html)
+        self.assertIn("Run newsroom", html)
+        self.assertIn("Reader value: Useful &lt;script&gt;context&lt;/script&gt;", html)
+        self.assertIn("Whether &lt;b&gt;timing&lt;/b&gt; is final", html)
+        self.assertNotIn("<script>context</script>", html)
+
     def test_desk_shows_bounded_theme_context_and_escapes_node_text(self):
         context = {
             "untrusted_discovery_context": True,

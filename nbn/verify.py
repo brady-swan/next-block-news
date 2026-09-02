@@ -139,9 +139,7 @@ def _domain(url: str) -> str:
 
 def _model_json(prompt: str, web: bool = False, max_tokens: int = 2400) -> dict:
     from . import brain
-    if not brain._budget_ok():
-        raise RuntimeError("LLM hourly call budget exhausted")
-    brain._call_times.append(time.time())
+    brain.consume_model_call()
     kwargs = dict(model=config.ANTHROPIC_MODEL, max_tokens=max_tokens,
                   messages=[{"role": "user", "content": prompt}])
     if web:

@@ -433,9 +433,10 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
         if csv_text:
             return {"text": csv_text[:limit], "final_url": url,
                     "canonical_url": url, "byline": "", "outcome": "ok",
-                    "error_kind": "", "error_message": ""}
+                    "error_kind": "", "error_message": "", "redirect_chain": [url]}
         with httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=False) as client:
             current_url = url
+            redirect_chain = [url]
             for _ in range(6):
                 _assert_public_http_url(current_url)
                 resp = client.get(current_url)
@@ -445,6 +446,7 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
                 if not location:
                     raise UnsafeSourceURL("redirect response omitted Location")
                 current_url = urljoin(current_url, location)
+                redirect_chain.append(current_url)
             else:
                 raise UnsafeSourceURL("too many source redirects")
             resp.raise_for_status()
@@ -454,7 +456,8 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
             if csv_text:
                 return {"text": csv_text[:limit], "final_url": str(resp.url),
                         "canonical_url": str(resp.url), "byline": "", "outcome": "ok",
-                        "error_kind": "", "error_message": ""}
+                        "error_kind": "", "error_message": "",
+                        "redirect_chain": redirect_chain}
         canonical = ""
         if m := re.search(r'(?is)<link[^>]+rel=["\'][^"\']*canonical[^"\']*["\'][^>]+>', body):
             if href := re.search(r'(?i)href=["\']([^"\']+)', m.group(0)):
@@ -472,7 +475,7 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
         return {"text": re.sub(r"\s+", " ", text).strip()[:limit],
                 "final_url": str(resp.url), "canonical_url": canonical or str(resp.url),
                 "byline": byline, "outcome": "ok", "error_kind": "",
-                "error_message": ""}
+                "error_message": "", "redirect_chain": redirect_chain}
     except Exception as exc:  # noqa: BLE001
         log.warning("article fetch failed %s: %s", url, exc)
         retryable = isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
@@ -481,7 +484,7 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
         outcome = "infrastructure_retryable" if retryable else "evidence_failed"
         return {"text": "", "final_url": url, "canonical_url": url, "byline": "",
                 "outcome": outcome, "error_kind": type(exc).__name__,
-                "error_message": str(exc)[:300]}
+                "error_message": str(exc)[:300], "redirect_chain": [url]}
 
 
 def fetch_article_text(url: str, limit: int = 8000) -> str:

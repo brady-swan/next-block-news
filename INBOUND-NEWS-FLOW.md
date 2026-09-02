@@ -23,11 +23,11 @@ Perception         every 15 minutes                  |- 10 X searches
                                       |
                              freshness/language gates
                                       |
-                           model triage (up to 25 items)
+                     one fresh Sonnet newsroom (up to 25)
+                         survey -> selective research
+                         exact-event judgment -> writing
                                       |
-                     fetch source and seek better receipt
-                                      |
-                         writer -> gates -> editor
+                    deterministic gates -> Fable editor
                                       |
                            Typefully / tape / hold
 ```
@@ -235,36 +235,59 @@ All sources converge before model judgment.
 2. **Freshness.** During weekdays from 7:00 a.m. to 7:00 p.m. Eastern, the normal maximum
    age is 2.5 hours. Overnight and weekends it is six hours. Parsed stale items are skipped
    before a model call.
-3. **Language.** Titles with more than 30% non-Latin letters are skipped before triage.
-4. **Batching.** Up to 25 pending items are sent to triage in one cycle. Excess items stay
+3. **Language.** Titles with more than 30% non-Latin letters are skipped before the newsroom.
+4. **Batching.** Up to 25 pending items are sent to one newsroom run. Excess items stay
    pending for the next minute's cycle.
 
 ## 4. Editorial funnel
 
-### Triage
+### Run-scoped Sonnet newsroom
 
-The triage model assigns `draft`, `update`, `hold`, or `skip`; creates or reuses the stable
-NBN story key; and proposes a post class. It sees already-published and still-open story
-keys so separate reports about the same event converge.
+One fresh Sonnet context owns each ordinary intake run: survey, research, exact-event
+grouping, news judgment, and writing. It does not persist across runs. This gives the model
+the whole current news picture without creating an immortal conversation or losing NBN's
+durable database state.
 
-Actionable pages are then fetched before final novelty and corroboration decisions. A
-high-precision identity pass compares their verified facts with recent clusters and can
-persist a short-lived alias when triage produced a different key for the same dated event.
-Only known keys and confidence of at least 0.85 are accepted; failure leaves the provisional
-key unchanged. Evidence queries and prior-coverage checks operate across the resulting
-canonical key family.
+Sonnet receives a deliberately organized editorial desk rather than raw records:
+
+- one stable intake card per candidate, separating what arrived, why it surfaced, and
+  whether it is a tip, an uninspected official lead, or a potential receipt;
+- a separate board of uninspected intake, Node, and guide-account URLs;
+- separate exact-event boards for recent reader coverage, open Typefully drafts, and other
+  recent decisions;
+- a broad Node theme board cross-linked to current candidates; and
+- a small verified-handle spelling directory.
+
+Raw Node envelopes and unrecognized metadata do not reach the model. Node summaries,
+event hints, themes, guide posts, and engagement counts remain untrusted attention/context,
+never evidence.
+
+The first forced response is a complete survey accounting for every candidate. Sonnet may
+then fetch intake pages, search SerpAPI, and fetch eligible results through bounded NBN-owned
+tools. It explicitly closes research before submitting one atomic dossier with exactly one
+`draft`, `update`, `hold`, or `skip` disposition for every candidate and one exact-event
+record for each story. A missing item, invented fetch ID, invalid group, malformed story
+key, or receipt that fails deterministic reconstruction rejects the entire dossier before
+materialization. Search snippets and desk cards never become evidence; only inspected,
+code-generated `fetch_id` records do.
+
+Story keys identify exact events, not themes. Recurring purchases, filings, reports, and
+readings include their event/disclosure date (or at least month and year when the day is
+unknown). Deterministic actor, event-type, date, direction, numeric, and narrow yield guards
+can veto unsafe grouping. Existing canonical aliases and exact prior-coverage checks remain
+authoritative.
 
 There is no target quota. Discovery volume should not force publication.
 
-For Node-tagged candidates, triage also sees Node activity and the exact NBN coverage
+For Node-tagged candidates, the newsroom sees Node activity and the exact NBN coverage
 snapshot later shown on the Desk. A theme is a broad ongoing subject, not an event cluster:
 it cannot satisfy evidence or corroboration, merge story keys, force a post because coverage
 is unknown/thin, or suppress a material distinct development because the theme was covered.
 
-### Source resolution and verification
+### Selective source resolution and verification
 
-For `draft` and `update` decisions, NBN fetches the page and independently classifies its
-receipt quality:
+During research, Sonnet chooses which promising leads need inspection and where a stronger
+source is needed. NBN independently classifies every fetched page's receipt quality:
 
 - **P0:** official or primary source.
 - **Tier 1:** premier reporting.
@@ -272,21 +295,19 @@ receipt quality:
 - **Tier 3:** discovery/corroboration lead only.
 - **Unknown/lower:** not autonomously receipt-eligible.
 
-A Tier 3 or weak source triggers an upgrade search for a primary source or stronger
-reporter. NBN first tries eligible pages already supplied by the Node or linked by a guide
-account. It then sends one deterministic claim query directly to SerpAPI, reclassifies the
-Google organic results against NBN's source registry, and fetches and assesses up to three
-eligible pages. The search snippets are never evidence. Claude's hosted search remains a
-single-use, 45-second fallback only. Search is therefore a research step, not a raw
-inbound feed. A second-tier publication can alert NBN to an event without becoming the
-link in the final post.
+A Tier 3 or weak source is a lead, not a receipt. Sonnet can inspect eligible pages already
+supplied by the Node or linked by a guide account, query SerpAPI directly, and fetch stronger
+official/research/reporting results. NBN reclassifies every requested and final redirect URL
+against its own registry. The search snippets are never evidence. Search is therefore a
+research step, not a raw inbound feed. A second-tier publication can alert NBN to an event
+without becoming the link in the final post.
 
-URL classification decides only whether a fetched page is eligible to be assessed. Every
-non-self-authenticating direct, Node, guide, and SerpAPI page must pass the ordinary
-non-web semantic support check before it counts as evidence. If that check times out, up
-to three sanitized URLs survive in the durable retry context but remain unsupported and
-cannot corroborate. Hosted search is unnecessary once an eligible page has passed that
-assessment.
+URL classification decides only whether a fetched page may be considered. Sonnet proposes
+support/originality from inspected text, but code reconstructs the source record from
+code-owned URL, redirect, ownership, tier, byline, artifact, and fingerprint fields. The
+selected receipt must support the complete final post. Fable independently checks every
+factual assertion against that exact receipt and fails closed on timeout, malformed output,
+or unknown support.
 
 Retryable network failures are persisted and retried after five minutes. Editorial holds
 are kept separate from infrastructure failures. A capped dry-run-first recovery command
@@ -298,11 +319,21 @@ that cluster rather than generating a duplicate draft; once the evidence class b
 `corroborated` (or a primary artifact arrives), the existing approved draft is scheduled
 in place when autopost is enabled.
 
-### Writer, deterministic gates, and Editor
+### Writing, deterministic gates, and Editor
 
-The Writer drafts only from the selected source text. Deterministic gates check freshness,
-style, numbers, receipt integrity, source support, and data-provider attribution. The
-Editor then publishes, revises, or spikes the surviving copy.
+The same Sonnet run writes from the selected inspected receipt after seeing the complete
+batch and its research. Deterministic gates check exact-story novelty, freshness, Bitcoin
+scope, style, numbers, quotes, receipt integrity, source support, and data-provider
+attribution. Repairable lint failures receive one aggregate post-only repair request in the
+same Sonnet context; research, story membership, source, and claims cannot reopen. Fable
+then independently publishes, revises, or spikes the surviving copy and must explicitly
+confirm semantic support.
+
+The legacy triage → per-item resolver → event clerk → Writer path remains available only
+behind `off`, `shadow`, or pre-materialization fallback during the migration window. Once
+newsroom materialization begins, a failure can hold a story but cannot mix it back into the
+legacy path. An interrupted worker closes read-only runs safely and holds any unknown
+post-materialization outcome rather than risking a duplicate delivery.
 
 The same complete stack runs whether autopost is on or off.
 
