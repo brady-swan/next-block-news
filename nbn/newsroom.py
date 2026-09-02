@@ -135,8 +135,10 @@ DESK MAP
   exact-event identity, evidence, corroboration, or a coverage mandate.
 - verified_handle_directory is only a spelling directory for optional X attribution.
 
-Keep candidate_id stable throughout the run. Keep exact event stories separate from broad
-themes. Distinguish what the tip claims from what an inspected receipt actually establishes.
+Copy candidate_id values only from intake_board and keep them stable throughout the run.
+Never substitute a reference_board pointer_id for a candidate_id. Keep exact event stories
+separate from broad themes. Distinguish what the tip claims from what an inspected receipt
+actually establishes.
 
 WIRE VOICE
 {brain.CHARTER}
@@ -154,22 +156,22 @@ TOOLS: list[dict[str, Any]] = [
                 "candidate_map": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
-                        "url_hash": {"type": "string"},
+                        "candidate_id": {"type": "string"},
                         "proposed_story_id": {"type": ["string", "null"]},
                         "proposed_disposition": {
                             "type": "string", "enum": ["research", "hold", "skip"]},
                         "reason": {"type": "string", "maxLength": 240},
                     },
-                    "required": ["url_hash", "proposed_story_id", "proposed_disposition", "reason"],
+                    "required": ["candidate_id", "proposed_story_id", "proposed_disposition", "reason"],
                 }},
                 "stories": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
                         "story_id": {"type": "string"},
-                        "member_hashes": {"type": "array", "items": {"type": "string"}},
+                        "member_candidate_ids": {"type": "array", "items": {"type": "string"}},
                         "research_need": {"type": "string", "maxLength": 500},
                     },
-                    "required": ["story_id", "member_hashes", "research_need"],
+                    "required": ["story_id", "member_candidate_ids", "research_need"],
                 }},
                 "run_note": {"type": "string", "maxLength": 500},
             },
@@ -182,8 +184,8 @@ TOOLS: list[dict[str, Any]] = [
         "strict": True,
         "input_schema": {
             "type": "object", "additionalProperties": False,
-            "properties": {"url_hash": {"type": "string"}},
-            "required": ["url_hash"],
+            "properties": {"candidate_id": {"type": "string"}},
+            "required": ["candidate_id"],
         },
     },
     {
@@ -222,12 +224,12 @@ TOOLS: list[dict[str, Any]] = [
                 "items": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
-                        "url_hash": {"type": "string"},
+                        "candidate_id": {"type": "string"},
                         "story_id": {"type": ["string", "null"]},
                         "disposition": {"type": "string", "enum": ["draft", "update", "hold", "skip"]},
                         "reason": {"type": "string", "maxLength": 400},
                     },
-                    "required": ["url_hash", "story_id", "disposition", "reason"],
+                    "required": ["candidate_id", "story_id", "disposition", "reason"],
                 }},
                 "stories": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
@@ -237,7 +239,7 @@ TOOLS: list[dict[str, Any]] = [
                         "recent_cluster_key": {"type": ["string", "null"]},
                         "relationship": {"type": "string", "enum": [
                             "distinct", "same_event", "new_development"]},
-                        "member_hashes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                        "member_candidate_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
                         "action": {"type": "string", "enum": ["draft", "update", "hold", "skip"]},
                         "reason": {"type": "string", "maxLength": 400},
                         "reader_value": {"type": "string", "maxLength": 800},
@@ -273,7 +275,7 @@ TOOLS: list[dict[str, Any]] = [
                         }},
                     },
                     "required": ["story_id", "story_key", "recent_cluster_key",
-                                 "relationship", "member_hashes", "action", "reason",
+                                 "relationship", "member_candidate_ids", "action", "reason",
                                  "reader_value", "selected_fetch_id", "evidence",
                                  "unresolved_questions", "post", "event_date", "disclosure_date",
                                  "underlying_period_end", "data_provider", "needs_second_source",
@@ -738,7 +740,7 @@ class NewsroomSession:
                 return self._tool_result(block.id, {"ok": False, "kind": "tool_capacity"}, error=True)
             self.tool_calls += 1
         if name == "fetch_intake_item":
-            item_hash = str(value.get("url_hash") or "")
+            item_hash = str(value.get("candidate_id") or "")
             item = self.by_hash.get(item_hash)
             if not item:
                 result = {"ok": False, "kind": "unknown_item"}
@@ -830,7 +832,7 @@ class NewsroomSession:
         rows = survey.get("candidate_map") or []
         if len(rows) > len(self.by_hash) or len(survey.get("stories") or []) > len(self.by_hash):
             raise NewsroomError("survey_too_large", "survey exceeds inventory bounds")
-        hashes = [str(row.get("url_hash") or "") for row in rows if isinstance(row, dict)]
+        hashes = [str(row.get("candidate_id") or "") for row in rows if isinstance(row, dict)]
         if len(hashes) != len(set(hashes)) or set(hashes) != set(self.by_hash):
             raise NewsroomError("survey_coverage", "survey must account for every inventory hash once")
 
@@ -941,6 +943,15 @@ class NewsroomSession:
     def _validate_and_convert(self, dossier: dict) -> NewsroomOutcome:
         if _json_bytes(dossier) > 98304:
             raise NewsroomError("dossier_too_large", "dossier exceeds 96 KiB")
+        # The model-facing contract uses editorial candidate IDs. Normalize those
+        # code-owned stable IDs to the storage vocabulary only after receipt.
+        dossier = copy.deepcopy(dossier)
+        for row in dossier.get("items") or []:
+            if "candidate_id" in row and "url_hash" not in row:
+                row["url_hash"] = row.pop("candidate_id")
+        for story in dossier.get("stories") or []:
+            if "member_candidate_ids" in story and "member_hashes" not in story:
+                story["member_hashes"] = story.pop("member_candidate_ids")
         item_rows = dossier.get("items") or []
         story_rows = dossier.get("stories") or []
         if len(item_rows) > len(self.by_hash) or len(story_rows) > len(self.by_hash):

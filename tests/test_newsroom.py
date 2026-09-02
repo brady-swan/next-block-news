@@ -389,11 +389,11 @@ class NewsroomContractTests(unittest.TestCase):
                 (source_policy.normalize_url(row["url"]) + "\n" + fingerprint).encode()
             ).hexdigest()[:20]
             survey = {
-                "candidate_map": [{"url_hash": row["url_hash"],
+                "candidate_map": [{"candidate_id": row["url_hash"],
                                    "proposed_story_id": "story-1",
                                    "proposed_disposition": "research",
                                    "reason": "official action"}],
-                "stories": [{"story_id": "story-1", "member_hashes": [row["url_hash"]],
+                "stories": [{"story_id": "story-1", "member_candidate_ids": [row["url_hash"]],
                              "research_need": "Inspect official release."}],
                 "run_note": "One lead.",
             }
@@ -405,7 +405,7 @@ class NewsroomContractTests(unittest.TestCase):
             client = Mock()
             client.messages.create.side_effect = [
                 tool_response("survey-1", "submit_survey", survey),
-                tool_response("fetch-1", "fetch_intake_item", {"url_hash": row["url_hash"]}),
+                tool_response("fetch-1", "fetch_intake_item", {"candidate_id": row["url_hash"]}),
                 tool_response("finish-1", "finish_research", {}),
                 tool_response("dossier-1", "submit_newsroom_dossier", dossier),
             ]
