@@ -9,9 +9,13 @@ from nbn import sources
 class SourceFetchSafetyTests(unittest.TestCase):
     def test_bitcoin_news_guides_have_a_dedicated_watch_lane(self):
         joined = " ".join(sources.X_GUIDE_QUERIES)
-        for handle in ("BitcoinNewsCom", "BitcoinArchive", "BitcoinMagazine", "TFTC21"):
+        for handle in ("BitcoinNewsCom", "BitcoinArchive", "BitcoinMagazine", "TFTC21",
+                       "SimplyBitcoin"):
             self.assertIn(f"from:{handle}", joined)
         self.assertNotIn("BitcoinNewsCom", " ".join(sources.X_DETECTOR_QUERIES))
+
+    def test_blockworks_is_in_detector_lane(self):
+        self.assertIn("from:Blockworks_", " ".join(sources.X_DETECTOR_QUERIES))
 
     def test_guide_post_stays_distinct_and_carries_format_and_link_context(self):
         client = MagicMock()

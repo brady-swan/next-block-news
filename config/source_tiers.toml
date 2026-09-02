@@ -983,6 +983,17 @@ aliases = ["bitcoin archive"]
 handles = ["BitcoinArchive"]
 
 [[sources]]
+id = "simply-bitcoin"
+display_name = "Simply Bitcoin"
+tier = "t3"
+category = "discovery"
+independence_key = "simply-bitcoin"
+receipt_role = "discovery"
+domains = ["simplybitcoin.com"]
+aliases = ["simply bitcoin"]
+handles = ["SimplyBitcoin"]
+
+[[sources]]
 id = "secondary-crypto-press"
 display_name = "Secondary Crypto Press"
 tier = "t3"

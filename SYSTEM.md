@@ -33,6 +33,9 @@ code vetoes.
 every 60 seconds
   reconcile Typefully + poll sources + ingest/deduplicate + health/heartbeat
        │
+       ├─ RSS + EDGAR → Haiku mailroom (priority / candidate / background)
+       │                    └─ background is audited, not sent to Sonnet
+       │
        ├─ scheduled Morning/Afternoon Block and daily audit keep their own cadence
        │
        └─ every 15 minutes, if the desk is non-empty
@@ -61,7 +64,7 @@ not wait 15 minutes.
 - Marketing Node `wire-pulse-v2`: hourly curated source clusters and advisory theme context.
 - Manual Desk stage/retry actions.
 
-Bitcoin Archive, Bitcoin News, Bitcoin Magazine, TFTC and similar proven desks are strong
+Bitcoin Archive, Bitcoin News, Bitcoin Magazine, TFTC, Simply Bitcoin, and similar proven desks are strong
 attention and craft priors. Their posts are tips: NBN tries to corroborate them and genuinely
 considers coverage, while learning useful information order, structure, and length without
 copying distinctive phrasing or emotional framing.
@@ -76,6 +79,19 @@ X reads remain `since_id` gated. Never replace them with list-timeline polling: 
 returned posts, and a timeline endpoint would repeatedly rebill old material.
 
 ## The clean Sonnet desk
+
+RSS and SEC EDGAR first pass through a narrow Haiku mailroom. Haiku sees only bounded feed
+cards and may route each item to Priority, Candidate, or Background. It does no research,
+source verification, clustering, writing, or publication judgment. Priority advances the
+persisted desk deadline; Candidate waits for the normal cadence; Background is removed from
+Sonnet's packet but remains visible on the Desk with its reason and a one-time **SEND TO
+DESK** control. Observe mode records routes without applying them. Any model, validation,
+budget, timeout, or batch-bound failure fails open to Candidate.
+
+Haiku has a durable eight-call hourly seat cap. Before calling it, the worker reserves both
+the mailroom call and the complete v2 desk allowance atomically, so intake cleanup cannot
+starve the more valuable Sonnet session. Route application and observe-to-enforce recovery
+are transactional and crash-safe.
 
 Each non-empty run gets a new Sonnet context. It receives a run brief, one clean card per
 candidate, safe reference pointers, recent coverage/open drafts, current Node themes linked
@@ -198,7 +214,7 @@ rules. Confirmed delivery records as `IMMEDIATE`; ambiguous confirmation records
 
 ## Cost and telemetry
 
-`model_usage` records one row per v2 newsdesk/editor API response with run ID, seat, model,
+`model_usage` records one row per Haiku mailroom, v2 newsdesk, and editor API response with run ID, seat, model,
 round, exact input/output/cache token counts, latency, outcome, and a rate-versioned estimated
 cost. It stores no prompts, article bodies, model reasoning, or tool payloads. The Desk shows
 selected-day calls, tokens, and estimated spend. SerpAPI retrieval is counted separately in
@@ -224,6 +240,9 @@ and stages corrections for human review.
 - Deploy: `railway up --detach` from this linked repository.
 - Important knobs: `NBN_EDITORIAL_ENGINE=v2`, `NBN_DESK_INTERVAL_SECONDS=900`,
   `NBN_DESK_RECENT_FEED_HOURS=48`, `NBN_PUBLISH_ANALYTICS_SECONDS=900`,
+  `NBN_INTAKE_TRIAGE_MODE=off|observe|enforce`,
+  `NBN_INTAKE_TRIAGE_MODEL=claude-haiku-4-5`,
+  `NBN_INTAKE_TRIAGE_MAX_CALLS_PER_HOUR=8`,
   `NBN_RUN_NEWSROOM_MODE=shadow|draft|live`, `NBN_AUTOPOST_ENABLED`,
   `NBN_AUTOPOST_CLASSES`, `NBN_EDITOR_MODEL`, and `NBN_SOURCE_POLICY_MODE`.
 - `NBN_EDITORIAL_ENGINE=v1` is a short-lived manual rollback switch only. It is never an

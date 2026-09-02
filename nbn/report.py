@@ -140,6 +140,8 @@ h2.needs{color:var(--orange)}
 .hentry .ttl{font:400 14px/1.45 var(--sans)}
 .hentry .why{font:400 12.5px/1.4 var(--mono);color:var(--red);margin-top:4px;
              overflow-wrap:anywhere}
+.mailentry{border-left-color:var(--dim)}
+.mailentry .why{color:var(--sub)}
 .decision{border-left:2px solid var(--orange)}
 .decision summary{padding:11px 13px}
 .decision .route{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
@@ -406,6 +408,20 @@ def _item_controls(con, item_hash: str, day: str) -> str:
     return f"<div class=itemacts>{''.join(buttons)}</div>"
 
 
+def _mailroom_control(row: dict, day: str) -> str:
+    if row.get("promoted_at") is not None:
+        return "<div class=itemacts><span class=actionstatus>sent to desk</span></div>"
+    if (row.get("status") != "skipped" or row.get("decision_stage") != "intake_triage"
+            or row.get("decision_category") != "background"):
+        return ""
+    hidden = (f"<input type=hidden name=k value='{_esc(config.REPORT_TOKEN)}'>"
+              f"<input type=hidden name=id value='{_esc(row.get('item_hash'))}'>"
+              f"<input type=hidden name=d value='{_esc(day)}'>")
+    return (f"<div class=itemacts><form method=post action='/item-action'>{hidden}"
+            "<input type=hidden name=action value=promote>"
+            "<button type=submit>SEND TO DESK</button></form></div>")
+
+
 def render(con, day: str = None) -> str:
     now = datetime.datetime.now(TZ)
     now_ts = time.time()
@@ -502,6 +518,12 @@ def render(con, day: str = None) -> str:
         if isinstance(row, dict) and row.get("theme_id")
     }
     usage = store.model_usage_summary(con, s)
+    mailroom_usage = store.model_usage_seat_summary(
+        con, seat="rss_triage", since=s, until=e
+    )
+    mailroom = store.intake_triage_summary(con, s, e)
+    mailroom_sources = store.intake_triage_source_summary(con, s, e, limit=12)
+    mailroom_background = store.intake_triage_background(con, s, e, limit=25)
     try:
         next_editorial = float(store.kv_get(con, "editorial:next_run_at") or 0)
     except ValueError:
@@ -527,6 +549,8 @@ def render(con, day: str = None) -> str:
         f"<span class=pill>direct Perception: {'on' if config.PERCEPTION_DIRECT_ENABLED else 'off'}</span>"
         f"<span class=pill>X guides + detectors: {'on' if config.X_DETECTOR_ENABLED else 'off'}</span>"
         f"<span class=pill>editorial core: {_esc(config.EDITORIAL_ENGINE)}</span>"
+        f"<span class=pill>mailroom: {_esc(config.INTAKE_TRIAGE_MODE)} · "
+        f"{_esc(config.INTAKE_TRIAGE_MODEL.replace('claude-', ''))}</span>"
         f"<span class=pill>desk every {config.DESK_INTERVAL_SECONDS // 60}m · "
         f"intake {config.DESK_CANDIDATE_MAX_AGE_HOURS:g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
@@ -555,6 +579,46 @@ def render(con, day: str = None) -> str:
         "<details class=countdefs><summary>Review the live orientation brief</summary>"
         f"<div class=body><p style='white-space:pre-wrap'>{_esc(orientation)}</p></div></details>"
     )
+
+    # ── Haiku intake mailroom ───────────────────────────────────────────────
+    out.append(
+        "<h2><span class=fill>Intake mailroom</span>"
+        f"<span class='count o'>{mailroom['priority']}</span></h2>"
+        f"<div class=metaline><b>Selected day</b> · {mailroom['priority']} priority · "
+        f"{mailroom['candidate']} candidate · {mailroom['background']} background · "
+        f"{mailroom['promoted']} promoted · {mailroom['fail_open']} fail-open<br>"
+        f"<b>Haiku usage</b> · {int(mailroom_usage.get('calls', 0) or 0)} calls · "
+        f"{int(mailroom_usage.get('input_tokens', 0) or 0)} input · "
+        f"{int(mailroom_usage.get('output_tokens', 0) or 0)} output · estimated "
+        f"${float(mailroom_usage.get('estimated_cost_usd', 0) or 0):.4f}<br>"
+        f"<b>Bounds</b> · {config.INTAKE_TRIAGE_BATCH_SIZE} cards/call · "
+        f"{config.INTAKE_TRIAGE_MAX_CALLS_PER_HOUR} calls/hour · background never reaches "
+        "Sonnet unless promoted</div>"
+    )
+    if mailroom_sources:
+        source_bits = " · ".join(
+            f"{_esc(row['source'])}: {_esc(row['route'])} {int(row['n'])}"
+            for row in mailroom_sources
+        )
+        out.append(
+            "<details class=countdefs><summary>Routes by source (top 12)</summary>"
+            f"<div class=body><p>{source_bits}</p></div></details>"
+        )
+    if mailroom_background:
+        out.append("<details class=skipbox><summary>Background decisions · latest 25</summary>")
+        for row_value in mailroom_background:
+            row = dict(row_value)
+            outcome = "" if row.get("outcome") == "model" else f" · {row.get('outcome')}"
+            out.append(
+                "<div class='hentry mailentry'>"
+                f"<div class=m>{_ct(float(row['triaged_at']))} · {_esc(row['source'])} · "
+                f"{_esc(row['category'])}{_esc(outcome)} · "
+                f"<a href='{_esc(row['url'])}'>source ↗</a></div>"
+                f"<div class=ttl>{_esc(row['title'])}</div>"
+                f"<div class=why>{_esc(row['reason'])}</div>"
+                f"{_mailroom_control(row, day)}</div>"
+            )
+        out.append("</details>")
 
     # ── Needs you ────────────────────────────────────────────────────────────
     needs = []

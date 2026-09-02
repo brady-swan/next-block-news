@@ -11,12 +11,13 @@ truth is `prompts/wire_voice.md`; the complete owner's manual is `SYSTEM.md`.
 ## Pipeline
 
 ```text
-poll -> intake -> one run-scoped newsroom (survey/research/judge/write) -> gates -> publish
+poll -> RSS/EDGAR Haiku mailroom -> run-scoped Sonnet newsroom -> gates -> publish
 ```
 
 | Module | Responsibility |
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
+| `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
 | `nbn/store.py` | SQLite URL/story deduplication, item state, post log, runtime key/value state |
 | `nbn/newsroom.py` | Run-scoped Sonnet newsroom, clean desk packet, bounded research tools, and atomic dossier |
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
@@ -157,6 +158,8 @@ For held items, the Desk can queue a guarded **Stage draft** retry (freshness,
 corroboration, style, and Editor holds only) or record **Dismiss**. Operator retries run
 the complete source/Writer/lint/Editor stack with a fresh web source search, override only the displayed gate, and are
 always delivered as Typefully drafts—not autonomous posts.
+The Desk also exposes the latest bounded Haiku Background decisions; **Send to desk**
+atomically restores one item to the Sonnet queue and advances the next desk deadline.
 
 See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
 publishing behavior.

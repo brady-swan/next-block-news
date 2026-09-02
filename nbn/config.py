@@ -56,6 +56,32 @@ DESK_CANDIDATE_MAX_AGE_HOURS = float(
 DESK_RECENT_FEED_HOURS = float(os.environ.get("NBN_DESK_RECENT_FEED_HOURS", "48"))
 DESK_RECENT_FEED_LIMIT = int(os.environ.get("NBN_DESK_RECENT_FEED_LIMIT", "40"))
 
+# One cheap semantic mailroom pass keeps broad RSS and EDGAR noise off Sonnet's desk.
+# Rollout is explicit; runtime failures always fail open as candidates.
+INTAKE_TRIAGE_MODE = os.environ.get("NBN_INTAKE_TRIAGE_MODE", "off").strip().lower()
+if INTAKE_TRIAGE_MODE not in {"off", "observe", "enforce"}:
+    raise RuntimeError("NBN_INTAKE_TRIAGE_MODE must be off, observe, or enforce")
+INTAKE_TRIAGE_MODEL = os.environ.get("NBN_INTAKE_TRIAGE_MODEL", "claude-haiku-4-5")
+INTAKE_TRIAGE_MAX_CALLS_PER_HOUR = int(
+    os.environ.get("NBN_INTAKE_TRIAGE_MAX_CALLS_PER_HOUR", "8")
+)
+INTAKE_TRIAGE_BATCH_SIZE = int(os.environ.get("NBN_INTAKE_TRIAGE_BATCH_SIZE", "50"))
+INTAKE_TRIAGE_RECOVERY_LIMIT = int(
+    os.environ.get("NBN_INTAKE_TRIAGE_RECOVERY_LIMIT", "100")
+)
+INTAKE_TRIAGE_RECOVERY_HOURS = float(
+    os.environ.get("NBN_INTAKE_TRIAGE_RECOVERY_HOURS", "24")
+)
+INTAKE_TRIAGE_MAX_PACKET_BYTES = int(
+    os.environ.get("NBN_INTAKE_TRIAGE_MAX_PACKET_BYTES", str(96 * 1024))
+)
+INTAKE_TRIAGE_TIMEOUT_SECONDS = float(
+    os.environ.get("NBN_INTAKE_TRIAGE_TIMEOUT_SECONDS", "45")
+)
+INTAKE_TRIAGE_MAX_OUTPUT_TOKENS = int(
+    os.environ.get("NBN_INTAKE_TRIAGE_MAX_OUTPUT_TOKENS", "8000")
+)
+
 # Model-free Google organic discovery. The credential is shared with the Marketing
 # Node account, but NBN calls SerpAPI directly and applies its own source policy.
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")

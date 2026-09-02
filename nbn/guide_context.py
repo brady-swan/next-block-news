@@ -14,6 +14,7 @@ GUIDE_HANDLES = {
     "bitcoinarchive": "BitcoinArchive",
     "bitcoinmagazine": "BitcoinMagazine",
     "tftc21": "TFTC21",
+    "simplybitcoin": "SimplyBitcoin",
 }
 MAX_CONTEXT_BYTES = 8192
 _METRICS = ("characters", "likes", "reposts", "quotes")

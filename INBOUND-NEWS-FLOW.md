@@ -20,6 +20,9 @@ Perception         every 15 minutes                  |- 10 X searches
         |                               NBN polls Node every 5 minutes
         |                                                   |
         +--------------------> canonical URL dedupe <-------+
+                                     |
+                  RSS + EDGAR -> Haiku semantic mailroom
+                  priority | candidate | background (omitted)
                                       |
                              freshness/language gates
                                       |
@@ -91,9 +94,9 @@ The watch has four parts:
 3. **Tier 2 research.** The Kobeissi Letter and Barchart. These accounts may support
    their own analysis or data, not unrelated claims.
 4. **Bitcoin-news guide accounts.** BitcoinNewsCom, Bitcoin Archive, Bitcoin Magazine,
-   and TFTC. Every original news-bearing post or linked story gets priority intake and a
+   TFTC, and Simply Bitcoin. Every original news-bearing post or linked story gets priority intake and a
    corroboration attempt. The account is an attention/format signal, never the receipt.
-5. **Broad detectors.** WatcherGuru, CoinDesk, and The Block. These remain ordinary tips:
+5. **Broad detectors.** WatcherGuru, CoinDesk, The Block, and Blockworks. These remain ordinary tips:
    NBN must find an eligible underlying receipt before publication.
 
 When a primary or research account links to exactly one external public page, NBN uses
@@ -232,11 +235,18 @@ All sources converge before model judgment.
    query parameters are retained. The first ingestion provenance is immutable. A Node
    pulse may attach context to an existing still-new row, but cannot rewrite a processed
    item.
-2. **Freshness.** During weekdays from 7:00 a.m. to 7:00 p.m. Eastern, the normal maximum
+2. **Haiku RSS/EDGAR mailroom.** One cheap semantic pass classifies newly persisted RSS and
+   SEC EDGAR cards as `priority`, `candidate`, or `background`. Priority wakes the Sonnet
+   desk immediately and sorts ahead of the 25-card cap. Candidate follows the normal
+   15-minute cadence. In enforcement mode, Background is retained in the audit trail but
+   omitted from Sonnet; the Desk owner can send it back exactly once with **SEND TO DESK**.
+   The mailroom does not research, corroborate, cluster, write, or decide publication.
+   Model, validation, capacity, and packet-bound failures all fail open as Candidate.
+3. **Freshness.** During weekdays from 7:00 a.m. to 7:00 p.m. Eastern, the normal maximum
    age is 2.5 hours. Overnight and weekends it is six hours. Parsed stale items are skipped
    before a model call.
-3. **Language.** Titles with more than 30% non-Latin letters are skipped before the newsroom.
-4. **Batching.** Up to 25 pending items are sent to one newsroom run. Excess items stay
+4. **Language.** Titles with more than 30% non-Latin letters are skipped before the newsroom.
+5. **Batching.** Up to 25 pending items are sent to one newsroom run. Excess items stay
    pending for the next minute's cycle.
 
 ## 4. Editorial funnel

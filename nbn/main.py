@@ -13,6 +13,7 @@ from . import (
     briefing,
     config,
     guide_context,
+    intake_triage,
     lint,
     node_discovery,
     publisher,
@@ -313,13 +314,15 @@ def _retry_inventory(con, jobs: list[dict], pipeline_run_id: str,
 def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                       inventory: list[dict], pending: list[dict], result: dict,
                       theme_snapshot: list[dict], overrides: dict,
-                      run_started: float) -> dict:
+                      run_started: float, reservation: str | None = None) -> dict:
     """Materialize the practical v2 desk without touching any legacy terminal gates."""
     from . import editor, newsroom
 
     cluster_context = store.story_cluster_context(
         con, exclude_hashes={item["url_hash"] for item in inventory})
-    reservation = brain.reserve_model_calls(config.RUN_NEWSROOM_MAX_ROUNDS * 2 + 1)
+    reservation = reservation or brain.reserve_model_calls(
+        config.RUN_NEWSROOM_MAX_ROUNDS * 2 + 1
+    )
     if not reservation:
         note = "defer:model_budget_unavailable"
         verdicts = [{**item, "action": "hold", "reason": note} for item in inventory]
@@ -613,6 +616,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
         raise RuntimeError("cycle lease lost after fetch")
     inserted = store.upsert_new_items(con, items)
+    mailroom = intake_triage.route_cycle(con, inserted, run_id=pipeline_run_id)
+    mailroom_reservation = mailroom.pop("reservation", None)
     summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
     pending = store.pending_items(con, config.MAX_ITEMS_PER_TRIAGE)
     overrides = {}
@@ -661,6 +666,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
               "pending": len(fresh) + len(retry_verdicts),
               "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
               "failed": 0, "taped": 0, "policy_held": 0}
+    result["intake_triage"] = mailroom
     if newsroom_recovery["runs"]:
         result["newsroom_recovery"] = newsroom_recovery
     result["resolver_paths"] = {}
@@ -715,7 +721,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             con, lease_owner=lease_owner, pipeline_run_id=pipeline_run_id,
             inventory=inventory, pending=pending, result=result,
             theme_snapshot=theme_snapshot, overrides=overrides,
-            run_started=run_started,
+            run_started=run_started, reservation=mailroom_reservation,
         )
         if len(store.pending_items(con, config.MAX_ITEMS_PER_TRIAGE + 1)) \
                 > config.MAX_ITEMS_PER_TRIAGE:
@@ -1509,8 +1515,21 @@ class Health(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         con = store.connect()
+        try:
+            mailroom_status = json.loads(store.kv_get(con, "intake_triage:last_run") or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            mailroom_status = {"error": "invalid persisted mailroom status"}
         body = json.dumps({**STATE, "db": store.status_summary(con),
                            "autopost": config.AUTOPOST_ENABLED,
+                           "intake_triage": {
+                               "mode": config.INTAKE_TRIAGE_MODE,
+                               "model": config.INTAKE_TRIAGE_MODEL,
+                               "last_run": mailroom_status,
+                               "last_success": store.kv_get(
+                                   con, "intake_triage:last_success"),
+                               "last_failure": store.kv_get(
+                                   con, "intake_triage:last_failure"),
+                           },
                            "source_policy_mode": config.SOURCE_POLICY_MODE,
                            "delivery_guard": "draft-only" if config.SOURCE_POLICY_MODE == "observe"
                                              else "normal"}).encode()

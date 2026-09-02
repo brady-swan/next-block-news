@@ -234,7 +234,8 @@ X_GUIDE_QUERIES = [
 X_DETECTOR_QUERIES = [
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
     # source-resolution hunt that finds an eligible receipt.
-    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo) -is:retweet',
+    '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:Blockworks_)'
+    ' -is:retweet',
 ]
 X_STATIC_QUERIES = (
     X_PRIMARY_QUERIES + X_RESEARCH_QUERIES + X_GUIDE_QUERIES + X_DETECTOR_QUERIES

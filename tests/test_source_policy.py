@@ -11,6 +11,7 @@ class SourcePolicyTests(unittest.TestCase):
             "https://cryptoslate.com/story": ("cryptoslate", "t3"),
             "https://x.com/BitcoinNewsCom/status/1": ("bitcoin-news-com", "t3"),
             "https://x.com/BitcoinArchive/status/1": ("bitcoin-archive", "t3"),
+            "https://x.com/SimplyBitcoin/status/1": ("simply-bitcoin", "t3"),
             "https://x.com/BitcoinMagazine/status/1": ("bitcoin-magazine", "t2"),
             "https://x.com/coindesk/status/1": ("coindesk", "t2"),
             "https://www.btcpolicy.org/research/report": ("bitcoin-policy-institute", "t2"),

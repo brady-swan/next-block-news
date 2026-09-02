@@ -220,6 +220,26 @@ CREATE TABLE IF NOT EXISTS model_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_model_usage_created ON model_usage(created_at);
 CREATE INDEX IF NOT EXISTS idx_model_usage_run ON model_usage(run_id, seat);
+CREATE TABLE IF NOT EXISTS intake_triage (
+  item_hash TEXT PRIMARY KEY,
+  route TEXT NOT NULL,
+  category TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  error_kind TEXT,
+  origin TEXT NOT NULL,
+  source TEXT NOT NULL,
+  model TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  batch_id TEXT NOT NULL,
+  triaged_at REAL NOT NULL,
+  applied_at REAL,
+  promoted_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_intake_triage_route_time
+  ON intake_triage(route, triaged_at DESC);
+CREATE INDEX IF NOT EXISTS idx_intake_triage_time
+  ON intake_triage(triaged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
@@ -312,6 +332,7 @@ _MODEL_RATES = {
     "claude-opus-5": (5.0, 25.0),
     "claude-fable-5": (10.0, 50.0),
     "claude-fable-5-1": (10.0, 50.0),
+    "claude-haiku-4-5": (1.0, 5.0),
 }
 MODEL_RATE_VERSION = "anthropic-public-2026-09-02-v1"
 
@@ -348,6 +369,25 @@ def model_usage_summary(con, since: float) -> dict:
         "COUNT(*) AS calls FROM model_usage WHERE created_at>=?", (float(since),),
     ).fetchone()
     return dict(row) if row else {}
+
+
+def model_usage_seat_summary(con, *, seat: str, since: float, until: float) -> dict:
+    row = con.execute(
+        "SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,"
+        "COALESCE(SUM(output_tokens),0) AS output_tokens,"
+        "COALESCE(SUM(estimated_cost_usd),0) AS estimated_cost_usd,COUNT(*) AS calls"
+        " FROM model_usage WHERE seat=? AND created_at>=? AND created_at<?",
+        (str(seat)[:40], float(since), float(until)),
+    ).fetchone()
+    return dict(row) if row else {}
+
+
+def model_usage_calls(con, *, seat: str, since: float) -> int:
+    row = con.execute(
+        "SELECT COUNT(*) AS calls FROM model_usage WHERE seat=? AND created_at>=?",
+        (str(seat)[:40], float(since)),
+    ).fetchone()
+    return int(row["calls"] if row else 0)
 
 
 def editorial_run_due(con, now: float | None = None, *, force: bool = False) -> bool:
@@ -388,16 +428,56 @@ def hold_gate(note: str) -> str:
 
 def request_operator_action(con, item_hash: str, action: str) -> dict:
     """Apply a Desk disposition or queue one guarded, draft-only pipeline retry."""
-    if action not in ("stage", "retry", "dismiss"):
+    if action not in ("stage", "retry", "dismiss", "promote"):
         return {"ok": False, "reason": "unknown action"}
     try:
         con.execute("BEGIN IMMEDIATE")
         item = con.execute(
-            "SELECT status,story_key,note FROM items WHERE url_hash=?", (item_hash,)
+            "SELECT status,story_key,note,decision_stage,decision_category"
+            " FROM items WHERE url_hash=?", (item_hash,)
         ).fetchone()
         if not item:
             con.rollback()
             return {"ok": False, "reason": "item not found"}
+        if action == "promote":
+            triage = con.execute(
+                "SELECT route,promoted_at FROM intake_triage WHERE item_hash=?", (item_hash,)
+            ).fetchone()
+            active = con.execute(
+                "SELECT 1 FROM operator_actions WHERE item_hash=?"
+                " AND state IN ('queued','processing') LIMIT 1", (item_hash,),
+            ).fetchone()
+            if (not triage or triage["route"] != "background"
+                    or triage["promoted_at"] is not None
+                    or item["status"] != "skipped"
+                    or item["decision_stage"] != "intake_triage"
+                    or item["decision_category"] != "background" or active):
+                con.rollback()
+                return {"ok": False, "reason": "item is not an eligible intake background"}
+            now = time.time()
+            cur = con.execute(
+                "INSERT INTO operator_actions(item_hash,story_key,action,gate,requested_at,"
+                "completed_at,state,original_status,original_note,result)"
+                " VALUES (?,?,?,NULL,?,?,'completed',?,?,?)",
+                (item_hash, item["story_key"], "promote", now, now,
+                 item["status"], item["note"], "owner sent intake background to desk"),
+            )
+            con.execute(
+                "UPDATE intake_triage SET promoted_at=? WHERE item_hash=? AND promoted_at IS NULL",
+                (now, item_hash),
+            )
+            con.execute(
+                "UPDATE items SET status='new',note='owner sent intake background to desk',"
+                "defer_until=NULL,decision_stage='operator',decision_category='promoted'"
+                " WHERE url_hash=?", (item_hash,),
+            )
+            con.execute(
+                "INSERT INTO kv(k,v) VALUES ('editorial:next_run_at',?)"
+                " ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(now),),
+            )
+            con.commit()
+            return {"ok": True, "id": cur.lastrowid, "state": "completed",
+                    "gate": "intake_triage"}
         if item["status"] != "held":
             con.rollback()
             return {"ok": False, "reason": f"item is {item['status']}, not held"}
@@ -664,6 +744,198 @@ def upsert_new_items(con, items) -> list:
             fresh.append({**it, "url_hash": h})
     con.commit()
     return fresh
+
+
+def intake_triage_work(con, inserted: list[dict], *, recovery_limit: int,
+                       recovery_hours: float) -> list[dict]:
+    """Return new RSS/EDGAR rows without a mailroom record, newest inserts first."""
+    work, seen = [], set()
+
+    def eligible(row: dict) -> bool:
+        item_hash = str(row.get("url_hash") or "")
+        origin = str(row.get("discovery_origin") or "")
+        if not item_hash or origin not in {"rss", "edgar"} or item_hash in seen:
+            return False
+        if con.execute(
+            "SELECT 1 FROM intake_triage WHERE item_hash=?", (item_hash,)
+        ).fetchone():
+            return False
+        if con.execute(
+            "SELECT 1 FROM operator_actions WHERE item_hash=?"
+            " AND state IN ('queued','processing') LIMIT 1", (item_hash,),
+        ).fetchone():
+            return False
+        return True
+
+    for raw in inserted:
+        row = dict(raw)
+        if eligible(row):
+            seen.add(row["url_hash"])
+            work.append(row)
+
+    rows = con.execute(
+        "SELECT i.url_hash,i.source,i.title,i.url,i.published_at AS published,"
+        " i.summary,i.discovery_origin FROM items i"
+        " LEFT JOIN intake_triage t ON t.item_hash=i.url_hash"
+        " WHERE i.status='new' AND i.discovery_origin IN ('rss','edgar')"
+        " AND i.first_seen>=? AND t.item_hash IS NULL"
+        " AND NOT EXISTS (SELECT 1 FROM operator_actions a WHERE a.item_hash=i.url_hash"
+        "  AND a.state IN ('queued','processing'))"
+        " ORDER BY i.first_seen LIMIT ?",
+        (time.time() - max(0.0, float(recovery_hours)) * 3600,
+         max(0, int(recovery_limit))),
+    ).fetchall()
+    for raw in rows:
+        row = dict(raw)
+        if eligible(row):
+            seen.add(row["url_hash"])
+            work.append(row)
+    return work
+
+
+def _apply_intake_triage_row(con, row, now: float) -> bool:
+    """Apply one persisted route inside the caller's transaction."""
+    item_hash = row["item_hash"]
+    if row["promoted_at"] is not None:
+        con.execute(
+            "UPDATE intake_triage SET applied_at=COALESCE(applied_at,?) WHERE item_hash=?",
+            (now, item_hash),
+        )
+        return False
+    item = con.execute(
+        "SELECT status FROM items WHERE url_hash=?", (item_hash,)
+    ).fetchone()
+    if not item or item["status"] != "new":
+        con.execute(
+            "UPDATE intake_triage SET applied_at=COALESCE(applied_at,?) WHERE item_hash=?",
+            (now, item_hash),
+        )
+        return False
+    if row["route"] == "background":
+        active = con.execute(
+            "SELECT 1 FROM operator_actions WHERE item_hash=?"
+            " AND state IN ('queued','processing') LIMIT 1", (item_hash,),
+        ).fetchone()
+        if active:
+            return False
+        note = ("intake background: " + str(row["reason"] or "no NBN relevance"))[:300]
+        con.execute(
+            "UPDATE items SET status='skipped',note=?,decision_stage='intake_triage',"
+            "decision_category='background' WHERE url_hash=? AND status='new'",
+            (note, item_hash),
+        )
+    elif row["route"] == "priority":
+        con.execute(
+            "INSERT INTO kv(k,v) VALUES ('editorial:next_run_at',?)"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(now),),
+        )
+    con.execute(
+        "UPDATE intake_triage SET applied_at=COALESCE(applied_at,?) WHERE item_hash=?",
+        (now, item_hash),
+    )
+    return row["route"] == "priority"
+
+
+def save_intake_triage(con, decisions: list[dict], *, mode: str) -> dict:
+    """Persist a batch and atomically apply it when enforcement is enabled."""
+    now = time.time()
+    inserted = applied = priority_wakes = 0
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        for value in decisions:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO intake_triage(item_hash,route,category,reason,outcome,"
+                "error_kind,origin,source,model,prompt_version,batch_id,triaged_at,applied_at,"
+                "promoted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)",
+                (str(value["item_hash"])[:64], str(value["route"])[:20],
+                 str(value["category"])[:40], str(value["reason"])[:240],
+                 str(value["outcome"])[:40], str(value.get("error_kind") or "")[:80] or None,
+                 str(value.get("origin") or "")[:40], str(value.get("source") or "")[:120],
+                 str(value.get("model") or "")[:80],
+                 str(value.get("prompt_version") or "")[:80],
+                 str(value.get("batch_id") or "")[:120], float(value.get("triaged_at") or now)),
+            )
+            if not cur.rowcount:
+                continue
+            inserted += 1
+            if mode == "enforce":
+                row = con.execute(
+                    "SELECT * FROM intake_triage WHERE item_hash=?", (value["item_hash"],)
+                ).fetchone()
+                woke = _apply_intake_triage_row(con, row, now)
+                refreshed = con.execute(
+                    "SELECT applied_at FROM intake_triage WHERE item_hash=?",
+                    (value["item_hash"],),
+                ).fetchone()
+                applied += int(bool(refreshed and refreshed["applied_at"] is not None))
+                priority_wakes += int(woke)
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return {"inserted": inserted, "applied": applied, "priority_wakes": priority_wakes}
+
+
+def reconcile_intake_triage(con, *, limit: int = 250) -> dict:
+    """Apply persisted observe/crash rows once when enforcement is active."""
+    now = time.time()
+    applied = priority_wakes = protected = 0
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        rows = con.execute(
+            "SELECT * FROM intake_triage WHERE applied_at IS NULL AND promoted_at IS NULL"
+            " ORDER BY triaged_at LIMIT ?", (max(0, int(limit)),),
+        ).fetchall()
+        for row in rows:
+            before = row["applied_at"]
+            woke = _apply_intake_triage_row(con, row, now)
+            refreshed = con.execute(
+                "SELECT applied_at FROM intake_triage WHERE item_hash=?", (row["item_hash"],)
+            ).fetchone()
+            if refreshed and refreshed["applied_at"] is not None and before is None:
+                applied += 1
+            else:
+                protected += 1
+            priority_wakes += int(woke)
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return {"seen": len(rows), "applied": applied, "protected": protected,
+            "priority_wakes": priority_wakes}
+
+
+def intake_triage_summary(con, start: float, end: float) -> dict:
+    counts = {"priority": 0, "candidate": 0, "background": 0, "promoted": 0,
+              "fail_open": 0}
+    rows = con.execute(
+        "SELECT route,COUNT(*) n,SUM(promoted_at IS NOT NULL) promoted,"
+        "SUM(outcome!='model') fail_open FROM intake_triage"
+        " WHERE triaged_at>=? AND triaged_at<? GROUP BY route", (start, end),
+    ).fetchall()
+    for row in rows:
+        if row["route"] in counts:
+            counts[row["route"]] = int(row["n"] or 0)
+        counts["promoted"] += int(row["promoted"] or 0)
+        counts["fail_open"] += int(row["fail_open"] or 0)
+    return counts
+
+
+def intake_triage_source_summary(con, start: float, end: float, limit: int = 12) -> list[dict]:
+    return [dict(row) for row in con.execute(
+        "SELECT source,route,COUNT(*) n FROM intake_triage"
+        " WHERE triaged_at>=? AND triaged_at<? GROUP BY source,route"
+        " ORDER BY n DESC,source,route LIMIT ?", (start, end, max(0, int(limit))),
+    ).fetchall()]
+
+
+def intake_triage_background(con, start: float, end: float, limit: int = 25) -> list[dict]:
+    return [dict(row) for row in con.execute(
+        "SELECT t.*,i.title,i.url,i.status,i.decision_stage,i.decision_category"
+        " FROM intake_triage t JOIN items i ON i.url_hash=t.item_hash"
+        " WHERE t.route='background' AND t.triaged_at>=? AND t.triaged_at<?"
+        " ORDER BY t.triaged_at DESC LIMIT ?", (start, end, max(0, int(limit))),
+    ).fetchall()]
 
 
 def node_run_consumed(con, run_id: int) -> bool:
@@ -1542,22 +1814,30 @@ def event_is_stale(date_str, max_hours: float, now=None) -> bool:
 def pending_items(con, limit: int) -> list:
     """Items awaiting triage — includes anything stranded by a crash mid-cycle."""
     rows = con.execute(
-        "SELECT url_hash, source, title, url, published_at AS published,"
-        " summary,discovery_origin,discovery_context,discovery_candidate_id,"
-        " story_key,note,decision_stage,decision_category"
-        " FROM items WHERE status='new' AND COALESCE(defer_until,0)<=?"
-        " ORDER BY first_seen",
+        "SELECT i.url_hash,i.source,i.title,i.url,i.published_at AS published,"
+        " i.summary,i.discovery_origin,i.discovery_context,i.discovery_candidate_id,"
+        " i.story_key,i.note,i.decision_stage,i.decision_category,"
+        " t.route AS intake_route,t.promoted_at AS intake_promoted_at"
+        " FROM items i LEFT JOIN intake_triage t ON t.item_hash=i.url_hash"
+        " WHERE i.status='new' AND COALESCE(i.defer_until,0)<=?"
+        " ORDER BY i.first_seen",
         (time.time(),),
     ).fetchall()
     values = [dict(row) for row in rows]
+    if config.INTAKE_TRIAGE_MODE == "enforce":
+        def rank(row):
+            if row.get("intake_route") == "priority":
+                return 0
+            if row.get("intake_promoted_at") is not None:
+                return 1
+            if guide_context.signal_from_context(row.get("discovery_context")):
+                return 2
+            return 3
+    else:
+        def rank(row):
+            return 0 if guide_context.signal_from_context(row.get("discovery_context")) else 1
     values = [row for _, row in sorted(
-        enumerate(values),
-        key=lambda pair: (
-            0 if guide_context.signal_from_context(
-                pair[1].get("discovery_context")
-            ) else 1,
-            pair[0],
-        ),
+        enumerate(values), key=lambda pair: (rank(pair[1]), pair[0])
     )]
     return values[:max(0, int(limit))]
 
