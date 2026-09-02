@@ -113,6 +113,32 @@ class EditorialV2Tests(unittest.TestCase):
             self.assertEqual(store.canonical_story_key(con, "sec-policy-update"),
                              "sec-bitcoin-policy")
 
+            # A later hard-rail defer becomes the workbench's explicit next objective.
+            con.execute("DELETE FROM posts WHERE story_key='sec-bitcoin-policy'")
+            con.execute(
+                "UPDATE items SET status='new',defer_until=0 WHERE url_hash=?",
+                (row["url_hash"],),
+            )
+            con.commit()
+            publish.reset_mock()
+            with patch.object(lint, "check_v2", return_value=[
+                "verbatim quote not in inspected evidence: 'unsupported quote'"
+            ]):
+                held = main._run_editorial_v2(
+                    con, lease_owner="test-owner", pipeline_run_id="run:v2-hard-rail",
+                    inventory=[row], pending=[row],
+                    result={"held": 0, "skipped": 0, "posted": 0, "drafted": 0,
+                            "uncertain": 0, "failed": 0, "taped": 0},
+                    theme_snapshot=[], overrides={}, run_started=time.time(),
+                )
+            self.assertEqual(held["held"], 1)
+            publish.assert_not_called()
+            memory = store.newsroom_story_memories(con)[0]
+            self.assertEqual(memory["state"], "research_pending")
+            self.assertEqual(memory["attempts"][-1]["failure"],
+                             "defer:editor_hard_rail")
+            self.assertIn("unsupported quote", memory["attempts"][-1]["objective"])
+
     def test_failed_elevated_story_retains_identity_draft_and_evidence(self):
         with temporary_store() as con:
             row = candidate()

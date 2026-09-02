@@ -63,6 +63,8 @@ revalidated cached evidence with a code-owned fetch ID is factual evidence.
 Pending item cards also expose bounded prior story key, note, stage, and category as
 untrusted historical context. Sonnet is instructed to reuse sound work, research only the
 missing piece, and say “recommended for delivery” rather than claiming publication.
+Final hard-rail defers likewise append a workbench attempt with the exact code-owned repair
+objective and the inspected evidence, so a later session can revise or deliberately drop it.
 
 ## Editor correction
 

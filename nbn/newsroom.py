@@ -514,6 +514,10 @@ _FAILURE_OBJECTIVES = {
     "defer:invalid_existing_cluster_key": (
         "Use only an exact event key supplied by the coverage or continuity board."
     ),
+    "defer:editor_hard_rail": (
+        "Revise or drop the prior copy after applying the code-owned quote, scope, URL, "
+        "length, mention, and investment-instruction rails shown on the workbench."
+    ),
 }
 
 

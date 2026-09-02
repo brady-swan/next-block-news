@@ -509,6 +509,31 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         errors = lint.check_v2(str(post or ""),
                                {"_source_text": resolution.selected_text}, members[0])
         if errors:
+            store.save_newsroom_story_attempt(
+                con, resolution.story_key, "research_pending", {
+                    "story_id": story_id,
+                    "members": [member["url_hash"] for member in members],
+                    "headlines": [member.get("title", "") for member in members[:3]],
+                    "submitted_story_key": resolution.story_key,
+                    "existing_cluster_key": resolution.story_key,
+                    "proposed_post": str(post or ""),
+                    "failure": "defer:editor_hard_rail",
+                    "objective": (
+                        "Revise or drop the prior copy after applying these code-owned rails: "
+                        + "; ".join(errors)
+                    )[:500],
+                    "evidence": [{
+                        "inspected_at": record.inspected_at,
+                        "requested_url": record.requested_url,
+                        "final_url": record.final_url,
+                        "canonical_url": record.canonical_url,
+                        "source_label": record.source.display_name,
+                        "byline": record.byline,
+                        "content_fingerprint": record.content_fingerprint,
+                        "text": record.text,
+                    } for record in candidate["fetches"][:8]],
+                },
+            )
             for member in members:
                 store.defer_item(
                     con, member["url_hash"],

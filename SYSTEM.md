@@ -108,6 +108,8 @@ sees this on `continuity_board` and can continue rather than rediscovering the s
 evidence is citable for at most 24 hours and only after its fingerprint, public URL, current
 source classification, eligibility, and independence are recomputed. It receives a fresh
 run-owned `memory_*` fetch ID; stale or corrupt evidence cannot satisfy a gate.
+If final lint defers a story, the exact quote/scope/URL/length issue and inspected evidence
+also become the next workbench objective rather than being reduced to a transient item note.
 
 ## Editorial doctrine
 
