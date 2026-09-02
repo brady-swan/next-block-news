@@ -425,6 +425,7 @@ class NewsroomContractTests(unittest.TestCase):
             ]
             with patch.object(newsroom.anthropic, "Anthropic", return_value=client), \
                     patch.object(brain, "consume_model_call"), \
+                    patch.object(config, "EDITORIAL_ENGINE", "v1"), \
                     patch.object(newsroom.sources, "fetch_article", return_value={
                         "text": text, "final_url": row["url"], "canonical_url": row["url"],
                         "byline": "", "outcome": "ok", "error_kind": "",
@@ -600,6 +601,7 @@ class NewsroomCycleTests(unittest.TestCase):
             stack.enter_context(patch.object(editor, "review_newsroom", review))
             stack.enter_context(patch.object(publisher, "publish", publish))
             stack.enter_context(patch.object(config, "RUN_NEWSROOM_MODE", mode))
+            stack.enter_context(patch.object(config, "EDITORIAL_ENGINE", "v1"))
             stack.enter_context(patch.object(config, "RUN_NEWSROOM_FALLBACK", "legacy"))
             stack.enter_context(patch.object(config, "SOURCE_POLICY_MODE", source_mode))
             result = main.cycle(con)

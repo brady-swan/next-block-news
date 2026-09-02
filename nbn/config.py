@@ -10,8 +10,8 @@ TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
 TRIAGE_EFFORT = os.environ.get("NBN_TRIAGE_EFFORT", "medium")
 # The Editor: last-mile judgment seat. It runs only on autonomous candidates, so the
 # higher-judgment Fable seat remains a small share of the model budget.
-EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-fable-5")
-EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "low")
+EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-sonnet-5")
+EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "medium")
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
 # One fresh Sonnet newsroom may own survey, research, judgment, and writing for a complete
@@ -24,7 +24,7 @@ RUN_NEWSROOM_FALLBACK = os.environ.get(
 ).strip().lower()
 if RUN_NEWSROOM_FALLBACK not in {"legacy", "hold"}:
     raise RuntimeError("NBN_RUN_NEWSROOM_FALLBACK must be legacy or hold")
-RUN_NEWSROOM_MAX_ROUNDS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_ROUNDS", "10"))
+RUN_NEWSROOM_MAX_ROUNDS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_ROUNDS", "6"))
 RUN_NEWSROOM_MAX_TOOL_CALLS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_TOOL_CALLS", "24"))
 RUN_NEWSROOM_MAX_SEARCHES = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_SEARCHES", "8"))
 RUN_NEWSROOM_MAX_FETCHES = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_FETCHES", "16"))
@@ -42,6 +42,16 @@ RUN_NEWSROOM_MAX_HISTORY_BYTES = int(
 )
 RUN_NEWSROOM_TIMEOUT_SECONDS = float(
     os.environ.get("NBN_RUN_NEWSROOM_TIMEOUT_SECONDS", "240")
+)
+# Editorial core v2 keeps the one-minute intake/health loop, but opens a fresh
+# run-scoped Sonnet desk only on a persisted editorial cadence. ``v1`` is a temporary,
+# manual rollback switch; there is never an automatic fallback into it.
+EDITORIAL_ENGINE = os.environ.get("NBN_EDITORIAL_ENGINE", "v2").strip().lower()
+if EDITORIAL_ENGINE not in {"v1", "v2"}:
+    raise RuntimeError("NBN_EDITORIAL_ENGINE must be v1 or v2")
+DESK_INTERVAL_SECONDS = int(os.environ.get("NBN_DESK_INTERVAL_SECONDS", "900"))
+DESK_CANDIDATE_MAX_AGE_HOURS = float(
+    os.environ.get("NBN_DESK_CANDIDATE_MAX_AGE_HOURS", "24")
 )
 
 # Model-free Google organic discovery. The credential is shared with the Marketing
@@ -118,13 +128,14 @@ X_LIST_ID = os.environ.get("NBN_X_LIST_ID", "")
 X_LIST_REFRESH_SECONDS = int(os.environ.get("NBN_X_LIST_REFRESH_SECONDS", "3600"))
 X_DETECTOR_ENABLED = os.environ.get("NBN_X_DETECTOR_ENABLED", "true").lower() == "true"
 
-# Classes allowed to auto-publish when AUTOPOST_ENABLED. Secondary never auto-publishes,
-# even if an environment variable includes it.
+# Classes allowed to auto-publish when AUTOPOST_ENABLED. In editorial v2, a routine
+# claim supported by one inspected Tier 1/2 receipt is allowed to ship as secondary;
+# the independent batch editor remains the final judgment seat.
 AUTOPOST_CLASSES = {
     c.strip() for c in os.environ.get(
-        "NBN_AUTOPOST_CLASSES", "primary,corroborated"
+        "NBN_AUTOPOST_CLASSES", "primary,secondary,corroborated"
     ).split(",") if c.strip()
-} - {"secondary"}
+}
 
 # Autonomous publishes are scheduled this many seconds out (publish_at:"now" rejects
 # drafts containing URLs; scheduled posts carry links fine — probed 2026-08-30)

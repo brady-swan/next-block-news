@@ -72,6 +72,30 @@ Return ONLY JSON:
 """
 
 
+BATCH_EDITOR_PROMPT = """You are the independent publishing editor for Next Block News.
+You receive all candidates from one run, their inspected evidence, and the recent feed.
+The desk's goal is a useful automated Bitcoin account with good work flowing—not perfect,
+unimpeachable copy and not a generic macro-stat feed.
+
+For each candidate, use practical editorial judgment:
+- publish useful, supported work; revise when a narrower or clearer version is better;
+- draft only when the story is worthwhile but uncertainty makes autonomous publication
+  unwise; drop true redundancy, unsupported material claims, non-stories, and bad framing;
+- routine factual claims may rest on one credible inspected official/Tier 1/Tier 2 receipt;
+  allegations, hacks, crime, disputed claims, or consequential legal assertions need a
+  primary artifact or two credible independent reports;
+- all supplied inspected receipts may support the post together. The selected receipt is the
+  link readers get, not a demand that one page reproduce every harmless detail;
+- judge rounding and numerical differences for materiality. Roughly 3% may describe 2.99%.
+  Do not reject 159.95 versus 160.1 unless it changes the actual claim;
+- use recent coverage to prevent genuine repetition while allowing useful later developments;
+- preserve or improve effective structure and length. Do not add facts absent from evidence.
+
+Return ONLY JSON:
+{"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
+"post":"final copy or null","reason":"brief newsroom explanation"}]}"""
+
+
 def review(post: str, item: dict, con) -> dict:
     """Returns {'verdict', 'post', 'reason'}; fails open to publish-as-is on errors."""
     from . import brain
@@ -167,3 +191,67 @@ def review_newsroom(post: str, item: dict, con, *, source_text: str,
         "claims_supported": supported,
         "unsupported_claims": [str(value)[:300] for value in unsupported[:12]],
     }
+
+
+def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
+                          reservation: str | None = None) -> dict:
+    """One clean Sonnet editor call for the complete run; outage stages safe drafts."""
+    from . import brain
+    effective_ts = store.effective_post_ts_sql()
+    recent = con.execute(
+        f"SELECT body,class,{effective_ts} AS effective_at FROM posts"
+        " WHERE mode IN ('IMMEDIATE','DRAFT','UNCERTAIN')"
+        " ORDER BY effective_at DESC LIMIT 12"
+    ).fetchall()
+    payload = {
+        "candidates": [{
+            "story_id": row["story_id"], "post": row["post"],
+            "reader_value": row.get("reader_value", ""),
+            "selected_receipt": row.get("selected_receipt", {}),
+            "inspected_evidence": row.get("inspected_evidence", [])[:8],
+            "elevated_claim": bool(row.get("elevated_claim")),
+        } for row in candidates],
+        "recent_feed_newest_first": [{
+            "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
+            "class": r["class"], "post": r["body"][:1000],
+        } for r in recent],
+    }
+    called_at = time.monotonic()
+    try:
+        resp = brain._create(
+            config.EDITOR_MODEL, BATCH_EDITOR_PROMPT, json.dumps(payload),
+            max_tokens=8000, effort=config.EDITOR_EFFORT, reservation=reservation,
+        )
+        store.record_model_usage(
+            con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
+            round_number=1, response=resp,
+            latency_ms=int((time.monotonic() - called_at) * 1000), outcome="ok",
+        )
+        out = brain._json_from(resp)
+        rows = out.get("decisions")
+        if not isinstance(rows, list):
+            raise ValueError("editor omitted decisions")
+        allowed = {row["story_id"] for row in candidates}
+        decisions = {}
+        for row in rows:
+            story_id = str(row.get("story_id") or "")
+            verdict = str(row.get("verdict") or "")
+            if story_id not in allowed or story_id in decisions \
+                    or verdict not in {"publish", "revise", "draft", "drop"}:
+                continue
+            final = row.get("post")
+            if verdict in {"publish", "revise", "draft"} and not str(final or "").strip():
+                continue
+            decisions[story_id] = {
+                "verdict": verdict, "post": final,
+                "reason": str(row.get("reason") or "")[:300],
+            }
+        return {"ok": True, "decisions": decisions}
+    except Exception as exc:  # noqa: BLE001 - preserve good desk work as drafts
+        store.record_model_usage(
+            con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
+            round_number=1, latency_ms=int((time.monotonic() - called_at) * 1000),
+            outcome="error",
+        )
+        log.warning("batch editor unavailable; staging candidates as drafts: %s", exc)
+        return {"ok": False, "error": str(exc)[:300], "decisions": {}}

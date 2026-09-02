@@ -501,6 +501,11 @@ def render(con, day: str = None) -> str:
         for row in (decision_run or {}).get("theme_coverage_snapshot", [])
         if isinstance(row, dict) and row.get("theme_id")
     }
+    usage = store.model_usage_summary(con, s)
+    try:
+        next_editorial = float(store.kv_get(con, "editorial:next_run_at") or 0)
+    except ValueError:
+        next_editorial = 0
 
     out = ["<!doctype html><meta charset=utf-8>"
            "<meta name=viewport content='width=device-width,initial-scale=1'>"
@@ -521,12 +526,35 @@ def render(con, day: str = None) -> str:
         f"<span class=pill>source policy: {_esc(config.SOURCE_POLICY_MODE)}</span>"
         f"<span class=pill>direct Perception: {'on' if config.PERCEPTION_DIRECT_ENABLED else 'off'}</span>"
         f"<span class=pill>X guides + detectors: {'on' if config.X_DETECTOR_ENABLED else 'off'}</span>"
-        f"<span class=pill>fresh {store.current_max_age_hours():g}h</span>"
+        f"<span class=pill>editorial core: {_esc(config.EDITORIAL_ENGINE)}</span>"
+        f"<span class=pill>desk every {config.DESK_INTERVAL_SECONDS // 60}m · "
+        f"intake {config.DESK_CANDIDATE_MAX_AGE_HOURS:g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
         f" @ high</span>"
         f"<span class=pill>editor: {_esc(config.EDITOR_MODEL.replace('claude-', ''))}"
         f" @ {_esc(config.EDITOR_EFFORT)}</span></div>"
         f"<div class=clock>{now:%A %B %-d · %-I:%M %p} Central</div></div>")
+
+    next_text = (_ct(next_editorial) if next_editorial else "on next worker cycle")
+    out.append(
+        "<h2><span class=fill>Editorial core v2</span></h2>"
+        f"<div class=metaline><b>Next desk</b> · {_esc(next_text)} Central<br>"
+        f"<b>Selected day model usage</b> · {_bounded_count(usage.get('calls', 0), 10000)} calls"
+        f" · {_bounded_count(usage.get('input_tokens', 0), 100000000)} input"
+        f" · {_bounded_count(usage.get('output_tokens', 0), 100000000)} output"
+        f" · {_bounded_count(usage.get('cache_read_input_tokens', 0), 100000000)} cache-read"
+        f" · estimated ${float(usage.get('estimated_cost_usd', 0) or 0):.4f}"
+        f" · rates {_esc(store.MODEL_RATE_VERSION)}</div>"
+    )
+    try:
+        from .newsroom import ORIENTATION_BRIEF
+        orientation = ORIENTATION_BRIEF
+    except Exception:  # noqa: BLE001 - report must remain available during deploys
+        orientation = "Orientation brief unavailable."
+    out.append(
+        "<details class=countdefs><summary>Review the live orientation brief</summary>"
+        f"<div class=body><p style='white-space:pre-wrap'>{_esc(orientation)}</p></div></details>"
+    )
 
     # ── Needs you ────────────────────────────────────────────────────────────
     needs = []
@@ -695,6 +723,8 @@ def render(con, day: str = None) -> str:
             final_note = item.get("final_note") or ""
             if final_status == "held":
                 final_label = f"held · {_hold_label(final_note)}"
+            elif final_status == "new" and final_note.startswith("defer:"):
+                final_label = "deferred · will return to desk"
             source_path = ""
             if item.get("selected_source"):
                 source_path = (f"<p>Receipt: {_esc(item.get('original_source') or item.get('source'))} "

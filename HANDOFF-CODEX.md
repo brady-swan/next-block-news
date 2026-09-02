@@ -4,11 +4,17 @@
 The deeper owner's manual is `SYSTEM.md`; this file is orientation and the rules you must
 not break.*
 
-**Operational update, 2026-09-01:** production reports `NBN_AUTOPOST_ENABLED=true` and
-`NBN_RUN_NEWSROOM_MODE=live`. The run-scoped Sonnet newsroom is now the primary one-off
-news path; `NBN_RUN_NEWSROOM_FALLBACK=legacy` remains available only before a dossier is
-materialized. `NBN_YIELD_IDENTITY_NORMALIZER_ENABLED=true` is a narrow, deterministic
-vetoed same-day U.S. 10-year-yield identity aid, not a general market-story merge rule.
+**Operational update, 2026-09-02:** editorial core v2 supersedes the architecture described
+later in this historical handoff. Read `SYSTEM.md` first. Production uses a persisted
+15-minute, run-scoped Sonnet story desk plus one independent batch Sonnet editor. Intake,
+health, Blocks, audits, and publication reconciliation still run every minute. The v2 path
+has no automatic legacy fallback and does not inherit the old hard freshness, semantic-key,
+exact-number, mandatory-prefix, or single-receipt-completeness vetoes. It keeps safe URL,
+exact-delivery idempotency, Bitcoin scope, quote support, mention, investment-instruction,
+correction, and kill-switch rails. Routine claims may ship from one credible inspected
+Tier 1/2 report; elevated claims need a primary artifact or two credible independent reports.
+The Desk exposes the live orientation brief and selected-day model token/cost telemetry.
+`NBN_EDITORIAL_ENGINE=v1` is a short-lived manual rollback switch only.
 
 ## What this is
 

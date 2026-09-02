@@ -130,3 +130,39 @@ def check(post: str, meta: dict, item: dict) -> list:
     if len(post) > 2800:
         errors.append(f"post too long ({len(post)} chars)")
     return errors
+
+
+def check_v2(post: str, meta: dict, item: dict) -> list:
+    """Small, consequential hard rails for editorial core v2.
+
+    Freshness, semantic novelty, rounding, numerical materiality, and story importance
+    are deliberately absent: those belong to the Sonnet desk and independent editor.
+    This function catches only failures that code can judge reliably in isolation.
+    """
+    if not post or not post.strip():
+        return ["empty post"]
+    errors = []
+    if URL_RE.search(post):
+        errors.append("URL in post body (the receipt is system-attached)")
+    unquoted = _outside_quotes(post)
+    if m := NON_BITCOIN_TOKENS.search(unquoted):
+        errors.append(f"non-Bitcoin token/scope: {m.group(0)!r}")
+    if any(value.lower() in post.lower() for value in (
+            "you should buy", "time to buy", "buy the dip", "load up")):
+        errors.append("investment instruction")
+    allowed = {h.lower() for h in verified_handles()}
+    mentions = MENTION_RE.findall(post)
+    if len(mentions) > 2:
+        errors.append(f"too many mentions ({len(mentions)})")
+    for mention in mentions:
+        if mention.lower() not in allowed:
+            errors.append(f"unverified handle: @{mention}")
+    # Verbatim quotations must occur in at least one inspected receipt. Paraphrases,
+    # rounded figures, and immaterial numerical presentation differences are editorial.
+    source_text = str(meta.get("_source_text") or "")
+    for quote in re.findall(r'["“]([^"”]{8,})["”]', post):
+        if " ".join(quote.split()).casefold() not in " ".join(source_text.split()).casefold():
+            errors.append(f"verbatim quote not in inspected evidence: {quote[:80]!r}")
+    if len(post) > 2800:
+        errors.append(f"post too long ({len(post)} chars)")
+    return errors

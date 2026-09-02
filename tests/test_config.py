@@ -38,6 +38,8 @@ print(json.dumps({
     'newsroom_mode': config.RUN_NEWSROOM_MODE,
     'newsroom_fallback': config.RUN_NEWSROOM_FALLBACK,
     'newsroom_rounds': config.RUN_NEWSROOM_MAX_ROUNDS,
+    'editorial_engine': config.EDITORIAL_ENGINE,
+    'desk_interval': config.DESK_INTERVAL_SECONDS,
     'serpapi': bool(config.SERPAPI_KEY),
     'serpapi_timeout': config.SERPAPI_TIMEOUT_SECONDS,
     'serpapi_results': config.SERPAPI_MAX_RESULTS,
@@ -59,20 +61,22 @@ class ConfigTests(unittest.TestCase):
             "model": "claude-sonnet-5",
             "triage": "claude-sonnet-5",
             "triage_effort": "medium",
-            "editor": "claude-fable-5",
-            "effort": "low",
+            "editor": "claude-sonnet-5",
+            "effort": "medium",
             "poll": 60,
             "perception": 900,
             "perception_direct": True,
             "node_pulse_max_age": 10800,
             "x_detector": True,
-            "classes": ["corroborated", "primary"],
+            "classes": ["corroborated", "primary", "secondary"],
             "delay": 30,
             "autopost": False,
             "source_policy_mode": "enforce",
             "newsroom_mode": "off",
             "newsroom_fallback": "legacy",
-            "newsroom_rounds": 10,
+            "newsroom_rounds": 6,
+            "editorial_engine": "v2",
+            "desk_interval": 900,
             "serpapi": False,
             "serpapi_timeout": 15.0,
             "serpapi_results": 5,
@@ -88,9 +92,9 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(values["perception_direct"])
         self.assertFalse(values["x_detector"])
 
-    def test_secondary_is_removed_from_autopost_classes(self):
+    def test_secondary_can_autopost_in_editorial_v2(self):
         values = load_config({"NBN_AUTOPOST_CLASSES": "secondary,primary"})
-        self.assertEqual(values["classes"], ["primary"])
+        self.assertEqual(values["classes"], ["primary", "secondary"])
 
     def test_test_process_blocks_real_network(self):
         with self.assertRaisesRegex(AssertionError, "real network access"):

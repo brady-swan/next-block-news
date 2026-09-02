@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS items (
   discovery_context TEXT DEFAULT '',
   discovery_candidate_id TEXT,
   decision_stage TEXT,
-  decision_category TEXT
+  decision_category TEXT,
+  defer_until REAL
 );
 CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,6 +189,24 @@ CREATE TABLE IF NOT EXISTS newsroom_story_commits (
 );
 CREATE INDEX IF NOT EXISTS idx_newsroom_story_state
   ON newsroom_story_commits(state, updated_at);
+CREATE TABLE IF NOT EXISTS model_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  seat TEXT NOT NULL,
+  model TEXT NOT NULL,
+  round INTEGER NOT NULL,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_input_tokens INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  outcome TEXT NOT NULL,
+  estimated_cost_usd REAL NOT NULL DEFAULT 0,
+  rate_version TEXT NOT NULL,
+  created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_model_usage_created ON model_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_model_usage_run ON model_usage(run_id, seat);
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
 CREATE INDEX IF NOT EXISTS idx_posts_story ON posts(story_key);
 """
@@ -210,6 +229,7 @@ ITEM_COLUMNS = {
     "discovery_candidate_id": "TEXT",
     "decision_stage": "TEXT",
     "decision_category": "TEXT",
+    "defer_until": "REAL",
 }
 
 NODE_RUN_COLUMNS = {
@@ -270,6 +290,69 @@ def kv_set(con, k: str, v: str):
     con.commit()
 
 
+_MODEL_RATES = {
+    # USD per million tokens. Prompt cache writes use Anthropic's default five-minute
+    # 1.25x multiplier; cache hits use the documented 0.1x multiplier.
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-opus-5": (5.0, 25.0),
+    "claude-fable-5": (10.0, 50.0),
+    "claude-fable-5-1": (10.0, 50.0),
+}
+MODEL_RATE_VERSION = "anthropic-public-2026-09-02-v1"
+
+
+def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number: int,
+                       response=None, latency_ms: int = 0, outcome: str = "ok") -> None:
+    """Persist billing metadata only: never prompts, bodies, reasoning, or tool text."""
+    usage = getattr(response, "usage", None)
+    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+    cache_create = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+    cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+    input_rate, output_rate = _MODEL_RATES.get(str(model), (0.0, 0.0))
+    estimated = ((input_tokens + cache_create * 1.25 + cache_read * 0.1) * input_rate
+                 + output_tokens * output_rate) / 1_000_000
+    con.execute(
+        "INSERT INTO model_usage(run_id,seat,model,round,input_tokens,output_tokens,"
+        "cache_creation_input_tokens,cache_read_input_tokens,latency_ms,outcome,"
+        "estimated_cost_usd,rate_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (str(run_id)[:120], str(seat)[:40], str(model)[:80], int(round_number),
+         input_tokens, output_tokens, cache_create, cache_read, max(0, int(latency_ms)),
+         str(outcome)[:40], estimated, MODEL_RATE_VERSION, time.time()),
+    )
+    con.commit()
+
+
+def model_usage_summary(con, since: float) -> dict:
+    row = con.execute(
+        "SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,"
+        "COALESCE(SUM(output_tokens),0) AS output_tokens,"
+        "COALESCE(SUM(cache_creation_input_tokens),0) AS cache_creation_input_tokens,"
+        "COALESCE(SUM(cache_read_input_tokens),0) AS cache_read_input_tokens,"
+        "COALESCE(SUM(estimated_cost_usd),0) AS estimated_cost_usd,"
+        "COUNT(*) AS calls FROM model_usage WHERE created_at>=?", (float(since),),
+    ).fetchone()
+    return dict(row) if row else {}
+
+
+def editorial_run_due(con, now: float | None = None, *, force: bool = False) -> bool:
+    """Atomically claim the persisted 15-minute desk slot before calling a model."""
+    now = float(now or time.time())
+    try:
+        due = float(kv_get(con, "editorial:next_run_at") or 0)
+    except ValueError:
+        due = 0
+    if not force and due > now:
+        return False
+    kv_set(con, "editorial:next_run_at", str(now + config.DESK_INTERVAL_SECONDS))
+    return True
+
+
+def editorial_run_soon(con, now: float | None = None) -> None:
+    """Let a remaining backlog drain on the next healthy one-minute worker cycle."""
+    kv_set(con, "editorial:next_run_at", str(float(now or time.time())))
+
+
 def hold_gate(note: str) -> str:
     """Return the operator-facing gate for holds that can safely become a draft.
 
@@ -326,7 +409,7 @@ def request_operator_action(con, item_hash: str, action: str) -> dict:
              None if action in {"stage", "retry"} else "owner dismissed"),
         )
         if action == "stage":
-            con.execute("UPDATE items SET status='new' WHERE url_hash=?", (item_hash,))
+            con.execute("UPDATE items SET status='new',defer_until=NULL WHERE url_hash=?", (item_hash,))
         elif action == "retry":
             con.execute(
                 "UPDATE research_jobs SET state='pending',next_attempt_at=?,manual_draft_only=1,"
@@ -665,6 +748,7 @@ def record_pipeline_event(con, run_id: str, item_hash: str, event: str,
 
 _NEWSROOM_STATES = {
     "surveying", "researching", "validated", "materializing", "completed", "fallback",
+    "deferred",
 }
 
 
@@ -718,7 +802,7 @@ def set_newsroom_state(con, run_id: str, status: str, *, error_kind: str = "",
                        error_message: str = "", counters: dict | None = None) -> None:
     if status not in _NEWSROOM_STATES:
         raise ValueError("invalid newsroom state")
-    completed = time.time() if status in {"completed", "fallback"} else None
+    completed = time.time() if status in {"completed", "fallback", "deferred"} else None
     con.execute(
         "UPDATE newsroom_runs SET status=?,error_kind=?,error_message=?,"
         "counters_json=COALESCE(?,counters_json),updated_at=?,completed_at=? WHERE run_id=?",
@@ -762,7 +846,7 @@ def prune_newsroom_runs(con, days: float = 14.0) -> None:
     cutoff = time.time() - max(1.0, days) * 86400
     con.execute(
         "UPDATE newsroom_runs SET inventory_json='[]',survey_json=NULL,dossier_json=NULL"
-        " WHERE status IN ('completed','fallback') AND created_at<?",
+        " WHERE status IN ('completed','fallback','deferred') AND created_at<?",
         (cutoff,),
     )
     con.commit()
@@ -1255,8 +1339,9 @@ def pending_items(con, limit: int) -> list:
     rows = con.execute(
         "SELECT url_hash, source, title, url, published_at AS published,"
         " summary,discovery_origin,discovery_context,discovery_candidate_id"
-        " FROM items WHERE status='new'"
+        " FROM items WHERE status='new' AND COALESCE(defer_until,0)<=?"
         " ORDER BY first_seen",
+        (time.time(),),
     ).fetchall()
     values = [dict(row) for row in rows]
     values = [row for _, row in sorted(
@@ -1759,6 +1844,15 @@ def story_produced(con, story_key: str) -> bool:
     ).fetchone() is not None
 
 
+def exact_output_exists(con, body: str, receipt_url: str) -> bool:
+    """Idempotency rail only; semantic novelty belongs to the editorial seats."""
+    return con.execute(
+        "SELECT 1 FROM posts WHERE (body=? OR receipt_url=?)"
+        " AND mode IN ('IMMEDIATE','DRAFT','UNCERTAIN') LIMIT 1",
+        (str(body), str(receipt_url)),
+    ).fetchone() is not None
+
+
 def recent_story_bodies(con, story_key: str, limit: int = 2) -> list[str]:
     family = story_key_family(con, story_key)
     if not family:
@@ -1808,6 +1902,20 @@ def set_status(con, url_hash_: str, status: str, story_key: str = None, note: st
         "decision_stage=COALESCE(?,decision_stage),decision_category=COALESCE(?,decision_category)"
         " WHERE url_hash=?",
         (status, story_key, note, stage, category, url_hash_),
+    )
+    con.commit()
+
+
+def defer_item(con, url_hash_: str, note: str, *, delay_seconds: int = 900,
+               story_key: str | None = None, stage: str = "newsdesk",
+               category: str = "editorial_defer") -> None:
+    if story_key:
+        story_key = canonical_story_key(con, story_key)
+    con.execute(
+        "UPDATE items SET status='new',story_key=COALESCE(?,story_key),note=?,"
+        "decision_stage=?,decision_category=?,defer_until=? WHERE url_hash=?",
+        (story_key, str(note)[:300], stage, category,
+         time.time() + max(1, int(delay_seconds)), url_hash_),
     )
     con.commit()
 
