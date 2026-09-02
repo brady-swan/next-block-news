@@ -427,6 +427,17 @@ class NewsroomContractTests(unittest.TestCase):
                 outcome = session.conduct()
             self.assertEqual(client.messages.create.call_count, 4)
             self.assertEqual(outcome.counters["rounds"], 4)
+            tool_sets = [
+                {tool["name"] for tool in call.kwargs["tools"]}
+                for call in client.messages.create.call_args_list
+            ]
+            self.assertEqual(tool_sets[0], {"submit_survey"})
+            self.assertEqual(
+                tool_sets[1],
+                {"fetch_intake_item", "search_web", "fetch_source", "finish_research"},
+            )
+            self.assertEqual(tool_sets[2], tool_sets[1])
+            self.assertEqual(tool_sets[3], {"submit_newsroom_dossier"})
             final_messages = client.messages.create.call_args_list[-1].kwargs["messages"]
             self.assertEqual(final_messages[0]["role"], "user")
             self.assertEqual(final_messages[1]["role"], "assistant")

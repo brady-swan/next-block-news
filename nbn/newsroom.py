@@ -151,7 +151,7 @@ TOOLS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object", "additionalProperties": False,
             "properties": {
-                "candidate_map": {"type": "array", "maxItems": 25, "items": {
+                "candidate_map": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
                         "url_hash": {"type": "string"},
@@ -162,7 +162,7 @@ TOOLS: list[dict[str, Any]] = [
                     },
                     "required": ["url_hash", "proposed_story_id", "proposed_disposition", "reason"],
                 }},
-                "stories": {"type": "array", "maxItems": 25, "items": {
+                "stories": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
                         "story_id": {"type": "string"},
@@ -219,7 +219,7 @@ TOOLS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object", "additionalProperties": False,
             "properties": {
-                "items": {"type": "array", "maxItems": 25, "items": {
+                "items": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
                         "url_hash": {"type": "string"},
@@ -229,7 +229,7 @@ TOOLS: list[dict[str, Any]] = [
                     },
                     "required": ["url_hash", "story_id", "disposition", "reason"],
                 }},
-                "stories": {"type": "array", "maxItems": 25, "items": {
+                "stories": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
                         "story_id": {"type": "string"},
@@ -242,7 +242,7 @@ TOOLS: list[dict[str, Any]] = [
                         "reason": {"type": "string", "maxLength": 400},
                         "reader_value": {"type": "string", "maxLength": 800},
                         "selected_fetch_id": {"type": ["string", "null"]},
-                        "evidence": {"type": "array", "maxItems": 16, "items": {
+                        "evidence": {"type": "array", "items": {
                             "type": "object", "additionalProperties": False,
                             "properties": {
                                 "fetch_id": {"type": "string"},
@@ -253,7 +253,7 @@ TOOLS: list[dict[str, Any]] = [
                             },
                             "required": ["fetch_id", "directly_supports", "originality", "subject_is_actor", "primary_artifact_fetch_id"],
                         }},
-                        "unresolved_questions": {"type": "array", "maxItems": 8,
+                        "unresolved_questions": {"type": "array",
                                                  "items": {"type": "string", "maxLength": 400}},
                         "post": {"type": ["string", "null"], "maxLength": 8000},
                         "event_date": {"type": ["string", "null"]},
@@ -261,9 +261,9 @@ TOOLS: list[dict[str, Any]] = [
                         "underlying_period_end": {"type": ["string", "null"]},
                         "data_provider": {"type": ["string", "null"], "maxLength": 120},
                         "needs_second_source": {"type": "boolean"},
-                        "mentions_used": {"type": "array", "maxItems": 2, "items": {"type": "string"}},
-                        "numbers_used": {"type": "array", "maxItems": 32, "items": {"type": "string"}},
-                        "claims": {"type": "array", "maxItems": 24, "items": {
+                        "mentions_used": {"type": "array", "items": {"type": "string"}},
+                        "numbers_used": {"type": "array", "items": {"type": "string"}},
+                        "claims": {"type": "array", "items": {
                             "type": "object", "additionalProperties": False,
                             "properties": {
                                 "claim": {"type": "string", "maxLength": 500},
@@ -291,7 +291,7 @@ TOOLS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object", "additionalProperties": False,
             "properties": {
-                "patches": {"type": "array", "maxItems": 25, "items": {
+                "patches": {"type": "array", "items": {
                     "type": "object", "additionalProperties": False,
                     "properties": {
                         "story_id": {"type": "string"},
@@ -301,8 +301,8 @@ TOOLS: list[dict[str, Any]] = [
                         "underlying_period_end": {"type": ["string", "null"]},
                         "data_provider": {"type": ["string", "null"], "maxLength": 120},
                         "needs_second_source": {"type": "boolean"},
-                        "mentions_used": {"type": "array", "maxItems": 2, "items": {"type": "string"}},
-                        "numbers_used": {"type": "array", "maxItems": 32, "items": {"type": "string"}},
+                        "mentions_used": {"type": "array", "items": {"type": "string"}},
+                        "numbers_used": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": ["story_id", "post", "event_date", "disclosure_date",
                                  "underlying_period_end", "data_provider", "needs_second_source",
@@ -765,8 +765,11 @@ class NewsroomSession:
         packet = self._initial_packet()
         self.messages = [{"role": "user", "content": json.dumps(
             packet, separators=(",", ":"), ensure_ascii=False)}]
-        response = self._call(max_tokens=8000,
-                              tool_choice={"type": "tool", "name": "submit_survey"})
+        response = self._call(
+            max_tokens=8000,
+            tool_choice={"type": "tool", "name": "submit_survey"},
+            tools=[_tool("submit_survey")],
+        )
         blocks = self._append_assistant(response)
         if len(blocks) != 1 or blocks[0].name != "submit_survey":
             raise NewsroomError("invalid_survey", "first round must submit exactly one survey")
@@ -779,7 +782,15 @@ class NewsroomSession:
         self.state = "research"
 
         while self.state == "research":
-            response = self._call(max_tokens=8000)
+            response = self._call(
+                max_tokens=8000,
+                tools=[
+                    _tool("fetch_intake_item"),
+                    _tool("search_web"),
+                    _tool("fetch_source"),
+                    _tool("finish_research"),
+                ],
+            )
             blocks = self._append_assistant(response)
             if len(blocks) > 1 and any(block.name == "finish_research" for block in blocks):
                 raise NewsroomError(
@@ -800,8 +811,11 @@ class NewsroomSession:
                 results.append(self._dispatch(block))
             self.messages.append({"role": "user", "content": results})
 
-        response = self._call(max_tokens=32000,
-                              tool_choice={"type": "tool", "name": "submit_newsroom_dossier"})
+        response = self._call(
+            max_tokens=32000,
+            tool_choice={"type": "tool", "name": "submit_newsroom_dossier"},
+            tools=[_tool("submit_newsroom_dossier")],
+        )
         blocks = self._append_assistant(response)
         if len(blocks) != 1 or blocks[0].name != "submit_newsroom_dossier":
             raise NewsroomError("invalid_dossier", "dossier round must submit exactly one dossier")
@@ -814,6 +828,8 @@ class NewsroomSession:
         if _json_bytes(survey) > 24576:
             raise NewsroomError("survey_too_large", "survey exceeds 24 KiB")
         rows = survey.get("candidate_map") or []
+        if len(rows) > len(self.by_hash) or len(survey.get("stories") or []) > len(self.by_hash):
+            raise NewsroomError("survey_too_large", "survey exceeds inventory bounds")
         hashes = [str(row.get("url_hash") or "") for row in rows if isinstance(row, dict)]
         if len(hashes) != len(set(hashes)) or set(hashes) != set(self.by_hash):
             raise NewsroomError("survey_coverage", "survey must account for every inventory hash once")
@@ -927,6 +943,8 @@ class NewsroomSession:
             raise NewsroomError("dossier_too_large", "dossier exceeds 96 KiB")
         item_rows = dossier.get("items") or []
         story_rows = dossier.get("stories") or []
+        if len(item_rows) > len(self.by_hash) or len(story_rows) > len(self.by_hash):
+            raise NewsroomError("dossier_too_large", "dossier exceeds inventory bounds")
         item_hashes = [str(row.get("url_hash") or "") for row in item_rows if isinstance(row, dict)]
         if len(item_hashes) != len(set(item_hashes)) or set(item_hashes) != set(self.by_hash):
             raise NewsroomError("dossier_coverage", "dossier must account for every inventory hash once")
@@ -958,6 +976,14 @@ class NewsroomSession:
 
         actionable_keys = {}
         for story_id, story in stories.items():
+            if (len(story.get("evidence") or []) > 16
+                    or len(story.get("unresolved_questions") or []) > 8
+                    or len(story.get("mentions_used") or []) > 2
+                    or len(story.get("numbers_used") or []) > 32
+                    or len(story.get("claims") or []) > 24):
+                raise NewsroomError(
+                    "story_too_large", f"story {story_id} exceeds collection bounds"
+                )
             safe, identity_note, canonical_key = self._identity_safe(story)
             if not safe:
                 story["action"] = "hold"
@@ -1125,11 +1151,16 @@ class NewsroomSession:
             raise NewsroomError("invalid_patch", "repair round did not submit one patch")
         allowed = {str(row.get("story_id") or "") for row in requests}
         patches = blocks[0].input.get("patches") or []
+        if len(patches) > len(allowed):
+            raise NewsroomError("invalid_patch", "patch count exceeds requested stories")
         by_story = {}
         for patch in patches:
             story_id = str(patch.get("story_id") or "")
             if not story_id or story_id not in allowed or story_id in by_story:
                 raise NewsroomError("invalid_patch", "patch targets an unrequested story")
+            if (len(patch.get("mentions_used") or []) > 2
+                    or len(patch.get("numbers_used") or []) > 32):
+                raise NewsroomError("invalid_patch", "patch exceeds collection bounds")
             by_story[story_id] = dict(patch)
         return by_story
 
