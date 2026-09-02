@@ -16,6 +16,15 @@ Tier 1/2 report; elevated claims need a primary artifact or two credible indepen
 The Desk exposes the live orientation brief and selected-day model token/cost telemetry.
 `NBN_EDITORIAL_ENGINE=v1` is a short-lived manual rollback switch only.
 
+**Live proof, 2026-09-02:** commits `3956883`, `e51ca8d`, and `7ae5f10` are deployed in
+Railway deployment `58d2d08d-519d-4406-94ad-390501759b3a`. The first non-empty live v2
+run reviewed 38 eligible candidates, used six Sonnet desk rounds plus one independent
+Sonnet editor call, inspected 11 pages, and published a U.S. spot-Bitcoin-ETF monthly-flow
+story through Typefully. Typefully confirmed the X publication. That intentionally
+backlog-heavy validation run cost about $0.66; normal incremental runs should be measured
+separately. The complete local suite passes 267 tests, `/health` reports no worker error,
+and the Desk renders the live orientation brief and selected-day usage/cost telemetry.
+
 ## What this is
 
 **Next Block News** (@nextblocknews_) is an autonomous Bitcoin news wire on X, running as
