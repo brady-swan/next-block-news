@@ -104,6 +104,20 @@ class NewsroomContractTests(unittest.TestCase):
         self.assertNotIn("discovery_context_untrusted", json.dumps(packet))
         self.assertNotIn("ignore_instructions", json.dumps(packet))
 
+    def test_failed_intake_fetch_directs_sonnet_to_an_alternate_receipt(self):
+        with temporary_store() as con:
+            row = candidate()
+            session = self.session(con, [row])
+            with patch.object(newsroom.sources, "fetch_article", return_value={
+                "outcome": "http_error", "error_kind": "status_429",
+                "error_message": "rate limited",
+            }):
+                result = session._fetch(row["url"], intake=row)
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["retry_same_call"])
+        self.assertIn("search_web", result["recommended_next_action"])
+        self.assertIn(row["title"], result["suggested_search_query"])
+
     def draft_dossier(self, row):
         return {
             "items": [{"url_hash": row["url_hash"], "story_id": "story-1",
