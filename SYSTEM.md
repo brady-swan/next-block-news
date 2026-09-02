@@ -194,3 +194,7 @@ and stages corrections for human review.
 
 The Desk exposes the exact live orientation brief in a collapsible panel so Brady can review
 and tune it explicitly after launch.
+
+Human-approved positive and negative examples accumulate in
+`prompts/orientation-examples.md`. That file is a review queue, not a runtime prompt include;
+examples enter production only through a deliberate orientation-brief revision.
