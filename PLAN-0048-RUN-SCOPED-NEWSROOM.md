@@ -132,7 +132,7 @@ The protocol is closed:
   exhaustion before the required submission is failure.
 - Unknown tools, invalid arguments, duplicate tool-use IDs, repeated identical loops,
   or projected context overflow fail the session before materialization.
-- Limits: 7 Sonnet rounds through dossier plus one optional patch round; 24 total research
+- Limits: 9 Sonnet rounds through dossier plus one optional patch round; 24 total research
   tool calls; 8
   searches; 16 fetches; 6 fetches associated with one story; one tool executed at a
   time; 8,000 characters per fetched page; 160,000 aggregate fetched characters;
@@ -159,8 +159,9 @@ before a valid dossier fails the session before materialization. No inventory it
 dropped to fit context.
 
 Every model round counts against the existing hourly call budget. Preflight atomically
-reserves `8 + inventory_size` calls: at most eight Sonnet rounds and at most one Fable
-call for every possible story. This is at most 33 calls for the current 25-item inventory.
+reserves `RUN_NEWSROOM_MAX_ROUNDS + inventory_size` calls: by default at most ten Sonnet
+rounds and at most one Fable call for every possible story. This is at most 35 calls for
+the current 25-item inventory.
 Fable and legacy fallback capacity are mutually exclusive: on dossier success, story
 review consumes the Fable portion; on pre-materialization session failure, the unused
 Fable/remaining-Sonnet portion is reassigned to legacy calls. Legacy still obeys the

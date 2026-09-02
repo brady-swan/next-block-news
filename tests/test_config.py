@@ -72,7 +72,7 @@ class ConfigTests(unittest.TestCase):
             "source_policy_mode": "enforce",
             "newsroom_mode": "off",
             "newsroom_fallback": "legacy",
-            "newsroom_rounds": 8,
+            "newsroom_rounds": 10,
             "serpapi": False,
             "serpapi_timeout": 15.0,
             "serpapi_results": 5,

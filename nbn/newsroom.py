@@ -802,14 +802,23 @@ class NewsroomSession:
         self.state = "research"
 
         while self.state == "research":
+            # Reserve one round for dossier submission and one for the optional
+            # post-only repair. When research reaches that boundary, close it
+            # explicitly rather than discovering the limit after finish_research.
+            must_finish = self.rounds >= config.RUN_NEWSROOM_MAX_ROUNDS - 3
+            research_tools = [
+                _tool("fetch_intake_item"),
+                _tool("search_web"),
+                _tool("fetch_source"),
+                _tool("finish_research"),
+            ]
             response = self._call(
                 max_tokens=8000,
-                tools=[
-                    _tool("fetch_intake_item"),
-                    _tool("search_web"),
-                    _tool("fetch_source"),
-                    _tool("finish_research"),
-                ],
+                tool_choice=(
+                    {"type": "tool", "name": "finish_research"}
+                    if must_finish else None
+                ),
+                tools=[_tool("finish_research")] if must_finish else research_tools,
             )
             blocks = self._append_assistant(response)
             if len(blocks) > 1 and any(block.name == "finish_research" for block in blocks):

@@ -426,7 +426,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         con, exclude_hashes={item["url_hash"] for item in inventory})
     if newsroom_mode != "off":
         from . import newsroom
-        reserve_count = 8 + len(inventory)
+        reserve_count = config.RUN_NEWSROOM_MAX_ROUNDS + len(inventory)
         reservation = brain.reserve_model_calls(reserve_count)
         if reservation:
             brain.activate_model_reservation(reservation)
@@ -434,6 +434,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                 con, pipeline_run_id, newsroom_mode, config.ANTHROPIC_MODEL,
                 newsroom.PROMPT_VERSION, [item["url_hash"] for item in inventory],
             )
+            session = None
             try:
                 session = newsroom.start_session(
                     run_id=pipeline_run_id, inventory=inventory,
@@ -449,13 +450,14 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             except Exception as exc:  # noqa: BLE001 - whole-batch fallback is intentional
                 newsroom_error = f"{type(exc).__name__}: {exc}"[:500]
                 kind = getattr(exc, "kind", type(exc).__name__)
+                counters = session.counters() if session else {}
                 store.set_newsroom_state(
                     con, pipeline_run_id, "fallback", error_kind=kind,
-                    error_message=newsroom_error,
+                    error_message=newsroom_error, counters=counters,
                 )
                 result["newsroom"] = {
                     "mode": newsroom_mode, "status": "fallback",
-                    "error_kind": kind, "error": newsroom_error,
+                    "error_kind": kind, "error": newsroom_error, **counters,
                 }
                 log.warning("run newsroom fell back before materialization: %s", newsroom_error)
         else:

@@ -24,7 +24,7 @@ RUN_NEWSROOM_FALLBACK = os.environ.get(
 ).strip().lower()
 if RUN_NEWSROOM_FALLBACK not in {"legacy", "hold"}:
     raise RuntimeError("NBN_RUN_NEWSROOM_FALLBACK must be legacy or hold")
-RUN_NEWSROOM_MAX_ROUNDS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_ROUNDS", "8"))
+RUN_NEWSROOM_MAX_ROUNDS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_ROUNDS", "10"))
 RUN_NEWSROOM_MAX_TOOL_CALLS = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_TOOL_CALLS", "24"))
 RUN_NEWSROOM_MAX_SEARCHES = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_SEARCHES", "8"))
 RUN_NEWSROOM_MAX_FETCHES = int(os.environ.get("NBN_RUN_NEWSROOM_MAX_FETCHES", "16"))

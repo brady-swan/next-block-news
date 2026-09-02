@@ -445,7 +445,7 @@ publication. Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_PERCEPTION_DIRECT_ENABLED` | `true` until production cutover gate passes | lets Node own Perception discovery once safely proven |
 | `NBN_MODEL` / `NBN_TRIAGE_MODEL` / `NBN_TRIAGE_EFFORT` | `claude-sonnet-5` / `claude-sonnet-5` / `medium` | run newsroom; legacy fallback keeps the separate triage setting |
 | `NBN_RUN_NEWSROOM_MODE` / `NBN_RUN_NEWSROOM_FALLBACK` | `off` (pre-rollout) / `legacy` | `off → shadow → draft → live`; fallback only before materialization |
-| `NBN_RUN_NEWSROOM_MAX_ROUNDS` / `MAX_TOOL_CALLS` | `8` / `24` | bounded same-session model/tool loop |
+| `NBN_RUN_NEWSROOM_MAX_ROUNDS` / `MAX_TOOL_CALLS` | `10` / `24` | bounded loop; dossier and optional repair retain reserved rounds |
 | `NBN_RUN_NEWSROOM_MAX_SEARCHES` / `MAX_FETCHES` | `8` / `16` | per-run retrieval bounds |
 | `NBN_RUN_NEWSROOM_MAX_FETCH_CHARS` / `MAX_FETCH_TOTAL_CHARS` | `8000` / `160000` | receipt text bounds |
 | `NBN_RUN_NEWSROOM_MAX_INITIAL_BYTES` / `MAX_HISTORY_BYTES` | `98304` / `491520` | clean-desk and total-context ceilings |
