@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from nbn import config, source_policy, store, verify
+from nbn import config, guide_context, source_policy, store, verify
 from scripts import backup_db
 from tests.support import item, temporary_store
 
@@ -19,7 +19,18 @@ class StoreTests(unittest.TestCase):
             store.upsert_new_items(con, [item(
                 url="https://x.com/BitcoinArchive/status/1",
                 source="X guide @BitcoinArchive",
+                summary="Guide claim",
             )])
+            guide = guide_context.build_signal(
+                "BitcoinArchive", "https://x.com/BitcoinArchive/status/1",
+                "Guide claim", {}, [],
+            )
+            con.execute(
+                "UPDATE items SET discovery_context=? WHERE source='X guide @BitcoinArchive'",
+                (json.dumps({"untrusted_discovery_context": True,
+                             "guide_signal": guide}),),
+            )
+            con.commit()
             pending = store.pending_items(con, 1)
             self.assertEqual(pending[0]["source"], "X guide @BitcoinArchive")
 

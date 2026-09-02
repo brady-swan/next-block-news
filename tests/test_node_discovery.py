@@ -66,7 +66,7 @@ def v2_payload(now=1788192000, urls=None, candidates=True, with_themes=False):
         refs.append({
             "ref_id": ref_id, "rank": rank, "source_id": None,
             "publisher": "Primary Source" if rank == 1 else "SEC",
-            "title": "Primary source title" if rank == 1 else "Official release",
+            "title": "Strategy buys bitcoin",
             "url": url, "published_at": generated.isoformat(), "observed_at": None,
             "source_tier": 1, "source_type": "article", "source_class": "official",
             "role_hint": "official",
@@ -78,9 +78,9 @@ def v2_payload(now=1788192000, urls=None, candidates=True, with_themes=False):
         rows.append({
             "candidate_id": hashlib.sha256(material.encode()).hexdigest()[:32],
             "order": 1, "primary_ref_id": refs[0]["ref_id"], "source_refs": refs,
-            "cluster_headline": "Context-only cluster headline",
+            "cluster_headline": "Strategy buys bitcoin",
             "cluster_summary": "Context-only cluster summary",
-            "event_key_hint": "event:strategy-purchase:2026-08-31",
+            "event_key_hint": "event:purchase-strategy:2026-08-31",
             "event_key_version": "wire-event-v1", "event_date": "2026-08-31",
             "disclosure_date": "2026-08-31", "reporting_period": None,
             "why_surfaced": "fresh official Bitcoin signal", "bitcoin_relevance": 0.9,
@@ -132,16 +132,100 @@ class NodeDiscoveryTests(unittest.TestCase):
             result = node_discovery.ingest(con, now=1788192000, client=client)
             row = con.execute("SELECT * FROM items").fetchone()
             self.assertEqual(result["contract"], "v2")
-            self.assertEqual(row["title"], "Primary source title")
+            self.assertEqual(row["title"], "Strategy buys bitcoin")
             self.assertEqual(row["source"], "Primary Source")
             self.assertEqual(row["summary"], "")
             context = json.loads(row["discovery_context"])
-            self.assertEqual(context["cluster_headline"], "Context-only cluster headline")
+            self.assertEqual(context["cluster_headline"], "Strategy buys bitcoin")
             self.assertEqual(
                 context["source_refs"][0]["ref_id"],
                 body["candidates"][0]["primary_ref_id"],
             )
             self.assertEqual(store.kv_get(con, "node:last_pulse_run_id"), "501")
+
+    def test_primary_mismatch_downgrades_to_minimal_provenance_without_hints(self):
+        body = v2_payload(with_themes=True)
+        body["candidates"][0]["cluster_headline"] = "Bessent addresses G20 tariffs"
+        body["candidates"][0]["event_key_hint"] = "event:bessent-g20-tariffs"
+        _run, _context, diagnostics, items = node_discovery._parse_v2(
+            body, now=1788192000
+        )
+        parsed = json.loads(items[0]["discovery_context"])
+        self.assertEqual(parsed["context_downgrade"], "primary_alignment")
+        self.assertNotIn("event_key_hint", parsed)
+        self.assertNotIn("why_surfaced", parsed)
+        self.assertEqual(parsed["theme_ids"], [])
+        self.assertNotIn("source_refs", parsed)
+        self.assertEqual(parsed["candidate_provenance"]["publisher"], "Primary Source")
+        self.assertEqual(diagnostics["primary_context_downgrades"], 1)
+
+    def test_related_mismatch_keeps_aligned_primary_but_drops_dependent_hints(self):
+        body = v2_payload(with_themes=True)
+        body["candidates"][0]["source_refs"][1]["title"] = "Strive buys bitcoin"
+        _run, _context, diagnostics, items = node_discovery._parse_v2(
+            body, now=1788192000
+        )
+        parsed = json.loads(items[0]["discovery_context"])
+        self.assertEqual(parsed["context_downgrade"], "related_ref_alignment")
+        self.assertEqual(len(parsed["source_refs"]), 1)
+        self.assertEqual(parsed["theme_signals"], [])
+        self.assertEqual(diagnostics["related_refs_dropped"], 1)
+
+    def test_related_alignment_rejects_different_entities_same_action_date_number(self):
+        primary = {
+            "title": "Strategy buys 100 BTC", "url": "https://example.com/strategy",
+            "published_at": "2026-09-01T12:00:00Z",
+        }
+        related = {
+            "title": "Metaplanet buys 100 BTC", "url": "https://example.com/metaplanet",
+            "published_at": "2026-09-01T13:00:00Z",
+        }
+        self.assertFalse(node_discovery._related_ref_aligns(primary, related))
+
+    def test_related_alignment_rejects_opposite_direction(self):
+        primary = {
+            "title": "IBIT posts $500 million inflow", "url": "https://example.com/in",
+            "published_at": "2026-09-01T12:00:00Z",
+        }
+        related = {
+            "title": "IBIT posts $500 million outflow", "url": "https://example.com/out",
+            "published_at": "2026-09-01T13:00:00Z",
+        }
+        self.assertFalse(node_discovery._related_ref_aligns(primary, related))
+
+    def test_related_alignment_rejects_ambiguous_mixed_direction(self):
+        mixed = {
+            "title": "IBIT posts $500 million inflow after an outflow",
+            "url": "https://example.com/mixed",
+            "published_at": "2026-09-01T12:00:00Z",
+        }
+        pure = {
+            "title": "IBIT posts $500 million outflow", "url": "https://example.com/out",
+            "published_at": "2026-09-01T13:00:00Z",
+        }
+        self.assertFalse(node_discovery._related_ref_aligns(mixed, pure))
+
+    def test_related_alignment_accepts_true_independent_reporting(self):
+        primary = {
+            "title": "Strategy buys 100 BTC", "url": "https://example.com/one",
+            "published_at": "2026-09-01T12:00:00Z",
+        }
+        related = {
+            "title": "Strategy purchases 100 bitcoin", "url": "https://example.com/two",
+            "published_at": "2026-09-01T13:00:00Z",
+        }
+        self.assertTrue(node_discovery._related_ref_aligns(primary, related))
+
+    def test_alignment_diagnostics_are_additive_and_bounded(self):
+        body = v2_payload()
+        body["alignment_diagnostics"] = {
+            "clusters_repaired": 2, "related_refs_dropped": 5,
+        }
+        _run, context, diagnostics, _items = node_discovery._parse_v2(
+            body, now=1788192000
+        )
+        self.assertEqual(context["alignment_diagnostics"]["clusters_repaired"], 2)
+        self.assertEqual(diagnostics["node_related_refs_dropped"], 5)
 
     def test_additive_theme_packet_is_validated_and_kept_untrusted(self):
         body = v2_payload(with_themes=True)

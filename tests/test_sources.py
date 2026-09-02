@@ -49,9 +49,10 @@ class SourceFetchSafetyTests(unittest.TestCase):
         guide = next(row for row in rows if row["source"] == "X guide @BitcoinArchive")
         self.assertEqual(guide["url"], "https://x.com/BitcoinArchive/status/42")
         context = json.loads(guide["discovery_context"])
-        self.assertTrue(context["guide_account_signal"])
-        self.assertEqual(context["outbound_urls"], ["https://example.com/primary"])
-        self.assertEqual(context["guide_format_metrics"]["likes"], 10)
+        signal = context["guide_signal"]
+        self.assertEqual(signal["version"], "guide-signal-v1")
+        self.assertEqual(signal["outbound_urls"], ["https://example.com/primary"])
+        self.assertEqual(signal["metrics"]["likes"], 10)
 
     def test_kobeissi_letter_is_in_direct_research_watch(self):
         self.assertTrue(any("from:KobeissiLetter" in query

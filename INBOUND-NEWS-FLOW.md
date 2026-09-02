@@ -103,6 +103,12 @@ pages are retained as untrusted research hints. Eligible P0/Tier 1/Tier 2 links 
 a bounded direct fetch/assessment before broad web search. Detector and guide posts enter
 source resolution before they can become receipts.
 
+Guide metadata is written as one versioned `guide-signal-v1` object and recognized from
+the normalized author handle regardless of query route. Duplicate new items merge this
+attention signal symmetrically with Node provenance; terminal items never change. Under
+the 8 KiB limit, guide metrics, outbounds, then text are shed before the enrichment is
+omitted, so valid Node context is never truncated.
+
 ### Direct Perception — every 15 minutes
 
 NBN directly searches Perception's aggregated feed for `bitcoin`, from yesterday through
@@ -179,6 +185,13 @@ The deterministic Curator:
 - Generates a versioned event-key hint and stable reference/candidate identifiers.
 - Returns at most 24 candidates.
 
+Before projection, the wire-specific sanitizer compares every related ref directly with
+the selected rank-1 source under a closed exact-event anchor rule. It may only subtract
+refs; it never joins, splits, or re-homes a cluster. All emitted headline/summary/event,
+date, theme, confidence, source-count, and reason fields are then derived from rank 1 plus
+surviving refs. Additive alignment diagnostics report repairs without changing the v2
+candidate or theme contracts.
+
 Ranking is confidence → primary role → source tier → freshness bucket → eligible theme
 activity → exact timestamp → candidate ID. Theme activity can therefore break only an
 otherwise-equal attention tie. It does not approve a story, cross a stronger source or
@@ -199,6 +212,9 @@ For each candidate, NBN:
   Primary/Tier 1/Tier 2.
 - Takes ordinary intake fields only from the selected source reference.
 - Does not trust the Node's summary as evidence.
+- Independently validates rank-1 identity and headline/event anchors. A primary mismatch
+  becomes a normal candidate with only minimal run provenance. If a related ref is dropped,
+  all Node hints that might depend on it are removed rather than recomputed in NBN.
 - Deduplicates against URLs already known from native NBN discovery.
 - Strictly validates the optional versioned theme packet and derives a bounded seven-day
   advisory coverage snapshot from NBN's own tagged publications and open Typefully drafts.
@@ -265,8 +281,17 @@ single-use, 45-second fallback only. Search is therefore a research step, not a 
 inbound feed. A second-tier publication can alert NBN to an event without becoming the
 link in the final post.
 
+URL classification decides only whether a fetched page is eligible to be assessed. Every
+non-self-authenticating direct, Node, guide, and SerpAPI page must pass the ordinary
+non-web semantic support check before it counts as evidence. If that check times out, up
+to three sanitized URLs survive in the durable retry context but remain unsupported and
+cannot corroborate. Hosted search is unnecessary once an eligible page has passed that
+assessment.
+
 Retryable network failures are persisted and retried after five minutes. Editorial holds
-are kept separate from infrastructure failures.
+are kept separate from infrastructure failures. A capped dry-run-first recovery command
+can requeue only fresh exhausted jobs from the repaired timeout path; it cannot draft or
+publish directly.
 
 A Typefully draft remains open to later evidence. A second independent outlet enriches
 that cluster rather than generating a duplicate draft; once the evidence class becomes

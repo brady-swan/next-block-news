@@ -201,6 +201,25 @@ class CycleTests(unittest.TestCase):
             publish.assert_not_called()
             review.assert_not_called()
 
+    def test_initial_held_resolution_records_unknown_not_selected_and_does_not_publish(self):
+        def held(row, text):
+            ref = source_policy.classify(row["url"], row["source"])
+            return verify._held(
+                row, ref, text, "semantic support failed", resolver_path="direct"
+            )
+
+        with temporary_store() as con:
+            result, _draft, publish, review, _resolve = self.run_cycle(
+                con, [item(source="CoinDesk")],
+                [{"action": "draft", "story_key": "held-resolution",
+                  "class": "secondary"}],
+                auto=True, resolution_factory=held,
+            )
+        self.assertEqual(result["resolver_outcomes"], {"unknown": 1})
+        self.assertNotIn("selected", result["resolver_outcomes"])
+        publish.assert_not_called()
+        review.assert_not_called()
+
     def test_directly_supporting_official_artifact_can_promote_primary(self):
         def official(row, text):
             return make_resolution({**row, "class": "primary"}, text)

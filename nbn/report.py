@@ -185,6 +185,15 @@ def _esc(s) -> str:
     return html.escape(str(s or ""))
 
 
+def _bounded_count(value, limit: int = 1000) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, min(int(value), limit))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _ct(ts: float) -> str:
     return datetime.datetime.fromtimestamp(ts, TZ).strftime("%-I:%M %p")
 
@@ -434,6 +443,52 @@ def render(con, day: str = None) -> str:
                           "first_seen>=? AND first_seen<? GROUP BY note ORDER BY n DESC "
                           "LIMIT 14", (s, e)).fetchall()
     summary = store.day_summary(con, day)
+    backlog = {
+        row["state"]: row["n"] for row in con.execute(
+            "SELECT state,COUNT(*) n FROM research_jobs"
+            " WHERE state IN ('pending','processing','exhausted') GROUP BY state"
+        ).fetchall()
+    }
+    activity_allowed = {
+        "research_started": "research started",
+        "research_completed": "research completed",
+        "research_failed": "research failed",
+        "node_packet_rejected": "Node packets rejected",
+        "node_packet_dropped": "Node packets downgraded",
+        "guide_lead_advanced": "guide leads advanced",
+        "research_recovery_requeued": "recovery requeued",
+    }
+    event_rows = con.execute(
+        "SELECT event,item_hash,metadata FROM pipeline_events WHERE at>=? AND at<?",
+        (s, e),
+    ).fetchall()
+    activity_sets = {key: set() for key in activity_allowed}
+    typed_failure_sets = {
+        key: set() for key in (
+            "support_assessment_timeout", "search_timeout", "source_fetch",
+            "exhausted", "unknown",
+        )
+    }
+    recovery_count = 0
+    for row in event_rows:
+        event = row["event"]
+        if event.startswith("research_failed:"):
+            activity_sets["research_failed"].add(row["item_hash"])
+        elif event in activity_sets and event != "research_recovery_requeued":
+            activity_sets[event].add(row["item_hash"])
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        if event.startswith("research_failed:"):
+            kind = event.partition(":")[2] or str(metadata.get("error_kind") or "unknown")
+            if kind not in typed_failure_sets:
+                kind = "unknown"
+            typed_failure_sets[kind].add(row["item_hash"])
+        elif event == "research_recovery_requeued":
+            recovery_count += _bounded_count(metadata.get("count", 0))
+    activity = {key: len(values) for key, values in activity_sets.items()}
+    activity["research_recovery_requeued"] = recovery_count
     audit_raw = store.kv_get(con, "audit:last")
     audit = json.loads(audit_raw) if audit_raw else None
     decision_raw = store.kv_get(con, "desk:last_decision_run")
@@ -548,12 +603,57 @@ def render(con, day: str = None) -> str:
         f"<div><b>{summary['held']}</b><span>currently held</span></div>"
         "</div>")
 
+    run_result = decision_run.get("result", {}) if decision_run else {}
+    path_labels = {
+        "direct": "direct", "node_ref": "Node ref", "guide_ref": "guide ref",
+        "serpapi": "SerpAPI", "hosted_web": "hosted web", "unknown": "unknown",
+    }
+    outcome_labels = {
+        "selected": "selected", "support_assessment_timeout": "support assessment timeout",
+        "search_timeout": "search timeout", "source_fetch": "source fetch",
+        "exhausted": "exhausted", "unknown": "unknown",
+    }
+    paths = run_result.get("resolver_paths") if isinstance(run_result, dict) else {}
+    outcomes = run_result.get("resolver_outcomes") if isinstance(run_result, dict) else {}
+    paths = paths if isinstance(paths, dict) else {}
+    outcomes = outcomes if isinstance(outcomes, dict) else {}
+    path_text = " · ".join(
+        f"{_esc(label)} {_bounded_count(paths.get(key, 0))}"
+        for key, label in path_labels.items() if _bounded_count(paths.get(key, 0)) > 0
+    ) or "no resolver paths recorded"
+    outcome_text = " · ".join(
+        f"{_esc(label)} {_bounded_count(outcomes.get(key, 0))}"
+        for key, label in outcome_labels.items() if _bounded_count(outcomes.get(key, 0)) > 0
+    ) or "no resolver outcomes recorded"
+    activity_text = " · ".join(
+        f"{_esc(label)} {_bounded_count(activity.get(key, 0))}"
+        for key, label in activity_allowed.items() if activity.get(key, 0)
+    ) or "no research activity"
+    failure_labels = {
+        "support_assessment_timeout": "support assessment timeout",
+        "search_timeout": "search timeout", "source_fetch": "source fetch",
+        "exhausted": "exhausted", "unknown": "unknown",
+    }
+    failure_text = " · ".join(
+        f"{_esc(label)} {_bounded_count(len(typed_failure_sets[key]))}"
+        for key, label in failure_labels.items() if typed_failure_sets[key]
+    ) or "none"
+    out.append(
+        "<h2><span class=fill>Research health</span></h2>"
+        f"<div class=metaline><b>Backlog now</b> · pending {int(backlog.get('pending', 0))}"
+        f" · processing {int(backlog.get('processing', 0))}"
+        f" · exhausted {int(backlog.get('exhausted', 0))}<br>"
+        f"<b>Selected CT day · distinct items</b> · {activity_text}<br>"
+        f"<b>Selected CT day · typed failures</b> · {failure_text}<br>"
+        f"<b>Last decision run · paths</b> · {path_text}<br>"
+        f"<b>Last decision run · outcomes</b> · {outcome_text}</div>"
+    )
+
     # ── Last completed non-empty decision run ───────────────────────────────
     decision_items = decision_run.get("items", []) if decision_run else []
     out.append(f"<h2><span class=fill>Last decision run</span>"
                f"<span class='count o'>{len(decision_items)}</span></h2>")
     if decision_run:
-        run_result = decision_run.get("result", {})
         completed = datetime.datetime.fromtimestamp(
             decision_run.get("completed", 0), TZ).strftime("%a %b %-d · %-I:%M %p Central")
         out.append(f"<div class=metaline>{_esc(completed)} · "

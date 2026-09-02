@@ -64,6 +64,14 @@ including a zero-candidate pulse. A fresh empty or already-consumed v2 response 
 and does not invoke the legacy API. NBN falls back to the legacy by-date projection only
 when v2 is missing, stale, incomplete, transport-failed, or invalid.
 
+Before projection, the Node now sanitizes each cluster pairwise against its selected
+rank-1 source and only removes misaligned refs. Headline, summary, event/date hints,
+confidence, reasons, and themes are derived from rank 1 plus surviving refs. Additive
+`alignment_diagnostics` reports repaired clusters and dropped refs. NBN still validates
+rank-1 identity and headline/event anchors independently. A bad primary becomes an
+ordinary candidate with minimal run provenance; one bad related ref removes every Node
+hint that might have depended on it. NBN never reimplements Node scoring or theme logic.
+
 Node headlines, summaries, source labels, relevance scores, themes, and event keys are
 **untrusted discovery hints**, not evidence or NBN editorial decisions. Ordinary intake
 fields come only from the primary source reference, and the item summary is intentionally
@@ -87,6 +95,12 @@ When the same URL already exists in NBN as `new`, the pulse may attach its conte
 candidate ID; it may not overwrite title, source, summary, status, or provenance. It
 never changes a processed row. The two projects remain separate codebases and databases;
 this versioned API is their explicit boundary.
+
+Guide attention uses one nested `guide-signal-v1` namespace regardless of whether the X
+post first arrived through the guide query, public list, detector, RSS overlap, or Node.
+The merge is symmetric, terminal items are immutable, and valid Node provenance wins.
+Under the 8 KiB bound guide metrics, outbound URLs, then text are shed before the guide
+enrichment itself is omitted; Node JSON is never sliced.
 
 **X recent-search (3 min), `since_id`-gated** — critical: X bills ~$0.005 per post
 *returned*, and search re-returns matches unless you ask for "only new"; quiet polls
@@ -145,8 +159,9 @@ eligible results by the NBN source ladder, and independently fetches and assesse
 three. Search snippets never count as evidence. Only after that path is exhausted may the
 single-use hosted-search fallback run.
 An omitted or structurally invalid triage response gets one smaller recovery call. If
-that also fails, ordinary items fail closed as held while guide leads still enter source
-research—never skip; a model formatting failure does not crash the worker cycle.
+that also fails, a substantive factual guide claim enters secondary research while reply
+banter, link-only copy, promotion, and non-claim opinion become visible `triage incomplete`
+holds. This heuristic chooses research versus hold only; it never establishes evidence.
 
 Triage also receives the validated theme packet and the advisory coverage snapshot for the
 current batch. It may use them to notice a distinct development or repetitive coverage, but
@@ -203,7 +218,19 @@ canonical/byline metadata wins over model metadata, and official-X is primary on
 account's own action or statement. Tier 1 is an acceptable receipt; Tier 2 reporting gets
 a bounded primary/Tier 1 upgrade search and may fall back only when original reporting is
 established. Tier 3, Tier 4, and unknown sources must be replaced by a directly supporting
-P0/Tier 1/Tier 2 page or they hold.
+P0/Tier 1/Tier 2 page or they hold. Final-URL classification establishes source
+eligibility only. Except for exact artifacts carrying trusted first-party adapter provenance
+(currently EDGAR; there is no FRED discovery-adapter shortcut), every direct,
+Node, guide, and SerpAPI receipt passes the ordinary non-web semantic support assessor
+before it can support or corroborate a claim. Hosted web search runs only when those
+bounded paths found no assessed eligible receipt.
+
+If semantic assessment times out, at most three sanitized eligible URLs and their resolver
+path are retained in the durable research context for the existing second attempt. They
+remain unsupported and ineligible for receipt/corroboration until assessment succeeds.
+`support_assessment_timeout` and `search_timeout` are separate typed outcomes. The explicit
+`scripts/requeue_source_timeouts.py` operator command is dry-run by default, capped, limited
+to fresh nonterminal exhausted timeout jobs, and never drafts or publishes directly.
 
 The original tip and final receipt are stored separately. A detector plus the artifact it
 located is one evidence chain, not two. Eligible evidence persists across cycles for the
@@ -331,7 +358,9 @@ TAPE ONLY / AGREE OR OVERRULE / AUDIT FLAG, each with a `dismiss ✓` that recor
 acknowledgment without deleting history) → daily lifecycle strip (seen/evaluated/outputs/
 confirmed published/currently held) → **Last decision run** (the most recent completed
 non-empty cycle, every considered source item, triage action/reason, final state/reason,
-and any receipt upgrade; empty polls do not erase it) → 7-day strip (published/held/seen per day,
+and any receipt upgrade; empty polls do not erase it) → **Research health** (backlog now,
+selected-day distinct-item activity, and exact last-run resolver paths and outcomes) →
+7-day strip (published/held/seen per day,
 stalled-weekday flags, day
 navigation) → Published (lede-only cards + editor verdicts) → Held grouped by reason
 family → Self-audit → Skips.
@@ -416,6 +445,7 @@ drafts). Pause the Railway service to stop even drafting. Tape reads:
 | `NBN_EDITOR_MODEL` / `NBN_EDITOR_EFFORT` | `claude-fable-5` / `low` | the editor seat |
 | `NBN_NODE_READ_TOKEN` / `NBN_NODE_BASE_URL` | set / production Node | v2 wire pulse, legacy fallback, and Blocks |
 | `NBN_NODE_PULSE_MAX_AGE_SECONDS` | `10800` | maximum accepted v2 pulse age (3h) |
+| `NBN_YIELD_IDENTITY_NORMALIZER_ENABLED` | `false` | narrow clerk-proposed, code-validated same-day U.S. 10-year-yield identity rule |
 | `NBN_BRIEFING_UTC` | `14:40,Morning;21:15,Afternoon` | Block schedule |
 | `NBN_BRIEFING_MAX_AGE_SECONDS` | `14400` | second freshness bound after exact Node run-provenance checks |
 | `NBN_AUDIT_UTC` | `09:00` | self-audit |

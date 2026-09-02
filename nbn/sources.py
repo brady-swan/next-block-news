@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from . import config
+from . import config, guide_context
 
 log = logging.getLogger("nbn.sources")
 
@@ -225,12 +225,7 @@ X_RESEARCH_QUERIES = [
     # Tier 2 research signal monitored directly, eligible only for its own analysis.
     '(from:KobeissiLetter OR from:Barchart) -is:retweet',
 ]
-X_GUIDE_HANDLES = (
-    "BitcoinNewsCom",
-    "BitcoinArchive",
-    "BitcoinMagazine",
-    "TFTC21",
-)
+X_GUIDE_HANDLES = tuple(guide_context.GUIDE_HANDLES.values())
 X_GUIDE_QUERIES = [
     # Proven Bitcoin-news desks. Their posts are editorial leads: NBN still replaces
     # the receipt, but substantive claims should reach research before being judged.
@@ -331,7 +326,8 @@ def fetch_x(con=None) -> list:
                 for t in data.get("data", []):
                     user = users.get(t["author_id"], {})
                     uname = user.get("username", "unknown")
-                    if q in X_GUIDE_QUERIES:
+                    canonical_guide = guide_context.normalize_handle(uname)
+                    if canonical_guide:
                         label = "X guide"
                     elif q in X_DETECTOR_QUERIES:
                         label = "X detector"
@@ -370,20 +366,18 @@ def fetch_x(con=None) -> list:
                     }
                     if label == "X guide":
                         metrics = t.get("public_metrics") or {}
-                        item["discovery_context"] = json.dumps({
-                            "untrusted_discovery_context": True,
-                            "origin": "bitcoin_news_guide_account",
-                            "guide_account_signal": True,
-                            "guide_handle": uname,
-                            "guide_post_url": tweet_url,
-                            "guide_post_text": t["text"][:600],
-                            "guide_format_metrics": {
+                        signal = guide_context.build_signal(
+                            canonical_guide, tweet_url, t["text"], {
                                 "characters": len(t["text"]),
                                 "likes": int(metrics.get("like_count") or 0),
                                 "reposts": int(metrics.get("retweet_count") or 0),
                                 "quotes": int(metrics.get("quote_count") or 0),
-                            },
-                            "outbound_urls": outbound[:4],
+                            }, outbound,
+                        )
+                        item["discovery_context"] = json.dumps({
+                            "untrusted_discovery_context": True,
+                            "origin": "bitcoin_news_guide_account",
+                            "guide_signal": signal,
                         }, separators=(",", ":"))
                     out.append(item)
             except Exception as exc:  # noqa: BLE001

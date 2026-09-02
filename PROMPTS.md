@@ -33,6 +33,18 @@ theme as evidence, corroboration, same-event identity, a quota, or a reason to l
 `coverage_known=false` means historical tagging is incomplete. The identity prompt receives
 theme IDs only to state that a broad shared theme is insufficient to merge story keys.
 
+The identity clerk is the only component that may propose an event-key alias. Its closed
+event-type conflict guard can veto a proposal. When
+`NBN_YIELD_IDENTITY_NORMALIZER_ENABLED=true`, the prompt may propose only the demonstrated
+same-day U.S. 10-year Treasury-yield threshold family; deterministic code then requires
+the exact instrument/date/direction/percent unit and a reading within 0.10 percentage
+point. Code never turns a clerk `distinct` result into a merge.
+
+Triage and Writer read guide examples through the versioned `guide-signal-v1` namespace
+(with legacy-read compatibility). Guide prose is an attention/format example only. It is
+never supplied as factual authority, and omitted-verdict recovery can route a substantive
+claim to research or a non-claim to visible hold, but cannot establish support.
+
 When a prompt changes, update its runtime source directly, add a regression case for the
 behavior where practical, and observe one complete live cycle after deployment as
 described in `HANDOFF-CODEX.md`.

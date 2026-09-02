@@ -9,6 +9,7 @@ import datetime
 import hashlib
 import json
 import logging
+import re
 import time
 
 import httpx
@@ -74,6 +75,165 @@ def _bounded_list(value, limit: int, item_limit: int, field: str) -> list[str]:
     if not isinstance(value, list) or len(value) > limit:
         raise InvalidNodeEnvelope(f"{field} outside contract")
     return [_short_text(item, item_limit, required=True) for item in value]
+
+
+_ANCHOR_STOP = {
+    "bitcoin", "btc", "crypto", "news", "latest", "update", "report", "reports",
+    "the", "and", "for", "with", "from", "into", "after", "amid", "says",
+}
+_ACTION_WORDS = {
+    "buy", "buys", "bought", "purchase", "purchases", "file", "files", "filed",
+    "launch", "launches", "launched", "approve", "approves", "approved", "reject",
+    "rejects", "rejected", "appoint", "appoints", "appointed", "resign", "resigns",
+    "resigned", "vote", "votes", "voted", "pass", "passes", "passed", "flow",
+    "flows", "inflow", "inflows", "outflow", "outflows", "release", "releases",
+}
+_ANCHOR_ALIASES = {
+    "buy": "purchase", "buys": "purchase", "bought": "purchase",
+    "purchases": "purchase", "purchased": "purchase",
+    "files": "file", "filed": "file",
+    "launches": "launch", "launched": "launch",
+    "approves": "approve", "approved": "approve",
+    "rejects": "reject", "rejected": "reject",
+    "appoints": "appoint", "appointed": "appoint",
+    "resigns": "resign", "resigned": "resign",
+    "votes": "vote", "voted": "vote", "passes": "pass", "passed": "pass",
+    "inflows": "flow", "outflows": "flow", "flows": "flow",
+    "releases": "release",
+}
+_DIRECTION_ALIASES = {
+    "inflow": "in", "inflows": "in", "outflow": "out", "outflows": "out",
+    "rise": "up", "rises": "up", "rose": "up", "rising": "up", "higher": "up",
+    "increase": "up", "increases": "up", "increased": "up",
+    "fall": "down", "falls": "down", "fell": "down", "falling": "down",
+    "lower": "down", "decrease": "down", "decreases": "down",
+    "decreased": "down", "drop": "down", "drops": "down", "dropped": "down",
+}
+_MONTH_WORDS = {
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december",
+}
+
+
+def _anchor_tokens(value: str) -> set[str]:
+    return {
+        _ANCHOR_ALIASES.get(token, token)
+        for token in re.findall(r"[a-z0-9][a-z0-9-]{2,}", str(value or "").lower())
+        if token not in _ANCHOR_STOP and not token.isdigit()
+    }
+
+
+def _primary_anchors_align(primary: dict, headline: str, event_key: str) -> bool:
+    title_tokens = _anchor_tokens(primary.get("title", ""))
+    headline_tokens = _anchor_tokens(headline)
+    if not title_tokens or not headline_tokens:
+        return False
+    shared = title_tokens & headline_tokens
+    if " ".join(str(primary.get("title") or "").lower().split()) != \
+            " ".join(str(headline or "").lower().split()) and len(shared) < 2:
+        return False
+    key_tokens = _anchor_tokens(str(event_key or "").replace(":", " ").replace("-", " "))
+    return event_key.startswith(("artifact:", "period:")) or len(title_tokens & key_tokens) >= 1
+
+
+def _ref_date(ref: dict) -> str:
+    return str(ref.get("published_at") or ref.get("observed_at") or "")[:10]
+
+
+def _related_ref_aligns(primary: dict, related: dict) -> bool:
+    if store.canonical_discovery_key(primary.get("url", "")) == \
+            store.canonical_discovery_key(related.get("url", "")):
+        return True
+    left_title = str(primary.get("title") or "")
+    right_title = str(related.get("title") or "")
+    left = _anchor_tokens(left_title)
+    right = _anchor_tokens(right_title)
+    shared_specific = _specific_title_entities(left_title) & _specific_title_entities(right_title)
+    shared_action = (left & right) & _ACTION_WORDS
+    if not shared_specific or not shared_action:
+        return False
+    left_directions = _direction_tokens(left_title)
+    right_directions = _direction_tokens(right_title)
+    if (left_directions or right_directions) and (
+        len(left_directions) != 1
+        or len(right_directions) != 1
+        or left_directions != right_directions
+    ):
+        return False
+    left_date, right_date = _ref_date(primary), _ref_date(related)
+    if not left_date or left_date != right_date:
+        return False
+    return _typed_ref_numbers_compatible(
+        left_title, right_title
+    )
+
+
+def _specific_title_entities(value: str) -> set[str]:
+    return {
+        token.lower()
+        for token in re.findall(r"\b(?:[A-Z][A-Za-z0-9&.-]{2,}|[A-Z]{2,})\b", value)
+        if token.lower() not in _ANCHOR_STOP
+        and token.lower() not in _ACTION_WORDS
+        and token.lower() not in _MONTH_WORDS
+        and not any(character.isdigit() for character in token)
+    }
+
+
+def _direction_tokens(value: str) -> set[str]:
+    return {
+        direction for token in re.findall(r"[a-z]+", value.lower())
+        if (direction := _DIRECTION_ALIASES.get(token))
+    }
+
+
+def _typed_ref_numbers_compatible(left: str, right: str) -> bool:
+    pattern = (
+        r"(\$\s*)?(\d+(?:\.\d+)?)\s*"
+        r"(%|percent|bp|bps|bitcoin|btc|million|billion)"
+    )
+    unit_aliases = {"%": "percent", "btc": "bitcoin", "bps": "bp"}
+
+    def normalize(value: str) -> set[tuple[str, float, bool]]:
+        return {
+            (unit_aliases.get(unit.lower(), unit.lower()), float(number), bool(dollars))
+            for dollars, number, unit in re.findall(pattern, value.replace(",", ""), re.I)
+        }
+
+    left_values, right_values = normalize(left), normalize(right)
+    if not left_values and not right_values:
+        return True
+    return bool(left_values and left_values == right_values)
+
+
+def _minimal_v2_context_json(run: dict, refs: list[dict] | None, reason: str,
+                             provenance: dict | None = None) -> str:
+    value = {
+        "untrusted_discovery_context": True,
+        "origin": "marketing_node_wire_pulse_v2",
+        "schema_version": V2_SCHEMA,
+        "node_pulse_run_id": run["run_id"],
+        "generated_at": run["generated_at"],
+        "completed_at": run["completed_at"],
+        "context_downgrade": reason,
+        "theme_ids": [],
+        "theme_signal_version": None,
+        "theme_signals": [],
+    }
+    if refs is not None:
+        value["source_refs"] = refs
+    elif provenance:
+        value["candidate_provenance"] = {
+            "primary_ref_id": str(provenance.get("ref_id") or "")[:24],
+            "publisher": str(provenance.get("publisher") or "")[:120],
+        }
+    while True:
+        encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+        if len(encoded.encode()) <= 8192:
+            return encoded
+        if len(value.get("source_refs") or []) > 1:
+            value["source_refs"].pop()
+        else:
+            raise InvalidNodeEnvelope("minimal pulse context exceeds bound")
 
 
 def _v2_context_json(raw: dict, run: dict, refs: list[dict]) -> str:
@@ -167,6 +327,9 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         raise InvalidNodeEnvelope("v2 provider diagnostics incomplete")
 
     node_theme_diagnostics = _parse_theme_diagnostics(payload.get("theme_diagnostics"))
+    node_alignment_diagnostics = _parse_alignment_diagnostics(
+        payload.get("alignment_diagnostics")
+    )
 
     candidates = payload.get("candidates")
     if not isinstance(candidates, list) or len(candidates) > 24:
@@ -174,6 +337,8 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
     items, all_key_hashes, primary_key_hashes = [], set(), set()
     timestamp_counts = {"parseable": 0, "unknown": 0, "unparseable": 0}
     rejected = theme_rejected = theme_signals_parsed = 0
+    primary_downgrades = context_downgrades = related_refs_dropped = 0
+    rejected_candidate_keys, dropped_candidate_keys = [], []
     for position, raw in enumerate(candidates, 1):
         try:
             if not isinstance(raw, dict) or raw.get("order") != position:
@@ -265,11 +430,36 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
                 "novelty_hint": novelty,
                 "confidence_hint": confidence,
             }
-            context_json = _v2_context_json(normalized_raw, {
+            run_context = {
                 "run_id": run_id,
                 "generated_at": generated.isoformat(),
                 "completed_at": completed.isoformat(),
-            }, refs)
+            }
+            primary_ok = _primary_anchors_align(primary, cluster_headline, event_key)
+            if not primary_ok:
+                primary_downgrades += 1
+                accepted_refs = [dict(primary)]
+                context_json = _minimal_v2_context_json(
+                    run_context, None, "primary_alignment", primary
+                )
+                dropped_candidate_keys.append(expected_id)
+            else:
+                accepted_refs = [dict(primary)]
+                for ref in refs[1:]:
+                    if _related_ref_aligns(primary, ref):
+                        accepted_refs.append(dict(ref))
+                    else:
+                        related_refs_dropped += 1
+                for rank, ref in enumerate(accepted_refs, 1):
+                    ref["rank"] = rank
+                if len(accepted_refs) != len(refs):
+                    context_downgrades += 1
+                    dropped_candidate_keys.append(expected_id)
+                    context_json = _minimal_v2_context_json(
+                        run_context, accepted_refs, "related_ref_alignment"
+                    )
+                else:
+                    context_json = _v2_context_json(normalized_raw, run_context, accepted_refs)
             items.append({
                 "source": primary["publisher"],
                 "title": primary["title"],
@@ -280,14 +470,19 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
                 "discovery_candidate_id": expected_id,
                 "discovery_context": context_json,
             })
-            all_key_hashes.update(store.url_hash(key) for key in keys)
+            all_key_hashes.update(
+                store.url_hash(store.canonical_discovery_key(ref["url"]))
+                for ref in accepted_refs
+            )
             primary_key_hashes.add(store.url_hash(keys[0]))
-        except theme_context.InvalidThemePacket as exc:
+        except theme_context.InvalidThemePacket:
             rejected += 1
             theme_rejected += 1
+            rejected_candidate_keys.append(f"{run_id}:{position}")
             log.warning("Node v2 candidate rejected: invalid theme packet")
         except (ValueError, InvalidNodeEnvelope, sources.UnsafeSourceURL) as exc:
             rejected += 1
+            rejected_candidate_keys.append(f"{run_id}:{position}")
             log.warning("Node v2 candidate rejected: %s", exc)
 
     selected_date = generated.date().isoformat()
@@ -297,6 +492,7 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         "completed_at": completed.isoformat(),
         "provider_diagnostics": providers,
         "theme_diagnostics": node_theme_diagnostics,
+        "alignment_diagnostics": node_alignment_diagnostics,
     }
     diagnostics = {
         "candidates_returned": len(candidates),
@@ -304,6 +500,13 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         "theme_candidates_rejected": theme_rejected,
         "theme_signals_parsed": theme_signals_parsed,
         "validated_candidates": len(items),
+        "primary_context_downgrades": primary_downgrades,
+        "related_context_downgrades": context_downgrades,
+        "related_refs_dropped": related_refs_dropped,
+        "node_clusters_repaired": node_alignment_diagnostics["clusters_repaired"],
+        "node_related_refs_dropped": node_alignment_diagnostics["related_refs_dropped"],
+        "rejected_candidate_keys": rejected_candidate_keys[:24],
+        "dropped_candidate_keys": list(dict.fromkeys(dropped_candidate_keys))[:24],
     }
     return ({
         "run_id": run_id, "status": status, "selected_date": selected_date,
@@ -334,6 +537,21 @@ def _parse_theme_diagnostics(value) -> dict:
         raw = value.get(key)
         if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= limit:
             raise InvalidNodeEnvelope("theme diagnostics invalid")
+        parsed[key] = raw
+    return parsed
+
+
+def _parse_alignment_diagnostics(value) -> dict:
+    keys = {"clusters_repaired": 500, "related_refs_dropped": 3000}
+    if value is None:
+        return {key: 0 for key in keys}
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise InvalidNodeEnvelope("alignment diagnostics invalid")
+    parsed = {}
+    for key, limit in keys.items():
+        raw = value.get(key)
+        if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= limit:
+            raise InvalidNodeEnvelope("alignment diagnostics invalid")
         parsed[key] = raw
     return parsed
 

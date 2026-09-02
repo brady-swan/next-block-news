@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nbn import brain
+from nbn import brain, guide_context
 
 
 def response(text):
@@ -134,13 +134,14 @@ class BrainJsonTests(unittest.TestCase):
             out = brain.triage(items, [], [])
         self.assertEqual(create.call_count, 2)
         self.assertEqual(out[0]["action"], "hold")
-        self.assertEqual(out[1]["action"], "draft")
-        self.assertEqual(out[1]["reason"], "guide lead recovery")
+        self.assertEqual(out[1]["action"], "hold")
+        self.assertEqual(out[1]["reason"], "triage incomplete: guide non-claim")
 
     def test_omitted_guide_verdict_fails_into_research_not_skip(self):
         item = {
             "url_hash": "abcdef1234567890ffff", "source": "X guide @BitcoinNewsCom",
-            "title": "A Bitcoin claim", "url": "https://x.com/BitcoinNewsCom/status/1",
+            "title": "Bitcoin ETF inflows rose 25% after the latest filing",
+            "url": "https://x.com/BitcoinNewsCom/status/1",
             "published": "", "summary": "", "discovery_context": json.dumps({
                 "untrusted_discovery_context": True, "guide_account_signal": True,
             }),
@@ -204,15 +205,17 @@ class BrainJsonTests(unittest.TestCase):
         self.assertEqual(out[0]["relationship"], "distinct")
 
     def test_guide_post_reaches_writer_as_format_example_not_evidence(self):
+        guide = guide_context.build_signal(
+            "BitcoinArchive", "https://x.com/BitcoinArchive/status/1",
+            "JUST IN: Bitcoin policy changed. • First fact • Second fact",
+            {"likes": 42, "characters": 60}, [],
+        )
         item = {
             "source": "Bloomberg", "title": "Verified Bitcoin story",
             "url": "https://bloomberg.com/story", "published": "", "class": "secondary",
             "discovery_context": json.dumps({
                 "untrusted_discovery_context": True,
-                "guide_account_signal": True,
-                "guide_handle": "BitcoinArchive",
-                "guide_post_text": "JUST IN: Bitcoin policy changed. • First fact • Second fact",
-                "guide_format_metrics": {"likes": 42, "characters": 60},
+                "guide_signal": guide,
             }),
         }
         payloads = []

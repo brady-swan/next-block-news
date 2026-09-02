@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import anthropic
 
-from . import config, source_policy
+from . import config, guide_context, source_policy
 
 log = logging.getLogger("nbn.verify")
 # A web-search verification that outlives two news cycles is no longer useful. Fail
@@ -61,6 +61,8 @@ class ResolutionResult:
     outcome: str = "selected"
     stage: str = "source_resolution"
     error_kind: str = ""
+    resolver_path: str = "unknown"
+    retry_candidates: tuple[dict, ...] = ()
 
     @property
     def held(self) -> bool:
@@ -183,6 +185,39 @@ def _synthetic_candidate(ref: source_policy.SourceRef, text: str) -> EvidenceCan
                              artifact, source_policy.content_fingerprint(text))
 
 
+def _unassessed_candidate(ref: source_policy.SourceRef, text: str) -> EvidenceCandidate:
+    return EvidenceCandidate(
+        ref, "unknown", False, False, False, "", source_policy.content_fingerprint(text)
+    )
+
+
+def _self_authenticating_candidate(
+    item: dict, ref: source_policy.SourceRef, text: str
+) -> EvidenceCandidate | None:
+    """Tiny artifact-only exception; source identity alone never qualifies."""
+    path = urlsplit(ref.url).path.lower()
+    host = _domain(ref.url)
+    exact_fred = (
+        host == "fred.stlouisfed.org"
+        and path.startswith("/graph/")
+        and str(text or "").startswith("FRED data series (graph ")
+        and item.get("discovery_origin") == "fred_adapter"
+    )
+    exact_edgar = (
+        host in {"sec.gov", "www.sec.gov"}
+        and path.startswith("/archives/edgar/data/")
+        and bool(str(text or "").strip())
+        and item.get("discovery_origin") == "edgar"
+    )
+    if not (exact_fred or exact_edgar):
+        return None
+    artifact = source_policy.artifact_fingerprint(ref.url)
+    return EvidenceCandidate(
+        ref, "primary_artifact", True, ref.base_receipt_eligible,
+        ref.base_receipt_eligible, artifact, source_policy.content_fingerprint(text),
+    )
+
+
 _OFFICIAL_ARTIFACT_PATH_WORDS = {
     "press", "pressrelease", "pressreleases", "release", "releases", "news", "newsroom",
     "newsevent", "newsevents", "filing", "filings", "edgar", "rule", "rules",
@@ -272,7 +307,8 @@ def _candidate(raw: dict, fallback_url: str, fallback_name: str, text: str,
 
 
 def _held(item: dict, original: source_policy.SourceRef, text: str, note: str,
-          evidence=(), earliest=None, *, outcome="evidence_failed", error_kind="") -> ResolutionResult:
+          evidence=(), earliest=None, *, outcome="evidence_failed", error_kind="",
+          resolver_path="unknown", retry_candidates=()) -> ResolutionResult:
     return ResolutionResult(
         item_hash=item["url_hash"], story_key=item.get("story_key") or "",
         original_source_name=item.get("source", ""), original=original, selected=original,
@@ -281,7 +317,8 @@ def _held(item: dict, original: source_policy.SourceRef, text: str, note: str,
         primary_artifact_url="", primary_artifact_fingerprint="",
         content_fingerprint=source_policy.content_fingerprint(text),
         earliest_coverage_date=earliest, note=note[:300], evidence=tuple(evidence),
-        outcome=outcome, error_kind=error_kind,
+        outcome=outcome, error_kind=error_kind, resolver_path=resolver_path,
+        retry_candidates=tuple(retry_candidates)[:3],
     )
 
 
@@ -356,15 +393,10 @@ def _node_ranked_refs(item: dict) -> list[dict]:
 
 def _guide_ranked_refs(item: dict) -> list[dict]:
     """Return guide-linked pages that qualify for direct bounded assessment."""
-    raw_context = item.get("discovery_context") or ""
-    try:
-        context = json.loads(raw_context)
-    except (TypeError, ValueError):
+    signal = guide_context.signal_from_context(item.get("discovery_context"))
+    if not signal:
         return []
-    if not isinstance(context, dict) or context.get("guide_account_signal") is not True \
-            or context.get("untrusted_discovery_context") is not True:
-        return []
-    raw_urls = context.get("outbound_urls")
+    raw_urls = signal.get("outbound_urls")
     if not isinstance(raw_urls, list):
         return []
     accepted, seen = [], set()
@@ -395,6 +427,20 @@ def _serpapi_query(item: dict) -> str:
     """Build one bounded literal search query from the news claim."""
     title = re.sub(r"https?://\S+", " ", str(item.get("title") or ""))
     title = _WIRE_PREFIX_RE.sub("", " ".join(title.split())).strip(" -—:|\n\t")
+    title_words = title.split()
+    uninformative = (
+        not title
+        or bool(re.fullmatch(r"@[A-Za-z0-9_]{1,30}", title))
+        or (title.startswith("@") and len(title_words) < 7)
+        or len(title_words) < 3
+    )
+    if uninformative:
+        guide = guide_context.signal_from_context(item.get("discovery_context")) or {}
+        title = re.sub(
+            r"https?://\S+", " ",
+            str(guide.get("text") or item.get("summary") or ""),
+        )
+        title = _WIRE_PREFIX_RE.sub("", " ".join(title.split())).strip(" -—:|\n\t")
     words = title.split()
     if len(words) > 32:
         title = " ".join(words[:32])
@@ -402,6 +448,30 @@ def _serpapi_query(item: dict) -> str:
         return title[:400]
     story_key = str(item.get("story_key") or "").replace("-", " ").strip()
     return story_key[:400]
+
+
+def _cached_ranked_refs(item: dict) -> list[dict]:
+    rows = item.get("_resolver_candidates")
+    if not isinstance(rows, list):
+        return []
+    accepted = []
+    for raw in rows[:3]:
+        if not isinstance(raw, dict):
+            continue
+        url = str(raw.get("url") or "").strip()
+        ref = source_policy.classify(url, str(raw.get("outlet") or ""))
+        if ref.base_receipt_eligible and ref.tier in {"p0", "t1", "t2"}:
+            path = str(raw.get("path") or "unknown")
+            accepted.append({"url": url, "outlet": ref.display_name,
+                             "rank": len(accepted) + 1,
+                             "path": path if path in {
+                                 "direct", "node_ref", "guide_ref", "serpapi", "hosted_web"
+                             } else "unknown"})
+    return accepted
+
+
+def _is_timeout(exc: Exception) -> bool:
+    return "timeout" in type(exc).__name__.lower() or "timed out" in str(exc).lower()
 
 
 def _serpapi_ranked_refs(item: dict) -> list[dict]:
@@ -446,8 +516,14 @@ def _try_prepared_refs(
     """Try already-discovered eligible refs before the normal web upgrade search."""
     from . import sources
 
-    direct = _synthetic_candidate(original, source_text)
+    direct = _unassessed_candidate(original, source_text)
     original_normalized = source_policy.normalize_url(original.url)
+    timed_out = []
+    resolver_path = {"Node": "node_ref", "Guide": "guide_ref",
+                     "SerpAPI": "serpapi", "Direct": "direct",
+                     "Cached": "unknown"}.get(label, "unknown")
+    if label == "Cached" and rows:
+        resolver_path = str(rows[0].get("path") or "unknown")
     for row in rows:
         try:
             sources._assert_public_http_url(row["url"])
@@ -468,8 +544,9 @@ def _try_prepared_refs(
             continue
         text = str(fetched["text"])
         try:
+            substantive_claim = _serpapi_query(item)
             raw = _model_json(NODE_REF_PROMPT.format(
-                title=item.get("title", ""),
+                title=substantive_claim,
                 story_key=item.get("story_key") or "",
                 outlet=row["outlet"],
                 url=fetched.get("final_url") or row["url"],
@@ -477,6 +554,14 @@ def _try_prepared_refs(
             ), web=False, max_tokens=1000)
         except Exception as exc:  # noqa: BLE001 - ordinary search remains the fallback.
             log.warning("prepared %s source assessment failed: %s", label, exc)
+            if _is_timeout(exc):
+                final_url = str(fetched.get("final_url") or row["url"])
+                final_ref = source_policy.classify(final_url, row["outlet"])
+                if final_ref.base_receipt_eligible and final_ref.tier in {"p0", "t1", "t2"}:
+                    timed_out.append({
+                        "url": final_url[:2000], "outlet": final_ref.display_name[:120],
+                        "tier": final_ref.tier, "path": resolver_path,
+                    })
             continue
         assessed = dict(raw)
         assessed.update({
@@ -507,7 +592,13 @@ def _try_prepared_refs(
             content_fingerprint=ev.content_fingerprint,
             earliest_coverage_date=None,
             note=f"{label} ranked ref {row['rank']} independently fetched and qualified",
-            evidence=evidence,
+            evidence=evidence, resolver_path=resolver_path,
+        )
+    if timed_out:
+        return _held(
+            item, original, source_text, f"{label} support assessment timed out",
+            outcome="infrastructure_retryable", error_kind="support_assessment_timeout",
+            resolver_path=resolver_path, retry_candidates=timed_out,
         )
     return None
 
@@ -566,19 +657,36 @@ def resolve_source(item: dict, original_text: str, con=None,
         _url_cache[cache_key] = (time.time(), persisted)
         return persisted
 
-    direct = _synthetic_candidate(original, source_text)
-    if original.tier == "t1" and direct.receipt_eligible:
+    direct = _self_authenticating_candidate(item, original, source_text)
+    if direct is not None and direct.receipt_eligible:
         result = ResolutionResult(
             item_hash=item["url_hash"], story_key=item.get("story_key") or "",
             original_source_name=item.get("source", ""), original=original, selected=original,
             selected_text=source_text, status="selected", supported=True,
-            originality="unknown", receipt_eligible=True, corroboration_eligible=False,
-            primary_artifact_url="", primary_artifact_fingerprint="",
+            originality=direct.originality, receipt_eligible=True,
+            corroboration_eligible=direct.corroboration_eligible,
+            primary_artifact_url=original.url,
+            primary_artifact_fingerprint=direct.primary_artifact_fingerprint,
             content_fingerprint=direct.content_fingerprint, earliest_coverage_date=None,
-            note="Tier 1 receipt accepted; independence unproven", evidence=(direct,),
+            note="exact self-authenticating artifact fetched", evidence=(direct,),
+            resolver_path="direct",
         )
         _url_cache[cache_key] = (time.time(), result)
         return result
+
+    prepared = _try_prepared_refs(
+        item, original, source_text, _cached_ranked_refs(item), "Cached"
+    )
+    if prepared is not None:
+        _url_cache[cache_key] = (time.time(), prepared)
+        return prepared
+    if original.base_receipt_eligible and original.tier in {"p0", "t1", "t2"}:
+        prepared = _try_prepared_refs(item, original, source_text, [{
+            "url": original.url, "outlet": original.display_name, "rank": 1,
+        }], "Direct")
+        if prepared is not None:
+            _url_cache[cache_key] = (time.time(), prepared)
+            return prepared
 
     prepared = _try_node_ranked_refs(item, original, source_text)
     if prepared is not None:
@@ -597,7 +705,7 @@ def resolve_source(item: dict, original_text: str, con=None,
     search_cached = _story_search_cache.get(story_key)
     try:
         verdict = _model_json(RESOLVE_PROMPT.format(
-            story_key=story_key, title=item.get("title", ""),
+            story_key=story_key, title=_serpapi_query(item),
             outlet=item.get("source", ""), url=item.get("url", ""),
             source_text=(source_text or item.get("summary", ""))[:7000],
         ), web=True)
@@ -616,7 +724,9 @@ def resolve_source(item: dict, original_text: str, con=None,
         log.warning("source resolution failed for %s: %s", item.get("title", "")[:60], exc)
         return _held(
             item, original, source_text, f"source resolution error: {exc}",
-            outcome="infrastructure_retryable", error_kind=type(exc).__name__)
+            outcome="infrastructure_retryable",
+            error_kind="search_timeout" if _is_timeout(exc) else type(exc).__name__,
+            resolver_path="hosted_web")
 
     evidence: list[EvidenceCandidate] = []
     primary_urls: dict[str, str] = {}
@@ -703,7 +813,7 @@ def resolve_source(item: dict, original_text: str, con=None,
         content_fingerprint=selected_ev.content_fingerprint,
         earliest_coverage_date=verdict.get("earliest_coverage_date"),
         note=str(verdict.get("reason") or "strongest supporting receipt selected")[:300],
-        evidence=tuple(evidence),
+        evidence=tuple(evidence), resolver_path="hosted_web",
     )
     _url_cache[cache_key] = (time.time(), result)
     return result

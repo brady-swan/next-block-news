@@ -7,7 +7,7 @@ from pathlib import Path
 
 import anthropic
 
-from . import config
+from . import config, guide_context
 
 log = logging.getLogger("nbn.brain")
 client = anthropic.Anthropic()
@@ -177,9 +177,30 @@ def _discovery_context(item: dict) -> dict | None:
 
 
 def _is_guide_item(item: dict) -> bool:
-    context = _discovery_context(item) or {}
-    return (str(item.get("source") or "").startswith("X guide @")
-            or context.get("guide_account_signal") is True)
+    return guide_context.is_guide(
+        str(item.get("source") or ""), item.get("discovery_context")
+    )
+
+
+def _guide_substantive_claim(item: dict) -> bool:
+    signal = guide_context.signal_from_context(item.get("discovery_context")) or {}
+    cleaned = re.sub(
+        r"https?://\S+", " ", str(signal.get("text") or item.get("title") or "")
+    ).strip()
+    words = re.findall(r"[A-Za-z0-9$%]+", cleaned)
+    if len(words) < 7 or re.search(
+        r"\b(subscribe|sponsor|giveaway|sale|podcast out now)\b", cleaned, re.I
+    ):
+        return False
+    return bool(
+        re.search(r"\d|[$%]", cleaned)
+        or re.search(
+            r"\b(announc\w*|approv\w*|reject\w*|file\w*|launch\w*|buy\w*|bought|"
+            r"sell\w*|sold|appoint\w*|resign\w*|pass\w*|vote\w*|rise\w*|fell|fall\w*|"
+            r"inflow\w*|outflow\w*|mine\w*|produc\w*|release\w*)\b",
+            cleaned, re.I,
+        )
+    )
 
 
 def _triage_payload(items: list, recent_keys: list, open_keys: list,
@@ -242,9 +263,12 @@ def triage(items: list, recent_keys: list, open_keys: list = None,
             })
 
     def fallback(it: dict) -> dict:
-        if _is_guide_item(it):
+        if _is_guide_item(it) and _guide_substantive_claim(it):
             return {"action": "draft", "story_key": f"guide-lead-{it['url_hash'][:16]}",
                     "class": "secondary", "reason": "guide lead recovery"}
+        if _is_guide_item(it):
+            return {"action": "hold", "story_key": None, "class": "secondary",
+                    "reason": "triage incomplete: guide non-claim"}
         return {"action": "hold", "story_key": None, "class": "secondary",
                 "reason": "triage response incomplete"}
 
@@ -283,6 +307,87 @@ Return ONLY a JSON array with exactly one object per candidate:
 [{"url_hash":"...","canonical_key":"...","relationship":"same_event|new_development|distinct","confidence":0.0,"reason":"ten words max"}]
 """
 
+YIELD_IDENTITY_RULE = """
+Narrow enabled exception: same-day U.S. 10-year Treasury-yield threshold updates may be
+"same_event" when the exact instrument, explicit event date, direction, percent unit, and
+closely compatible readings align. Do not extend this to other instruments or to Bitcoin
+prices/flows. Code will independently veto an unsafe proposal.
+"""
+
+_EVENT_PATTERNS = (
+    ("appointment", r"\b(appoint\w*|named?\s+(?:as|to)|chief executive|ceo)\b"),
+    ("purchase", r"\b(buy\w*|bought|purchas\w*|acquir\w*)\b"),
+    ("protocol_release", r"\b(protocol|client|software|version)\b.*\b(releas\w*|upgrade\w*)\b"),
+    ("speech", r"\b(speech|remarks|address|testif\w*)\b"),
+    ("market_move", r"\b(yield|price|index|rate)\b.*\b(rose|rises|fell|falls|jump\w*|drop\w*|hit)\b"),
+    ("report_release", r"\b(report|data|index|survey|study)\b.*\b(releas\w*|publish\w*|show\w*)\b"),
+    ("filing", r"\b(filing|filed|8-k|10-k|10-q|s-1)\b"),
+    ("policy_action", r"\b(approv\w*|reject\w*|ban\w*|order\w*|rule\w*|vote\w*|pass\w*)\b"),
+)
+
+
+def _event_type(text: str) -> str:
+    matches = {
+        event_type for event_type, pattern in _EVENT_PATTERNS
+        if re.search(pattern, str(text or ""), re.I | re.S)
+    }
+    return next(iter(matches)) if len(matches) == 1 else "unknown"
+
+
+def _cluster_text(cluster: dict) -> str:
+    return " ".join([
+        str(cluster.get("canonical_key") or ""),
+        *[str(value) for value in cluster.get("titles", [])[:3]],
+        *[str(value) for value in cluster.get("post_leads", [])[:2]],
+    ])
+
+
+def _yield_signature(text: str) -> dict | None:
+    value = str(text or "")
+    if not re.search(r"\b(?:u\.?s\.?\s+)?10[- ]year\b", value, re.I) \
+            or not re.search(r"\btreasury\b", value, re.I) \
+            or not re.search(r"\byield\b", value, re.I):
+        return None
+    date_match = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", value)
+    direction = ""
+    if re.search(r"\b(rose|rises|rising|climb\w*|jump\w*|higher|hit|tops?)\b", value, re.I):
+        direction = "up"
+    elif re.search(r"\b(fell|falls|falling|drop\w*|lower|declin\w*)\b", value, re.I):
+        direction = "down"
+    readings = _material_yield_readings(value)
+    if not date_match or not direction or len(readings) != 1:
+        return None
+    return {"date": date_match.group(1), "direction": direction, "reading": readings[0]}
+
+
+def _material_yield_readings(value: str) -> list[float]:
+    direction = (
+        r"(?:rose|rises|rising|climb(?:ed|s)?|jump(?:ed|s)?|fell|falls|falling|"
+        r"drop(?:ped|s)?|declin(?:ed|es)|hit|hits|top(?:ped|s)?)"
+    )
+    unit = r"(?:%|percent)(?=\s|[.,;:!?)]|$)"
+    patterns = (
+        rf"\b{direction}\s+from\s+\d+(?:\.\d+)?\s*{unit}\s+to\s+(\d+(?:\.\d+)?)\s*{unit}",
+        rf"\b{direction}\s+(?:to|at|above|below|past|near)\s+(\d+(?:\.\d+)?)\s*{unit}",
+        rf"\b{direction}\s+(\d+(?:\.\d+)?)\s*{unit}",
+    )
+    readings = {
+        round(float(raw), 4)
+        for pattern in patterns
+        for raw in re.findall(pattern, value, re.I)
+    }
+    return sorted(readings)
+
+
+def _yield_same_event(candidate_text: str, cluster_text: str) -> bool:
+    left, right = _yield_signature(candidate_text), _yield_signature(cluster_text)
+    if not left or not right or left["date"] != right["date"] \
+            or left["direction"] != right["direction"]:
+        return False
+    # The final percentage in ordinary "from X to Y" copy is the material observation.
+    # Sharing only a starting point must not alias two different moves.
+    return abs(left["reading"] - right["reading"]) <= 0.10
+
 
 def reconcile_story_keys(items: list, recent_clusters: list) -> list:
     """High-precision semantic key reconciliation; failure preserves provisional keys."""
@@ -298,6 +403,7 @@ def reconcile_story_keys(items: list, recent_clusters: list) -> list:
             "source": str(item.get("source") or "")[:120],
             "title": str(item.get("title") or "")[:300],
             "summary": str(item.get("summary") or "")[:600],
+            "published": str(item.get("published") or "")[:100],
             "selected_source": str(item.get("_selected_source") or "")[:120],
             "fetched_facts": str(item.get("_selected_text") or "")[:1800],
             "node_event_hint": str(context.get("event_key_hint") or "")[:180],
@@ -309,7 +415,9 @@ def reconcile_story_keys(items: list, recent_clusters: list) -> list:
     } for row in candidates]
     try:
         parsed = _json_from(_create(
-            config.TRIAGE_MODEL, CLUSTER_SYSTEM,
+            config.TRIAGE_MODEL,
+            CLUSTER_SYSTEM + (YIELD_IDENTITY_RULE
+                              if config.YIELD_IDENTITY_NORMALIZER_ENABLED else ""),
             json.dumps({"recent_clusters": recent_clusters, "candidates": candidates}),
             max_tokens=4000, effort="low",
         ))
@@ -324,6 +432,10 @@ def reconcile_story_keys(items: list, recent_clusters: list) -> list:
         str(row.get("canonical_key") or "") for row in recent_clusters
     }
     by_hash = {row["url_hash"]: row for row in candidates}
+    clusters_by_key = {
+        str(cluster.get("canonical_key") or ""): cluster
+        for cluster in recent_clusters if isinstance(cluster, dict)
+    }
     accepted = {}
     for row in parsed:
         if not isinstance(row, dict) or row.get("url_hash") not in by_hash:
@@ -342,6 +454,39 @@ def reconcile_story_keys(items: list, recent_clusters: list) -> list:
             canonical = original["proposed_key"]
             relationship = "distinct"
             confidence = 1.0
+        candidate_text = " ".join(
+            str(original.get(key) or "")
+            for key in ("title", "summary", "published", "fetched_facts", "proposed_key")
+        )
+        target_cluster = clusters_by_key.get(canonical, {})
+        target_text = _cluster_text(target_cluster)
+        if canonical != original["proposed_key"] and relationship in {
+                "same_event", "new_development"}:
+            candidate_type, target_type = _event_type(candidate_text), _event_type(target_text)
+            if (candidate_type != "unknown" and target_type != "unknown"
+                    and candidate_type != target_type):
+                canonical = original["proposed_key"]
+                relationship, confidence = "distinct", 1.0
+                row["reason"] = "identity-guard-v1:event-type-conflict"
+            candidate_yield = _yield_signature(candidate_text)
+            target_yield = _yield_signature(target_text)
+            if candidate_yield or target_yield:
+                valid_yield = (
+                    config.YIELD_IDENTITY_NORMALIZER_ENABLED
+                    and relationship == "same_event"
+                    and confidence >= 0.85
+                    and _yield_same_event(candidate_text, target_text)
+                )
+                if not valid_yield:
+                    canonical = original["proposed_key"]
+                    relationship, confidence = "distinct", 1.0
+                    row["reason"] = "identity-guard-v1:yield-anchor-veto"
+                else:
+                    row["reason"] = "identity-guard-v1:yield-same-event"
+            elif canonical != original["proposed_key"]:
+                row["reason"] = "identity-guard-v1:" + str(
+                    row.get("reason") or relationship
+                )[:90]
         accepted[row["url_hash"]] = {
             "url_hash": row["url_hash"], "canonical_key": canonical,
             "relationship": relationship, "confidence": confidence,
@@ -408,14 +553,15 @@ def draft(item: dict, article_text: str, verified_handles: dict, already_covered
     if already_covered:
         payload["already_covered"] = already_covered
     context = _discovery_context(item) or {}
-    if context.get("guide_account_signal") is True:
-        example = str(context.get("guide_post_text") or item.get("title") or "")[:600]
+    guide = guide_context.signal_from_context(context)
+    if guide:
+        example = str(guide.get("text") or item.get("title") or "")[:600]
         if example:
             payload["guide_format_example_untrusted"] = {
-                "handle": str(context.get("guide_handle") or "")[:30],
+                "handle": str(guide.get("handle") or "")[:30],
                 "text": example,
                 "characters": len(example),
-                "public_metrics": context.get("guide_format_metrics") or {},
+                "public_metrics": guide.get("metrics") or {},
             }
     resp = _create(config.ANTHROPIC_MODEL, DRAFT_SYSTEM, json.dumps(payload), max_tokens=2000)
     return _json_from(resp, lenient_draft=True)

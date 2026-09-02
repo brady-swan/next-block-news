@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from nbn import store, verify
+from nbn import guide_context, store, verify
 from tests.support import temporary_store
 
 
@@ -101,13 +101,15 @@ class VerifyTests(unittest.TestCase):
         row = story(
             "https://x.com/BitcoinArchive/status/1", "X guide @BitcoinArchive",
         )
-        row["discovery_context"] = json.dumps({
-            "untrusted_discovery_context": True,
-            "guide_account_signal": True,
-            "outbound_urls": [
+        guide = guide_context.build_signal(
+            "BitcoinArchive", row["url"], "Bitcoin policy changed", {}, [
                 "https://news.bitcoin.com/relay",
                 "https://reuters.com/world/bitcoin-policy",
             ],
+        )
+        row["discovery_context"] = json.dumps({
+            "untrusted_discovery_context": True,
+            "guide_signal": guide,
         })
         self.assertEqual(
             [ref["url"] for ref in verify._guide_ranked_refs(row)],
@@ -243,12 +245,12 @@ class VerifyTests(unittest.TestCase):
 
     def test_story_cache_never_reuses_another_pages_originality_verdict(self):
         verdicts = [
-            {"original": {"directly_supports": True, "originality": "original_reporting",
-                          "canonical_url": "https://coindesk.com/one", "byline": "One"},
-             "candidates": [], "reason": "first"},
-            {"original": {"directly_supports": True, "originality": "original_reporting",
-                          "canonical_url": "https://theblock.co/two", "byline": "Two"},
-             "candidates": [], "reason": "second"},
+            {"directly_supports": True, "originality": "original_reporting",
+             "canonical_url": "https://coindesk.com/one", "byline": "One",
+             "subject_is_actor": False},
+            {"directly_supports": True, "originality": "original_reporting",
+             "canonical_url": "https://theblock.co/two", "byline": "Two",
+             "subject_is_actor": False},
         ]
         with patch.object(verify, "_model_json", side_effect=verdicts) as model:
             first = verify.resolve_source(

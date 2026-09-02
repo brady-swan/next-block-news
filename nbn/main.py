@@ -8,7 +8,18 @@ import uuid
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import brain, briefing, config, lint, node_discovery, publisher, source_policy, sources, store
+from . import (
+    brain,
+    briefing,
+    config,
+    guide_context,
+    lint,
+    node_discovery,
+    publisher,
+    source_policy,
+    sources,
+    store,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("nbn.main")
@@ -143,7 +154,7 @@ def _hold(con, item, result, note):
 
 def _defer_research(con, item, result, stage: str, kind: str, message: str):
     budget = "hourly call budget exhausted" in str(message).lower()
-    store.defer_research_job(
+    state = store.defer_research_job(
         con, item["url_hash"], stage, kind or "infrastructure", message,
         delay_seconds=300, consume_attempt=not budget,
     )
@@ -151,9 +162,23 @@ def _defer_research(con, item, result, stage: str, kind: str, message: str):
         con, item.get("_run_id", ""), item["url_hash"], "research_deferred",
         item.get("story_key"), "infrastructure", {"stage": stage, "error_kind": kind},
     )
+    _record_research_failure(con, item, stage, kind, state)
     _finish_actions(con, item, "blocked", f"research retry failed: {message}")
     item["_research_deferred"] = True
     result["held"] += 1
+
+
+def _record_research_failure(con, item: dict, stage: str, kind: str, state: str) -> None:
+    allowed = {"support_assessment_timeout", "search_timeout", "source_fetch", "exhausted"}
+    typed = "source_fetch" if stage == "source_fetch" else str(kind or "unknown")
+    if typed not in allowed:
+        typed = "unknown"
+    store.record_pipeline_event(
+        con, item.get("_run_id", ""), item["url_hash"], f"research_failed:{typed}",
+        item.get("story_key"), "infrastructure", {
+            "stage": stage, "error_kind": typed, "state": state,
+        },
+    )
 
 
 def _provider_matches(provider: str, selected_ref) -> bool:
@@ -328,8 +353,20 @@ def _cycle_locked(con, lease_owner: str) -> dict:
               "pending": len(fresh) + len(retry_verdicts),
               "drafted": 0, "held": 0, "posted": 0, "uncertain": 0,
               "failed": 0, "taped": 0, "policy_held": 0}
+    result["resolver_paths"] = {}
+    result["resolver_outcomes"] = {}
     theme_snapshot = store.theme_coverage_snapshot(con, fresh)
     node_diagnostics = node_result.get("diagnostics") or {}
+    for key in node_diagnostics.get("rejected_candidate_keys", [])[:24]:
+        store.record_pipeline_event(
+            con, pipeline_run_id, f"node-rejected:{key}", "node_packet_rejected",
+            None, "discovery", {},
+        )
+    for key in node_diagnostics.get("dropped_candidate_keys", [])[:24]:
+        store.record_pipeline_event(
+            con, pipeline_run_id, f"node-dropped:{key}", "node_packet_dropped",
+            None, "discovery", {},
+        )
     store.record_pipeline_event(
         con, pipeline_run_id, f"themes:{pipeline_run_id}", "theme_context_summary",
         None, "discovery", {
@@ -401,8 +438,19 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             con, pipeline_run_id, item["url_hash"], "research_started", story_key,
             "infrastructure", {"retry": bool(item.get("_research_retry"))},
         )
+        if guide_context.signal_from_context(item.get("discovery_context")):
+            store.record_pipeline_event(
+                con, pipeline_run_id, item["url_hash"], "guide_lead_advanced",
+                story_key, "discovery", {},
+            )
         fetched = sources.fetch_article(item["url"])
         if fetched.get("outcome") == "infrastructure_retryable":
+            result["resolver_paths"]["unknown"] = (
+                result["resolver_paths"].get("unknown", 0) + 1
+            )
+            result["resolver_outcomes"]["source_fetch"] = (
+                result["resolver_outcomes"].get("source_fetch", 0) + 1
+            )
             _defer_research(
                 con, item, result, "source_fetch", fetched.get("error_kind", ""),
                 fetched.get("error_message") or "source fetch failed")
@@ -416,12 +464,40 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             item, text, con=con, use_persisted=not bool(_action_ids(item)),
             force_refresh=bool(_action_ids(item)))
         if resolution.outcome == "infrastructure_retryable":
+            if resolution.retry_candidates:
+                store.update_research_retry_candidates(
+                    con, item["url_hash"], resolution.retry_candidates
+                )
+            path = resolution.resolver_path if resolution.resolver_path in {
+                "direct", "node_ref", "guide_ref", "serpapi", "hosted_web"
+            } else "unknown"
+            outcome = resolution.error_kind if resolution.error_kind in {
+                "support_assessment_timeout", "search_timeout", "source_fetch", "exhausted"
+            } else "unknown"
+            result["resolver_paths"][path] = result["resolver_paths"].get(path, 0) + 1
+            result["resolver_outcomes"][outcome] = (
+                result["resolver_outcomes"].get(outcome, 0) + 1
+            )
             _defer_research(
                 con, item, result, "source_resolution", resolution.error_kind,
                 resolution.note)
             continue
+        path = resolution.resolver_path if resolution.resolver_path in {
+            "direct", "node_ref", "guide_ref", "serpapi", "hosted_web"
+        } else "unknown"
+        result["resolver_paths"][path] = result["resolver_paths"].get(path, 0) + 1
+        resolution_outcome = "selected" if resolution.status == "selected" else "unknown"
+        result["resolver_outcomes"][resolution_outcome] = (
+            result["resolver_outcomes"].get(resolution_outcome, 0) + 1
+        )
         resolutions[item["url_hash"]] = resolution
         store.persist_resolution(con, resolution, config.SOURCE_POLICY_MODE)
+        store.record_pipeline_event(
+            con, pipeline_run_id, item["url_hash"], "research_completed",
+            item.get("story_key"), "research", {
+                "status": resolution.status, "resolver_path": path,
+            },
+        )
 
     # Triage sees only headlines. Reconcile provisional keys after source fetch, using
     # article facts and a compact recent cluster catalog. A model failure is a no-op;

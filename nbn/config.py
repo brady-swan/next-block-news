@@ -25,6 +25,9 @@ HOSTED_SEARCH_ENABLED = os.environ.get(
 HOSTED_SEARCH_TIMEOUT_SECONDS = float(
     os.environ.get("NBN_HOSTED_SEARCH_TIMEOUT_SECONDS", "45")
 )
+YIELD_IDENTITY_NORMALIZER_ENABLED = os.environ.get(
+    "NBN_YIELD_IDENTITY_NORMALIZER_ENABLED", "false"
+).lower() == "true"
 
 # Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
 REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")

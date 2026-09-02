@@ -1,12 +1,13 @@
 """SQLite state: seen items, story-level dedup, post log."""
 import hashlib
+import datetime
 import json
 import sqlite3
 import time
 import unicodedata
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from . import config, source_policy, theme_context
+from . import config, guide_context, source_policy, theme_context
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
@@ -400,10 +401,29 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "theme_ids": packet["theme_ids"],
             "theme_signals": packet["theme_signals"],
         })
+    def safe_count(value) -> int:
+        if isinstance(value, bool):
+            return 0
+        try:
+            return max(0, min(int(value), 1000))
+        except (TypeError, ValueError):
+            return 0
+
+    safe_result = dict(result)
+    for field, allowed in (
+        ("resolver_paths", {"direct", "node_ref", "guide_ref", "serpapi", "hosted_web", "unknown"}),
+        ("resolver_outcomes", {"selected", "support_assessment_timeout", "search_timeout",
+                               "source_fetch", "exhausted", "unknown"}),
+    ):
+        raw = result.get(field) or {}
+        safe_result[field] = {
+            key: safe_count(raw.get(key, 0))
+            for key in sorted(allowed) if safe_count(raw.get(key, 0)) > 0
+        } if isinstance(raw, dict) else {}
     payload = {
         "started": started_at,
         "completed": time.time(),
-        "result": dict(result),
+        "result": safe_result,
         "items": decisions,
         "theme_coverage_snapshot": list(theme_snapshot or []),
     }
@@ -466,14 +486,24 @@ def upsert_new_items(con, items) -> list:
     for it in items:
         key = canonical_discovery_key(it["url"])
         existing = con.execute(
-            "SELECT url_hash FROM items WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
+            "SELECT url_hash,status,discovery_context FROM items"
+            " WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
             (key,),
         ).fetchone()
         if existing:
+            if existing["status"] == "new":
+                merged = guide_context.merge_context(
+                    existing["discovery_context"], str(it.get("discovery_context") or "")
+                )
+                if merged and merged != (existing["discovery_context"] or ""):
+                    con.execute(
+                        "UPDATE items SET discovery_context=? WHERE url_hash=? AND status='new'",
+                        (merged, existing["url_hash"]),
+                    )
             continue
         h = url_hash(key or it["url"])
         origin = str(it.get("discovery_origin") or "legacy")[:40]
-        context = str(it.get("discovery_context") or "")[:8192]
+        context = guide_context.merge_context("", str(it.get("discovery_context") or ""))
         candidate_id = str(it.get("discovery_candidate_id") or "")[:32] or None
         cur = con.execute(
             "INSERT OR IGNORE INTO items(url_hash,source,title,url,published_at,first_seen,"
@@ -512,12 +542,15 @@ def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: s
         for it in items:
             key = canonical_discovery_key(it["url"])
             existing = con.execute(
-                "SELECT url_hash,status FROM items WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
+                "SELECT url_hash,status,discovery_context FROM items"
+                " WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
                 (key,),
             ).fetchone()
             if existing:
                 deduped += 1
-                context_value = str(it.get("discovery_context") or "")[:8192]
+                context_value = guide_context.merge_context(
+                    existing["discovery_context"], str(it.get("discovery_context") or "")
+                )
                 if (existing["status"] == "new"
                         and '"schema_version":"wire-pulse-v2"' in context_value):
                     con.execute(
@@ -536,7 +569,7 @@ def ingest_node_discovery_run(con, *, run_id: int, selected_date: str, status: s
                 " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (h, it["source"], it["title"], it["url"], it.get("published", ""),
                  time.time(), "", key, "marketing_node",
-                 str(it.get("discovery_context") or "")[:8192],
+                 guide_context.merge_context("", str(it.get("discovery_context") or "")),
                  str(it.get("discovery_candidate_id") or "")[:32] or None),
             )
             if cur.rowcount:
@@ -645,6 +678,39 @@ def update_research_stage(con, item_hash: str, stage: str) -> None:
     con.commit()
 
 
+def update_research_retry_candidates(con, item_hash: str, candidates) -> None:
+    row = con.execute(
+        "SELECT context_json FROM research_jobs WHERE item_hash=?", (item_hash,)
+    ).fetchone()
+    if not row:
+        return
+    try:
+        context = json.loads(row["context_json"])
+    except (TypeError, ValueError):
+        return
+    if not isinstance(context, dict):
+        return
+    bounded = []
+    for raw in list(candidates or [])[:3]:
+        if not isinstance(raw, dict):
+            continue
+        bounded.append({
+            "url": str(raw.get("url") or "")[:2000],
+            "outlet": str(raw.get("outlet") or "")[:120],
+            "tier": str(raw.get("tier") or "")[:10],
+            "path": str(raw.get("path") or "unknown")[:20],
+        })
+    context["_resolver_candidates"] = bounded
+    encoded = json.dumps(context, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode()) > 32768:
+        return
+    con.execute(
+        "UPDATE research_jobs SET context_json=?,updated_at=? WHERE item_hash=?",
+        (encoded, time.time(), item_hash),
+    )
+    con.commit()
+
+
 def finish_research_job(con, item_hash: str) -> None:
     con.execute(
         "UPDATE research_jobs SET state='completed',claim_token=NULL,claimed_at=NULL,updated_at=?"
@@ -655,7 +721,7 @@ def finish_research_job(con, item_hash: str) -> None:
 
 def defer_research_job(con, item_hash: str, stage: str, error_kind: str,
                        message: str, delay_seconds: int = 300,
-                       consume_attempt: bool = True) -> None:
+                       consume_attempt: bool = True) -> str:
     now = time.time()
     row = con.execute(
         "SELECT attempts,manual_draft_only FROM research_jobs WHERE item_hash=?", (item_hash,)
@@ -678,6 +744,7 @@ def defer_research_job(con, item_hash: str, stage: str, error_kind: str,
         " WHERE url_hash=?", (f"research {state}: {message}"[:300], stage, item_hash)
     )
     con.commit()
+    return state
 
 
 def claim_due_research_jobs(con, limit: int = 2, lease_ttl: int = 900,
@@ -719,6 +786,57 @@ def claim_due_research_jobs(con, limit: int = 2, lease_ttl: int = 900,
     except Exception:
         con.rollback()
         raise
+
+
+def recover_exhausted_timeouts(con, limit: int = 20, apply: bool = False,
+                               now: float = None) -> dict:
+    """Explicit, capped one-time recovery for the repaired source-timeout path."""
+    current = time.time() if now is None else now
+    cap = max(1, min(int(limit), 100))
+    rows = con.execute(
+        "SELECT r.item_hash,r.error_kind,r.error_message,i.published_at,i.status"
+        " FROM research_jobs r JOIN items i ON i.url_hash=r.item_hash"
+        " WHERE r.state='exhausted' AND r.stage='source_resolution'"
+        " AND i.status='held' ORDER BY r.updated_at,r.item_hash LIMIT ?",
+        (cap * 4,),
+    ).fetchall()
+    eligible = []
+    for row in rows:
+        kind = str(row["error_kind"] or "")
+        message = str(row["error_message"] or "").lower()
+        repaired = kind in {"support_assessment_timeout", "search_timeout"} or (
+            kind == "APITimeoutError" and (
+                "timed out" in message or "timeout" in message or "interrupted" in message
+            )
+        )
+        if repaired and not is_stale(row["published_at"], now=datetime.datetime.fromtimestamp(
+                current, tz=datetime.timezone.utc)):
+            eligible.append(row["item_hash"])
+        if len(eligible) >= cap:
+            break
+    if apply and eligible:
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            for item_hash in eligible:
+                con.execute(
+                    "UPDATE research_jobs SET state='pending',attempts=1,next_attempt_at=?,"
+                    "claim_token=NULL,claimed_at=NULL,updated_at=? WHERE item_hash=?"
+                    " AND state='exhausted'",
+                    (current, current, item_hash),
+                )
+            event_hash = f"recovery:{int(current)}"
+            con.execute(
+                "INSERT OR IGNORE INTO pipeline_events(run_id,item_hash,event,category,at,metadata)"
+                " VALUES (?,?,?,?,?,?)",
+                (event_hash, event_hash, "research_recovery_requeued", "infrastructure",
+                 current, json.dumps({"count": len(eligible), "cap": cap}, separators=(",", ":"))),
+            )
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return {"eligible": len(eligible), "applied": len(eligible) if apply else 0,
+            "limit": cap, "dry_run": not apply}
 
 
 def current_max_age_hours(now=None) -> float:
@@ -808,10 +926,19 @@ def pending_items(con, limit: int) -> list:
         "SELECT url_hash, source, title, url, published_at AS published,"
         " summary,discovery_origin,discovery_context,discovery_candidate_id"
         " FROM items WHERE status='new'"
-        " ORDER BY CASE WHEN source LIKE 'X guide @%' THEN 0 ELSE 1 END, first_seen LIMIT ?",
-        (limit,),
+        " ORDER BY first_seen",
     ).fetchall()
-    return [dict(r) for r in rows]
+    values = [dict(row) for row in rows]
+    values = [row for _, row in sorted(
+        enumerate(values),
+        key=lambda pair: (
+            0 if guide_context.signal_from_context(
+                pair[1].get("discovery_context")
+            ) else 1,
+            pair[0],
+        ),
+    )]
+    return values[:max(0, int(limit))]
 
 
 def theme_coverage_snapshot(con, items: list, days: float = 7.0,
