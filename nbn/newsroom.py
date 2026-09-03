@@ -226,6 +226,8 @@ HOW TO WORK
   treating it as evidence. If the original page is adequate, stop searching.
 - Account for as much of the desk as you can. Omitted candidates are deferred, not silently
   discarded, so malformed output never loses news.
+- The dossier may contain at most 25 decisions and 25 stories. A story may contain at most
+  25 member candidate IDs and eight evidence fetch IDs.
 - For each publishable story, cite inspected fetch IDs, choose the best receipt, and write the
   strongest useful post those receipts collectively support. Mark elevated_claim true for
   allegations, hacks, crime, disputed claims, or consequential legal assertions.
@@ -265,7 +267,7 @@ V2_DOSSIER_TOOL = {
     "input_schema": {
         "type": "object", "additionalProperties": False,
         "properties": {
-            "decisions": {"type": "array", "maxItems": 25, "items": {
+            "decisions": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False,
                 "properties": {
                     "candidate_id": {"type": "string"},
@@ -275,19 +277,17 @@ V2_DOSSIER_TOOL = {
                 },
                 "required": ["candidate_id", "story_id", "disposition", "reason"],
             }},
-            "stories": {"type": "array", "maxItems": 25, "items": {
+            "stories": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False,
                 "properties": {
                     "story_id": {"type": "string"},
                     "story_key": {"type": "string"},
                     "existing_cluster_key": {"type": ["string", "null"]},
                     "member_candidate_ids": {"type": "array", "minItems": 1,
-                                             "maxItems": 25,
                                              "items": {"type": "string"}},
                     "post": {"type": "string", "maxLength": 8000},
                     "selected_fetch_id": {"type": "string"},
                     "evidence_fetch_ids": {"type": "array", "minItems": 1,
-                                           "maxItems": 8,
                                            "items": {"type": "string"}},
                     "elevated_claim": {"type": "boolean"},
                     "reader_value": {"type": "string", "maxLength": 800},

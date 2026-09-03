@@ -149,9 +149,10 @@ conversion rejected it first.
 
 Candidate omissions still become `defer:model_output_missing`, never `skip`.
 
-The strict dossier contract and code both cap decisions at 25, stories at 25, member candidate
-IDs per story at 25, and evidence fetch IDs per story at eight. A provider response that exceeds
-any bound despite the strict schema is a run-level protocol failure: defer the inventory and
+The dossier instructions and code cap decisions at 25, stories at 25, member candidate IDs per
+story at 25, and evidence fetch IDs per story at eight. Anthropic's strict-tool subset does not
+support JSON Schema `maxItems`, so these cardinality limits cannot be encoded as schema keywords.
+A provider response that exceeds any bound is a run-level protocol failure: defer the inventory and
 record no silently sliced or uncommitted stories.
 
 Shadow runs also close commit lifecycle. After observation, every valid `pending` shadow story
