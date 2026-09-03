@@ -4,7 +4,7 @@
 
 This document describes every path by which a news candidate currently reaches Next
 Block News (NBN), when each path runs, and how all paths converge into the same editorial
-funnel. It describes live production configuration, not merely code defaults.
+funnel. It describes the Plan 0052 production flow and its rollout controls.
 
 ## At a glance
 
@@ -24,13 +24,13 @@ Perception         every 15 minutes                  |- 10 X searches
                   RSS + EDGAR -> Haiku semantic mailroom
                   priority | candidate | background (omitted)
                                       |
-                             freshness/language gates
+                      Haiku assignment desk (all lanes)
+                         advance | background (audited)
                                       |
-                     one fresh Sonnet newsroom (up to 25)
-                         survey -> selective research
-                         exact-event judgment -> writing
+                     one fresh compact Sonnet newsroom
+                    retrieve/delegate/search/fetch -> dossier
                                       |
-                    deterministic gates -> Fable editor
+                 consequential mechanical rails -> Sonnet editor
                                       |
                            Typefully / tape / hold
 ```
@@ -242,18 +242,20 @@ All sources converge before model judgment.
    omitted from Sonnet; the Desk owner can send it back exactly once with **SEND TO DESK**.
    The mailroom does not research, corroborate, cluster, write, or decide publication.
    Model, validation, capacity, and packet-bound failures all fail open as Candidate.
-3. **Freshness.** During weekdays from 7:00 a.m. to 7:00 p.m. Eastern, the normal maximum
-   age is 2.5 hours. Overnight and weekends it is six hours. Parsed stale items are skipped
-   before a model call.
-4. **Language.** Titles with more than 30% non-Latin letters are skipped before the newsroom.
-5. **Batching.** Up to 25 pending items are sent to one newsroom run. Excess items stay
+3. **Run-scoped Haiku assignment desk.** At the due boundary, Haiku distills and routes
+   candidates from every lane as `advance` or `background`. Guide, Node, official, operator,
+   retry, and unresolved-continuity work is protected; every error fails open. In enforce mode,
+   an all-Background batch does not wake Sonnet. Background remains visible and promotable.
+4. **Mechanical eligibility.** Exact URL duplicates, unsafe inputs, and clearly unusable
+   language are handled in code. Semantic freshness and news value belong to the models.
+5. **Batching.** Up to 25 pending items enter one preparation/newsroom run. Excess items stay
    pending for the next minute's cycle.
 
 ## 4. Editorial funnel
 
 ### Run-scoped Sonnet newsroom
 
-One fresh Sonnet context owns each ordinary intake run: survey, research, exact-event
+One fresh Sonnet context owns each prepared intake run: research, exact-event
 grouping, news judgment, and writing. It does not persist across runs. This gives the model
 the whole current news picture without creating an immortal conversation or losing NBN's
 durable database state.
@@ -262,24 +264,24 @@ Sonnet receives a deliberately organized editorial desk rather than raw records:
 
 - one stable intake card per candidate, separating what arrived, why it surfaced, and
   whether it is a tip, an uninspected official lead, or a potential receipt;
+- the Haiku assignment summary/research objective and code-prefetched receipts;
 - a separate board of uninspected intake, Node, and guide-account URLs;
 - separate exact-event boards for recent reader coverage, open Typefully drafts, and other
   recent decisions;
-- a broad Node theme board cross-linked to current candidates; and
+- compact indexes for recent posts, continuity, and a broad Node theme board, with bounded
+  retrieval of full records; and
 - a small verified-handle spelling directory.
 
 Raw Node envelopes and unrecognized metadata do not reach the model. Node summaries,
 event hints, themes, guide posts, and engagement counts remain untrusted attention/context,
 never evidence.
 
-The first forced response is a complete survey accounting for every candidate. Sonnet may
-then fetch intake pages, search SerpAPI, and fetch eligible results through bounded NBN-owned
-tools. It explicitly closes research before submitting one atomic dossier with exactly one
-`draft`, `update`, `hold`, or `skip` disposition for every candidate and one exact-event
-record for each story. A missing item, invented fetch ID, invalid group, malformed story
-key, or receipt that fails deterministic reconstruction rejects the entire dossier before
-materialization. Search snippets and desk cards never become evidence; only inspected,
-code-generated `fetch_id` records do.
+Sonnet may submit immediately, retrieve full indexed context, fetch intake pages, search SerpAPI,
+fetch public results, or give one focused two-round reporting assignment to Haiku. Haiku's memo
+is context, not evidence; inspected code-generated `fetch_id` records are evidence. Sonnet then
+submits one dossier with a disposition for every candidate and one exact-event record per story.
+A malformed story defers only its own members, while an omitted candidate returns on a later run.
+There is no forced survey or minimum research phase.
 
 Story keys identify exact events, not themes. Recurring purchases, filings, reports, and
 readings include their event/disclosure date (or at least month and year when the day is
@@ -315,35 +317,23 @@ without becoming the link in the final post.
 URL classification decides only whether a fetched page may be considered. Sonnet proposes
 support/originality from inspected text, but code reconstructs the source record from
 code-owned URL, redirect, ownership, tier, byline, artifact, and fingerprint fields. The
-selected receipt must support the complete final post. Fable independently checks every
-factual assertion against that exact receipt and fails closed on timeout, malformed output,
-or unknown support.
-
-Retryable network failures are persisted and retried after five minutes. Editorial holds
-are kept separate from infrastructure failures. A capped dry-run-first recovery command
-can requeue only fresh exhausted jobs from the repaired timeout path; it cannot draft or
-publish directly.
-
-A Typefully draft remains open to later evidence. A second independent outlet enriches
-that cluster rather than generating a duplicate draft; once the evidence class becomes
-`corroborated` (or a primary artifact arrives), the existing approved draft is scheduled
-in place when autopost is enabled.
+desk and editor may support copy from several inspected receipts and choose the best useful
+link for the reader. One credible inspected report is sufficient for routine narrow claims;
+elevated allegations normally need an official artifact or two independent reports. Timeouts
+and weak sources invite narrower attribution, a human draft, or a later retry—not an automatic
+whole-story veto.
 
 ### Writing, deterministic gates, and Editor
 
-The same Sonnet run writes from the selected inspected receipt after seeing the complete
-batch and its research. Deterministic gates check exact-story novelty, freshness, Bitcoin
-scope, style, numbers, quotes, receipt integrity, source support, and data-provider
-attribution. Repairable lint failures receive one aggregate post-only repair request in the
-same Sonnet context; research, story membership, source, and claims cannot reopen. Fable
-then independently publishes, revises, or spikes the surviving copy and must explicitly
-confirm semantic support.
+The same Sonnet run writes after seeing the prepared batch and inspected research. Code keeps
+only consequential rails: safe URLs, exact duplicate delivery, non-empty/length constraints,
+verified mentions, investment instructions, and verbatim quote support. Freshness, importance,
+scope, semantic novelty, source sufficiency, and numerical materiality remain editorial calls.
+The independent Sonnet editor can publish, revise, draft, or drop each surviving story.
 
-The legacy triage → per-item resolver → event clerk → Writer path remains available only
-behind `off`, `shadow`, or pre-materialization fallback during the migration window. Once
-newsroom materialization begins, a failure can hold a story but cannot mix it back into the
-legacy path. An interrupted worker closes read-only runs safely and holds any unknown
-post-materialization outcome rather than risking a duplicate delivery.
+The legacy path is a manual rollback only; v2 never falls into it automatically. A same-session
+transport retry is allowed, but a billed Sonnet session is never replayed from scratch after a
+protocol error.
 
 The same complete stack runs whether autopost is on or off.
 

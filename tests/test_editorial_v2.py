@@ -2,11 +2,12 @@ import time
 import unittest
 import json
 from unittest.mock import Mock, patch
+from types import SimpleNamespace
 
 from contextlib import ExitStack
 
 from nbn import (
-    brain, config, editor, lint, main, newsroom, publisher, report, search, source_policy, sources, store,
+    brain, config, desk_prep, editor, lint, main, newsroom, publisher, report, search, source_policy, sources, store,
     verify,
 )
 from tests.support import temporary_store
@@ -87,6 +88,184 @@ class EditorialV2Tests(unittest.TestCase):
     def result_counts():
         return {"held": 0, "skipped": 0, "posted": 0, "drafted": 0,
                 "uncertain": 0, "failed": 0, "taped": 0}
+
+    def test_assignment_desk_can_suppress_empty_sonnet_wake(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            saved = store.upsert_new_items(con, [{
+                "source": "Example", "title": "Unrelated corporate update",
+                "url": "https://example.com/unrelated", "published": "", "summary": "",
+            }])[0]
+            row = dict(con.execute("SELECT * FROM items WHERE url_hash=?",
+                                   (saved["url_hash"],)).fetchone())
+            store.start_newsroom_run(
+                con, "empty-wake", "live", config.ANTHROPIC_MODEL,
+                newsroom.PROMPT_VERSION, [row["url_hash"]],
+            )
+            prep_row = desk_prep._synthetic(
+                row, run_id="empty-wake", reason="Outside the Bitcoin desk.",
+                outcome="model", model_route="background",
+            )
+            prep_row["effective_route"] = "background"
+            session = newsroom.NewsroomSession(
+                run_id="empty-wake", inventory=[row], recent_clusters=[],
+                theme_snapshot=[], handles={}, con=con, reservation="r",
+                prep_mode="enforce", research_mode="off", compact_enabled=True,
+            )
+            with patch.object(desk_prep, "prepare", return_value=desk_prep.PreparationResult(
+                    [prep_row], (), {"mode": "enforce", "sonnet_inventory": 0})):
+                outcome = session.conduct_v2()
+            self.assertEqual(outcome.verdicts[0]["action"], "skip")
+            self.assertEqual(session.successful_newsdesk_calls, 0)
+
+    def test_prefetch_respects_its_budget_and_preserves_parent_research(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            rows = []
+            for index in range(10):
+                saved = store.upsert_new_items(con, [{
+                    "source": "Example", "title": f"Bitcoin lead {index}",
+                    "url": f"https://example.com/{index}", "published": "", "summary": "",
+                }])[0]
+                rows.append(dict(con.execute("SELECT * FROM items WHERE url_hash=?",
+                                             (saved["url_hash"],)).fetchone()))
+            session = newsroom.NewsroomSession(
+                run_id="prefetch", inventory=rows, recent_clusters=[], theme_snapshot=[],
+                handles={}, con=con, reservation="r", prep_mode="enforce",
+                research_mode="off", compact_enabled=True,
+            )
+            session.preparations = {row["url_hash"]: {"protection_reason": ""}
+                                    for row in rows}
+
+            def fetched(url, limit):
+                return {"outcome": "ok", "text": "x" * limit, "final_url": url,
+                        "canonical_url": url, "redirect_chain": [url]}
+
+            with patch.object(newsroom.sources, "fetch_article", side_effect=fetched), \
+                    patch.object(config, "RUN_NEWSROOM_MAX_FETCHES", 20), \
+                    patch.object(config, "RUN_NEWSROOM_MAX_FETCH_TOTAL_CHARS", 200000):
+                session.prefetch_prepared_receipts()
+            self.assertLessEqual(session.prefetch_attempts, config.DESK_PREFETCH_MAX_URLS)
+            self.assertLessEqual(session.prefetch_chars, config.DESK_PREFETCH_MAX_CHARS)
+            self.assertGreaterEqual(20 - session.fetch_count,
+                                    config.DESK_PREFETCH_RESERVE_FETCHES)
+            self.assertGreaterEqual(200000 - session.fetch_chars,
+                                    config.DESK_PREFETCH_RESERVE_CHARS)
+
+    def test_compact_initial_packet_stays_bounded_with_long_recent_feed(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            rows = []
+            for index in range(25):
+                saved = store.upsert_new_items(con, [{
+                    "source": "Example", "title": "Bitcoin current lead " + "T" * 280,
+                    "url": f"https://example.com/current/{index}?context=" + "u" * 700,
+                    "published": "", "summary": "S" * 600,
+                }])[0]
+                rows.append(dict(con.execute("SELECT * FROM items WHERE url_hash=?",
+                                             (saved["url_hash"],)).fetchone()))
+            session = newsroom.NewsroomSession(
+                run_id="compact", inventory=rows, recent_clusters=[], theme_snapshot=[],
+                handles={f"handle{index}": "identity " + "z" * 120 for index in range(50)},
+                con=con, reservation="r", prep_mode="off", research_mode="off",
+                compact_enabled=True,
+            )
+            recent = [{
+                "effective_at": time.time() - index * 60,
+                "story_key": f"event-{index}", "class": "secondary",
+                "body": "A" * 4000, "receipt_url": f"https://example.com/r/{index}",
+                "performance": {}, "performance_synced_at": None,
+            } for index in range(40)]
+            with patch.object(store, "recent_feed_posts", return_value=recent):
+                packet = session._initial_packet()
+            self.assertLessEqual(len(json.dumps(packet).encode()),
+                                 config.COMPACT_DESK_INITIAL_BYTES)
+            self.assertTrue(packet["recent_reader_feed_48h"]["index"])
+            self.assertTrue(session.context_rows)
+
+    def test_sonnet_can_delegate_bounded_haiku_reporting_with_code_owned_receipt(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            saved = store.upsert_new_items(con, [{
+                "source": "Example", "title": "Bitcoin policy lead",
+                "url": "https://example.com/policy", "published": "", "summary": "",
+            }])[0]
+            row = dict(con.execute("SELECT * FROM items WHERE url_hash=?",
+                                   (saved["url_hash"],)).fetchone())
+            session = newsroom.NewsroomSession(
+                run_id="haiku-assignment", inventory=[row], recent_clusters=[],
+                theme_snapshot=[], handles={}, con=con, reservation="r", prep_mode="off",
+                research_mode="on", compact_enabled=True,
+            )
+            usage = SimpleNamespace(input_tokens=100, output_tokens=20,
+                                    cache_creation_input_tokens=0,
+                                    cache_read_input_tokens=0, cache_creation=None)
+            api = Mock()
+            calls = 0
+
+            def create(**kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    block = SimpleNamespace(
+                        type="tool_use", id="fetch-tool", name="fetch_source",
+                        input={"url": "https://example.com/report"},
+                    )
+                else:
+                    fetch_id = next(iter(session.fetches))
+                    block = SimpleNamespace(
+                        type="tool_use", id="memo-tool", name="submit_research_memo",
+                        input={
+                            "what_happened": "A policy development happened.",
+                            "when": "today", "source_findings": "The report supports it.",
+                            "conflicts": "", "supportable_angle": "Report the development.",
+                            "remaining_gap": "", "cited_fetch_ids": [fetch_id],
+                        },
+                    )
+                return SimpleNamespace(content=[block], usage=usage)
+
+            api.messages.create.side_effect = create
+            fetched = {"outcome": "ok", "text": "A supported Bitcoin policy development.",
+                       "final_url": "https://example.com/report",
+                       "canonical_url": "https://example.com/report",
+                       "redirect_chain": ["https://example.com/report"]}
+            with patch.object(newsroom.anthropic, "Anthropic", return_value=api), \
+                    patch.object(newsroom.sources, "fetch_article", return_value=fetched), \
+                    patch.object(newsroom.brain, "consume_model_call"):
+                result = session._haiku_research({
+                    "objective": "Resolve the policy lead.",
+                    "candidate_ids": [row["url_hash"]], "fetch_ids": [],
+                })
+            self.assertTrue(result["ok"])
+            self.assertEqual(session.haiku_assignments, 1)
+            self.assertEqual(session.haiku_rounds, 2)
+            self.assertTrue(result["inspected_evidence"][0]["inspectable_evidence"])
+            self.assertEqual(store.model_usage_calls(
+                con, seat="research_assistant", since=0), 2)
+
+    def test_sonnet_transport_retry_keeps_same_session_and_one_hour_cache(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            session = newsroom.NewsroomSession(
+                run_id="retry-cache", inventory=[], recent_clusters=[], theme_snapshot=[],
+                handles={}, con=con, reservation="r", prep_mode="off",
+                research_mode="off", compact_enabled=True,
+            )
+            session.messages = [{"role": "user", "content": "same desk"}]
+            usage = SimpleNamespace(input_tokens=100, output_tokens=20,
+                                    cache_creation_input_tokens=0,
+                                    cache_read_input_tokens=0, cache_creation=None)
+            response = SimpleNamespace(content=[], usage=usage)
+            api = Mock()
+            api.messages.create.side_effect = [RuntimeError("transport"), response]
+            session.client = api
+            with patch.object(newsroom.brain, "consume_model_call"):
+                returned = session._call(max_tokens=100, tools=[])
+            self.assertIs(returned, response)
+            self.assertEqual(api.messages.create.call_count, 2)
+            first = api.messages.create.call_args_list[0].kwargs
+            second = api.messages.create.call_args_list[1].kwargs
+            self.assertEqual(first["messages"], second["messages"])
+            self.assertEqual(first["system"][0]["cache_control"],
+                             {"type": "ephemeral", "ttl": "1h"})
+            self.assertTrue(session.newsdesk_retry_used)
+            self.assertEqual(session.successful_newsdesk_calls, 1)
+            self.assertEqual(session.rounds, 2)
 
     def test_v2_materialization_persists_editor_and_typefully_draft_lifecycle(self):
         with temporary_store() as con, ExitStack() as stack:

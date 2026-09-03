@@ -4,6 +4,7 @@ import json
 import sqlite3
 import tempfile
 import time
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,25 @@ from tests.support import item, temporary_store
 
 
 class StoreTests(unittest.TestCase):
+    def test_model_usage_prices_one_hour_cache_separately(self):
+        with temporary_store() as con:
+            usage = SimpleNamespace(
+                input_tokens=1000, output_tokens=50,
+                cache_creation_input_tokens=500, cache_read_input_tokens=400,
+                cache_creation=SimpleNamespace(
+                    ephemeral_5m_input_tokens=200,
+                    ephemeral_1h_input_tokens=300,
+                ),
+            )
+            store.record_model_usage(
+                con, run_id="cache-run", seat="newsdesk", model="claude-sonnet-5",
+                round_number=1, response=SimpleNamespace(usage=usage),
+            )
+            row = con.execute("SELECT * FROM model_usage").fetchone()
+            self.assertEqual(row["cache_creation_5m_input_tokens"], 200)
+            self.assertEqual(row["cache_creation_1h_input_tokens"], 300)
+            self.assertAlmostEqual(row["estimated_cost_usd"], 0.00428, places=8)
+
     def test_guide_items_are_prioritized_for_triage(self):
         with temporary_store() as con:
             store.upsert_new_items(con, [item(url="https://example.com/ordinary")])

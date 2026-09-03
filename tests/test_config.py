@@ -44,6 +44,10 @@ print(json.dumps({
     'desk_interval': config.DESK_INTERVAL_SECONDS,
     'desk_recent_feed_hours': config.DESK_RECENT_FEED_HOURS,
     'desk_recent_feed_limit': config.DESK_RECENT_FEED_LIMIT,
+    'compact_desk': config.COMPACT_DESK_ENABLED,
+    'desk_prep_mode': config.DESK_PREP_MODE,
+    'haiku_research_mode': config.HAIKU_RESEARCH_MODE,
+    'reservation': config.editorial_reservation_calls(),
     'intake_triage_mode': config.INTAKE_TRIAGE_MODE,
     'intake_triage_model': config.INTAKE_TRIAGE_MODEL,
     'intake_triage_hourly': config.INTAKE_TRIAGE_MAX_CALLS_PER_HOUR,
@@ -89,6 +93,10 @@ class ConfigTests(unittest.TestCase):
             "desk_interval": 900,
             "desk_recent_feed_hours": 48.0,
             "desk_recent_feed_limit": 40,
+            "compact_desk": False,
+            "desk_prep_mode": "off",
+            "haiku_research_mode": "off",
+            "reservation": 8,
             "intake_triage_mode": "off",
             "intake_triage_model": "claude-haiku-4-5",
             "intake_triage_hourly": 8,
@@ -111,6 +119,21 @@ class ConfigTests(unittest.TestCase):
     def test_secondary_can_autopost_in_editorial_v2(self):
         values = load_config({"NBN_AUTOPOST_CLASSES": "secondary,primary"})
         self.assertEqual(values["classes"], ["primary", "secondary"])
+
+    def test_assignment_modes_expand_reservation_from_configuration(self):
+        values = load_config({
+            "NBN_RUN_NEWSROOM_MAX_ROUNDS": "3",
+            "NBN_RUN_NEWSROOM_RETRY_ALLOWANCE": "1",
+            "NBN_DESK_PREP_MODE": "enforce",
+            "NBN_COMPACT_DESK_ENABLED": "true",
+            "NBN_HAIKU_RESEARCH_MODE": "on",
+            "NBN_HAIKU_RESEARCH_MAX_ASSIGNMENTS": "1",
+            "NBN_HAIKU_RESEARCH_MAX_ROUNDS": "2",
+        })
+        self.assertTrue(values["compact_desk"])
+        self.assertEqual(values["desk_prep_mode"], "enforce")
+        self.assertEqual(values["haiku_research_mode"], "on")
+        self.assertEqual(values["reservation"], 8)  # 3 Sonnet + retry + editor + prep + 2 Haiku
 
     def test_test_process_blocks_real_network(self):
         with self.assertRaisesRegex(AssertionError, "real network access"):

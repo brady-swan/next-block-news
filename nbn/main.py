@@ -329,9 +329,15 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
 
     cluster_context = store.story_cluster_context(
         con, exclude_hashes={item["url_hash"] for item in inventory})
+    direct_fallback = False
     reservation = reservation or brain.reserve_model_calls(
-        config.RUN_NEWSROOM_MAX_ROUNDS * 2 + 1
+        config.editorial_reservation_calls()
     )
+    if not reservation:
+        direct_fallback = True
+        reservation = brain.reserve_model_calls(
+            config.editorial_reservation_calls(direct_fallback=True)
+        )
     if not reservation:
         note = "defer:model_budget_unavailable"
         verdicts = [{**item, "action": "hold", "reason": note} for item in inventory]
@@ -354,42 +360,57 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         run_id=pipeline_run_id, inventory=inventory, recent_clusters=cluster_context,
         theme_snapshot=theme_snapshot, handles=lint.verified_handles(), con=con,
         reservation=reservation,
+        prep_mode="off" if direct_fallback else None,
+        research_mode="off" if direct_fallback else None,
+        compact_enabled=False if direct_fallback else None,
     )
     try:
         outcome = session.conduct()
-    except Exception as exc:  # one bounded clean retry; never enter legacy triage
-        log.warning("v2 newsdesk failed, retrying once with a clean context: %s", exc)
-        try:
-            session = newsroom.start_session(
-                run_id=pipeline_run_id, inventory=inventory, recent_clusters=cluster_context,
-                theme_snapshot=theme_snapshot, handles=lint.verified_handles(), con=con,
-                reservation=reservation,
-            )
-            outcome = session.conduct()
-        except Exception as retry_exc:  # noqa: BLE001 - preserve inventory for next slot
-            kind = getattr(retry_exc, "kind", type(retry_exc).__name__)
-            message = f"{type(retry_exc).__name__}: {retry_exc}"[:500]
-            counters = session.counters()
-            store.set_newsroom_state(
-                con, pipeline_run_id, "deferred", error_kind=kind,
-                error_message=message, counters=counters,
-            )
-            verdicts = []
-            for item in inventory:
-                note = f"defer:newsdesk_unavailable:{kind}"[:300]
-                store.defer_item(con, item["url_hash"], note, delay_seconds=300,
-                                 story_key=item.get("story_key"),
-                                 stage="newsdesk", category="technical_defer")
-                verdicts.append({**item, "action": "hold", "reason": note})
-            result["held"] += len(inventory)
-            result["newsroom"] = {
-                "mode": config.RUN_NEWSROOM_MODE, "status": "deferred",
-                "prompt_version": newsroom.PROMPT_VERSION, "error_kind": kind,
-                "error": message, **counters,
-            }
-            store.record_decision_run(con, pending, verdicts, result, run_started,
-                                      theme_snapshot=theme_snapshot)
-            return result
+    except Exception as exc:  # continuity preserves late work; never replay billed rounds
+        kind = getattr(exc, "kind", type(exc).__name__)
+        message = f"{type(exc).__name__}: {exc}"[:500]
+        counters = session.counters()
+        store.set_newsroom_state(
+            con, pipeline_run_id, "deferred", error_kind=kind,
+            error_message=message, counters=counters,
+        )
+        verdicts = []
+        session_inventory = getattr(session, "inventory", inventory)
+        if not isinstance(session_inventory, list):
+            session_inventory = inventory
+        prep_backgrounds = getattr(session, "prep_backgrounds", [])
+        if not isinstance(prep_backgrounds, list):
+            prep_backgrounds = []
+        active_hashes = {item["url_hash"] for item in session_inventory}
+        for prep in prep_backgrounds:
+            item = next((row for row in inventory
+                         if row["url_hash"] == prep["item_hash"]), None)
+            if item:
+                verdicts.append({
+                    **item, "action": "skip", "class": "secondary",
+                    "reason": "desk_prep: " + str(
+                        prep.get("event_summary") or prep.get("bitcoin_relevance")
+                        or "no NBN development"
+                    )[:260],
+                })
+        for item in inventory:
+            if item["url_hash"] not in active_hashes:
+                continue
+            note = f"defer:newsdesk_unavailable:{kind}"[:300]
+            store.defer_item(con, item["url_hash"], note, delay_seconds=300,
+                             story_key=item.get("story_key"),
+                             stage="newsdesk", category="technical_defer")
+            verdicts.append({**item, "action": "hold", "reason": note})
+        result["held"] += len(active_hashes)
+        result["skipped"] = int(result.get("skipped", 0)) + len(prep_backgrounds)
+        result["newsroom"] = {
+            "mode": config.RUN_NEWSROOM_MODE, "status": "deferred",
+            "prompt_version": newsroom.PROMPT_VERSION, "error_kind": kind,
+            "error": message, **counters,
+        }
+        store.record_decision_run(con, pending, verdicts, result, run_started,
+                                  theme_snapshot=theme_snapshot)
+        return result
 
     result["newsroom"] = {
         "mode": config.RUN_NEWSROOM_MODE, "status": "validated",

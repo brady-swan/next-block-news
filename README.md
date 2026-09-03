@@ -1,8 +1,9 @@
 # Next Block News
 
 Autonomous Bitcoin news wire for X at `@nextblocknews_`. A single Python worker watches
-primary sources, press feeds, Perception, and selected X accounts. A fresh run-scoped Sonnet
-desk researches and writes each non-empty 15-minute batch; an independent Sonnet editor makes
+primary sources, press feeds, Perception, and selected X accounts. A bounded Haiku assignment
+desk prepares each due batch; a fresh run-scoped Sonnet desk researches and writes the useful
+work; an independent Sonnet editor makes
 the final editorial call; a small mechanical shell then delivers eligible work through
 Typefully.
 
@@ -12,15 +13,16 @@ truth is `prompts/wire_voice.md`; the complete owner's manual is `SYSTEM.md`.
 ## Pipeline
 
 ```text
-poll -> RSS/EDGAR Haiku mailroom -> Sonnet newsroom -> Sonnet editor -> mechanical rails -> Typefully
+poll -> RSS/EDGAR Haiku mailroom -> Haiku assignment desk -> Sonnet newsroom -> Sonnet editor -> Typefully
 ```
 
 | Module | Responsibility |
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
+| `nbn/desk_prep.py` | Run-scoped Haiku distillation/routing; protected work and every failure advance |
 | `nbn/store.py` | SQLite deduplication, bounded cross-run workbenches, commit lifecycle, post log |
-| `nbn/newsroom.py` | Run-scoped Sonnet newsroom, clean desk packet, bounded research tools, and atomic dossier |
+| `nbn/newsroom.py` | Run-scoped Sonnet newsroom, compact/retrievable desk context, bounded Haiku delegation, and atomic dossier |
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
 | `config/source_tiers.toml` | Canonical P0/T1/T2/T3/T4 source registry |
 | `nbn/source_policy.py` | Validated source classification, normalization, and ranking |
@@ -140,8 +142,10 @@ For held items, the Desk can queue a guarded **Stage draft** retry (freshness,
 corroboration, style, and Editor holds only) or record **Dismiss**. Operator retries run
 the complete source/Writer/lint/Editor stack with a fresh web source search, override only the displayed gate, and are
 always delivered as Typefully drafts—not autonomous posts.
-The Desk also exposes the latest bounded Haiku Background decisions; **Send to desk**
-atomically restores one item to the Sonnet queue and advances the next desk deadline.
+The Desk exposes both RSS-mailroom and assignment-desk Background decisions; **Send to desk**
+atomically restores one item to the Sonnet queue and advances the next desk deadline. It also
+shows per-seat model spend, the daily cost target, initial packet size, Sonnet attempts, prepared
+receipts, and delegated Haiku work.
 
 See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
 publishing behavior.

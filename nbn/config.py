@@ -43,6 +43,9 @@ RUN_NEWSROOM_MAX_HISTORY_BYTES = int(
 RUN_NEWSROOM_TIMEOUT_SECONDS = float(
     os.environ.get("NBN_RUN_NEWSROOM_TIMEOUT_SECONDS", "240")
 )
+RUN_NEWSROOM_RETRY_ALLOWANCE = int(
+    os.environ.get("NBN_RUN_NEWSROOM_RETRY_ALLOWANCE", "1")
+)
 # Editorial core v2 keeps the one-minute intake/health loop, but opens a fresh
 # run-scoped Sonnet desk only on a persisted editorial cadence. ``v1`` is a temporary,
 # manual rollback switch; there is never an automatic fallback into it.
@@ -55,6 +58,98 @@ DESK_CANDIDATE_MAX_AGE_HOURS = float(
 )
 DESK_RECENT_FEED_HOURS = float(os.environ.get("NBN_DESK_RECENT_FEED_HOURS", "48"))
 DESK_RECENT_FEED_LIMIT = int(os.environ.get("NBN_DESK_RECENT_FEED_LIMIT", "40"))
+COMPACT_DESK_ENABLED = os.environ.get(
+    "NBN_COMPACT_DESK_ENABLED", "false"
+).lower() == "true"
+COMPACT_DESK_INITIAL_BYTES = int(
+    os.environ.get("NBN_COMPACT_DESK_INITIAL_BYTES", str(64 * 1024))
+)
+COMPACT_DESK_HISTORY_BYTES = int(
+    os.environ.get("NBN_COMPACT_DESK_HISTORY_BYTES", str(192 * 1024))
+)
+COMPACT_DESK_RETRIEVAL_CALLS = int(
+    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_CALLS", "2")
+)
+COMPACT_DESK_RETRIEVAL_ROWS = int(
+    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_ROWS", "8")
+)
+COMPACT_DESK_RETRIEVAL_BYTES = int(
+    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_BYTES", str(16 * 1024))
+)
+COMPACT_DESK_RETRIEVAL_TOTAL_BYTES = int(
+    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_TOTAL_BYTES", str(24 * 1024))
+)
+
+# A run-scoped Haiku assigning editor prepares the cross-source desk before Sonnet.
+DESK_PREP_MODE = os.environ.get("NBN_DESK_PREP_MODE", "off").strip().lower()
+if DESK_PREP_MODE not in {"off", "observe", "enforce"}:
+    raise RuntimeError("NBN_DESK_PREP_MODE must be off, observe, or enforce")
+DESK_PREP_MODEL = os.environ.get("NBN_DESK_PREP_MODEL", "claude-haiku-4-5")
+DESK_PREP_BATCH_SIZE = int(os.environ.get("NBN_DESK_PREP_BATCH_SIZE", "25"))
+DESK_PREP_MAX_PACKET_BYTES = int(
+    os.environ.get("NBN_DESK_PREP_MAX_PACKET_BYTES", str(48 * 1024))
+)
+DESK_PREP_MAX_OUTPUT_TOKENS = int(
+    os.environ.get("NBN_DESK_PREP_MAX_OUTPUT_TOKENS", "6000")
+)
+DESK_PREP_TIMEOUT_SECONDS = float(
+    os.environ.get("NBN_DESK_PREP_TIMEOUT_SECONDS", "45")
+)
+DESK_PREP_MAX_CALLS_PER_HOUR = int(
+    os.environ.get("NBN_DESK_PREP_MAX_CALLS_PER_HOUR", "6")
+)
+DESK_PREFETCH_MAX_URLS = int(os.environ.get("NBN_DESK_PREFETCH_MAX_URLS", "6"))
+DESK_PREFETCH_MAX_CHARS = int(os.environ.get("NBN_DESK_PREFETCH_MAX_CHARS", "24000"))
+DESK_PREFETCH_RESERVE_FETCHES = int(
+    os.environ.get("NBN_DESK_PREFETCH_RESERVE_FETCHES", "8")
+)
+DESK_PREFETCH_RESERVE_CHARS = int(
+    os.environ.get("NBN_DESK_PREFETCH_RESERVE_CHARS", "80000")
+)
+
+# Sonnet may delegate one bounded source-resolution assignment to Haiku.
+HAIKU_RESEARCH_MODE = os.environ.get("NBN_HAIKU_RESEARCH_MODE", "off").strip().lower()
+if HAIKU_RESEARCH_MODE not in {"off", "on"}:
+    raise RuntimeError("NBN_HAIKU_RESEARCH_MODE must be off or on")
+HAIKU_RESEARCH_MODEL = os.environ.get("NBN_HAIKU_RESEARCH_MODEL", "claude-haiku-4-5")
+HAIKU_RESEARCH_MAX_ASSIGNMENTS = int(
+    os.environ.get("NBN_HAIKU_RESEARCH_MAX_ASSIGNMENTS", "1")
+)
+HAIKU_RESEARCH_MAX_ROUNDS = int(os.environ.get("NBN_HAIKU_RESEARCH_MAX_ROUNDS", "2"))
+HAIKU_RESEARCH_MAX_TOOL_CALLS = int(
+    os.environ.get("NBN_HAIKU_RESEARCH_MAX_TOOL_CALLS", "8")
+)
+HAIKU_RESEARCH_MAX_SEARCHES = int(os.environ.get("NBN_HAIKU_RESEARCH_MAX_SEARCHES", "3"))
+HAIKU_RESEARCH_MAX_FETCHES = int(os.environ.get("NBN_HAIKU_RESEARCH_MAX_FETCHES", "5"))
+HAIKU_RESEARCH_MAX_FETCH_CHARS = int(
+    os.environ.get("NBN_HAIKU_RESEARCH_MAX_FETCH_CHARS", "20000")
+)
+HAIKU_RESEARCH_MAX_PACKET_BYTES = int(
+    os.environ.get("NBN_HAIKU_RESEARCH_MAX_PACKET_BYTES", str(32 * 1024))
+)
+HAIKU_RESEARCH_MAX_HISTORY_BYTES = int(
+    os.environ.get("NBN_HAIKU_RESEARCH_MAX_HISTORY_BYTES", str(96 * 1024))
+)
+HAIKU_RESEARCH_MAX_MEMO_BYTES = int(
+    os.environ.get("NBN_HAIKU_RESEARCH_MAX_MEMO_BYTES", "4096")
+)
+HAIKU_RESEARCH_TIMEOUT_SECONDS = float(
+    os.environ.get("NBN_HAIKU_RESEARCH_TIMEOUT_SECONDS", "90")
+)
+MODEL_DAILY_TARGET_USD = float(os.environ.get("NBN_MODEL_DAILY_TARGET_USD", "6"))
+
+
+def editorial_reservation_calls(*, include_mailroom: bool = False,
+                                direct_fallback: bool = False) -> int:
+    """Worst-case API attempts for one v2 cycle under the enabled configuration."""
+    total = max(0, RUN_NEWSROOM_MAX_ROUNDS) + max(0, RUN_NEWSROOM_RETRY_ALLOWANCE) + 1
+    if not direct_fallback:
+        total += int(DESK_PREP_MODE != "off")
+        if HAIKU_RESEARCH_MODE == "on":
+            total += (max(0, HAIKU_RESEARCH_MAX_ASSIGNMENTS)
+                      * max(0, HAIKU_RESEARCH_MAX_ROUNDS))
+        total += int(include_mailroom)
+    return total
 
 # One cheap semantic mailroom pass keeps broad RSS and EDGAR noise off Sonnet's desk.
 # Rollout is explicit; runtime failures always fail open as candidates.

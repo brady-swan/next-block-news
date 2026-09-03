@@ -4,6 +4,16 @@
 The deeper owner's manual is `SYSTEM.md`; this file is orientation and the rules you must
 not break.*
 
+**Cost-control update, 2026-09-03 (Plan 0052):** a run-scoped Haiku assignment desk now
+prepares the cross-source batch before Sonnet; protected/high-attention work and every failure
+advance, while all-Background windows can avoid a Sonnet wake. Sonnet receives compact indexes
+with bounded retrieval, code-prefetched receipts, and one optional two-round Haiku reporting
+assignment. Production targets three successful Sonnet newsroom calls, allows one same-session
+transport retry, never replays a billed protocol failure, and uses a one-hour orientation cache.
+Detailed per-seat/cache telemetry and a configurable $6/day target are on the Desk. Rollout is
+controlled by `NBN_DESK_PREP_MODE`, `NBN_COMPACT_DESK_ENABLED`, and
+`NBN_HAIKU_RESEARCH_MODE`; autopost is a separate owner switch and must not be changed with them.
+
 **Operational update, 2026-09-02:** editorial core v2 supersedes the architecture described
 later in this historical handoff. Read `SYSTEM.md` first. Production uses a persisted
 15-minute, run-scoped Sonnet story desk plus one independent batch Sonnet editor. Intake,

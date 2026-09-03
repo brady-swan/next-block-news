@@ -213,6 +213,8 @@ CREATE TABLE IF NOT EXISTS model_usage (
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_creation_5m_input_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_creation_1h_input_tokens INTEGER NOT NULL DEFAULT 0,
   cache_read_input_tokens INTEGER NOT NULL DEFAULT 0,
   latency_ms INTEGER NOT NULL DEFAULT 0,
   outcome TEXT NOT NULL,
@@ -222,6 +224,33 @@ CREATE TABLE IF NOT EXISTS model_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_model_usage_created ON model_usage(created_at);
 CREATE INDEX IF NOT EXISTS idx_model_usage_run ON model_usage(run_id, seat);
+CREATE TABLE IF NOT EXISTS desk_preparations (
+  run_id TEXT NOT NULL,
+  item_hash TEXT NOT NULL,
+  model_route TEXT NOT NULL,
+  effective_route TEXT NOT NULL,
+  event_summary TEXT NOT NULL DEFAULT '',
+  bitcoin_relevance TEXT NOT NULL DEFAULT '',
+  freshness_note TEXT NOT NULL DEFAULT '',
+  research_objective TEXT NOT NULL DEFAULT '',
+  source_leads_json TEXT NOT NULL DEFAULT '[]',
+  related_keys_json TEXT NOT NULL DEFAULT '[]',
+  protection_reason TEXT,
+  model TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  error_kind TEXT,
+  mode TEXT NOT NULL,
+  application_state TEXT NOT NULL,
+  prepared_at REAL NOT NULL,
+  applied_at REAL NOT NULL,
+  promoted_at REAL,
+  PRIMARY KEY(run_id, item_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_desk_prep_item_time
+  ON desk_preparations(item_hash, prepared_at DESC);
+CREATE INDEX IF NOT EXISTS idx_desk_prep_route_time
+  ON desk_preparations(effective_route, prepared_at DESC);
 CREATE TABLE IF NOT EXISTS intake_triage (
   item_hash TEXT PRIMARY KEY,
   route TEXT NOT NULL,
@@ -282,6 +311,11 @@ NEWSROOM_MEMORY_COLUMNS = {
     "evidence_pool_json": "TEXT NOT NULL DEFAULT '[]'",
 }
 
+MODEL_USAGE_COLUMNS = {
+    "cache_creation_5m_input_tokens": "INTEGER NOT NULL DEFAULT 0",
+    "cache_creation_1h_input_tokens": "INTEGER NOT NULL DEFAULT 0",
+}
+
 
 def _ensure_post_columns(con):
     """Apply additive post migrations without masking unexpected SQLite failures."""
@@ -337,6 +371,14 @@ def _ensure_newsroom_columns(con):
     con.commit()
 
 
+def _ensure_model_usage_columns(con):
+    existing = {r["name"] for r in con.execute("PRAGMA table_info(model_usage)").fetchall()}
+    for name, declaration in MODEL_USAGE_COLUMNS.items():
+        if name not in existing:
+            con.execute(f"ALTER TABLE model_usage ADD COLUMN {name} {declaration}")
+    con.commit()
+
+
 def kv_get(con, k: str) -> str:
     row = con.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
     return row["v"] if row else ""
@@ -356,7 +398,7 @@ _MODEL_RATES = {
     "claude-fable-5-1": (10.0, 50.0),
     "claude-haiku-4-5": (1.0, 5.0),
 }
-MODEL_RATE_VERSION = "anthropic-public-2026-09-02-v1"
+MODEL_RATE_VERSION = "anthropic-public-2026-09-03-cache-ttl-v2"
 
 
 def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number: int,
@@ -366,16 +408,30 @@ def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number:
     input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
     output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
     cache_create = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+    cache_detail = getattr(usage, "cache_creation", None)
+    cache_create_5m = int(
+        getattr(cache_detail, "ephemeral_5m_input_tokens", 0) or 0
+    )
+    cache_create_1h = int(
+        getattr(cache_detail, "ephemeral_1h_input_tokens", 0) or 0
+    )
+    if not cache_create_5m and not cache_create_1h:
+        # Historical/current SDK responses without the detailed object used the
+        # default five-minute cache duration.
+        cache_create_5m = cache_create
     cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
     input_rate, output_rate = _MODEL_RATES.get(str(model), (0.0, 0.0))
-    estimated = ((input_tokens + cache_create * 1.25 + cache_read * 0.1) * input_rate
+    estimated = ((input_tokens + cache_create_5m * 1.25 + cache_create_1h * 2.0
+                  + cache_read * 0.1) * input_rate
                  + output_tokens * output_rate) / 1_000_000
     con.execute(
         "INSERT INTO model_usage(run_id,seat,model,round,input_tokens,output_tokens,"
-        "cache_creation_input_tokens,cache_read_input_tokens,latency_ms,outcome,"
-        "estimated_cost_usd,rate_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "cache_creation_input_tokens,cache_creation_5m_input_tokens,"
+        "cache_creation_1h_input_tokens,cache_read_input_tokens,latency_ms,outcome,"
+        "estimated_cost_usd,rate_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (str(run_id)[:120], str(seat)[:40], str(model)[:80], int(round_number),
-         input_tokens, output_tokens, cache_create, cache_read, max(0, int(latency_ms)),
+         input_tokens, output_tokens, cache_create, cache_create_5m, cache_create_1h,
+         cache_read, max(0, int(latency_ms)),
          str(outcome)[:40], estimated, MODEL_RATE_VERSION, time.time()),
     )
     con.commit()
@@ -386,6 +442,8 @@ def model_usage_summary(con, since: float) -> dict:
         "SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,"
         "COALESCE(SUM(output_tokens),0) AS output_tokens,"
         "COALESCE(SUM(cache_creation_input_tokens),0) AS cache_creation_input_tokens,"
+        "COALESCE(SUM(cache_creation_5m_input_tokens),0) AS cache_creation_5m_input_tokens,"
+        "COALESCE(SUM(cache_creation_1h_input_tokens),0) AS cache_creation_1h_input_tokens,"
         "COALESCE(SUM(cache_read_input_tokens),0) AS cache_read_input_tokens,"
         "COALESCE(SUM(estimated_cost_usd),0) AS estimated_cost_usd,"
         "COUNT(*) AS calls FROM model_usage WHERE created_at>=?", (float(since),),
@@ -410,6 +468,128 @@ def model_usage_calls(con, *, seat: str, since: float) -> int:
         (str(seat)[:40], float(since)),
     ).fetchone()
     return int(row["calls"] if row else 0)
+
+
+def save_desk_preparations(con, rows: list[dict], *, mode: str) -> dict:
+    """Persist one run-scoped preparation batch and atomically apply enforcement."""
+    if mode not in {"observe", "enforce"}:
+        raise ValueError("desk preparation persistence requires observe or enforce mode")
+    inserted = suppressed = advanced = 0
+    now = time.time()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        for value in rows:
+            leads = json.dumps(list(value.get("source_leads") or [])[:3],
+                               separators=(",", ":"), ensure_ascii=False)
+            related = json.dumps(list(value.get("related_keys") or [])[:3],
+                                 separators=(",", ":"), ensure_ascii=False)
+            if len(leads.encode("utf-8")) > 1800 or len(related.encode("utf-8")) > 800:
+                raise ValueError("desk preparation row exceeds JSON bounds")
+            effective = str(value.get("effective_route") or "advance")[:20]
+            state = "observed" if mode == "observe" else "applied"
+            cur = con.execute(
+                "INSERT OR REPLACE INTO desk_preparations("
+                "run_id,item_hash,model_route,effective_route,event_summary,"
+                "bitcoin_relevance,freshness_note,research_objective,source_leads_json,"
+                "related_keys_json,protection_reason,model,prompt_version,outcome,error_kind,"
+                "mode,application_state,prepared_at,applied_at,promoted_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                (str(value.get("run_id") or "")[:120],
+                 str(value.get("item_hash") or "")[:64],
+                 str(value.get("model_route") or "advance")[:20], effective,
+                 str(value.get("event_summary") or "")[:400],
+                 str(value.get("bitcoin_relevance") or "")[:300],
+                 str(value.get("freshness_note") or "")[:240],
+                 str(value.get("research_objective") or "")[:400], leads, related,
+                 str(value.get("protection_reason") or "")[:80] or None,
+                 str(value.get("model") or "")[:80],
+                 str(value.get("prompt_version") or "")[:80],
+                 str(value.get("outcome") or "")[:40],
+                 str(value.get("error_kind") or "")[:80] or None,
+                 mode, state, float(value.get("prepared_at") or now), now),
+            )
+            inserted += int(bool(cur.rowcount))
+            if effective == "advance":
+                advanced += 1
+            elif mode == "enforce" and effective == "background":
+                changed = con.execute(
+                    "UPDATE items SET status='skipped',note=?,decision_stage='desk_prep',"
+                    "decision_category='background',defer_until=NULL"
+                    " WHERE url_hash=? AND status='new'",
+                    (("desk prep background: " + str(value.get("event_summary") or
+                                                       value.get("bitcoin_relevance") or
+                                                       "no NBN development"))[:300],
+                     str(value.get("item_hash") or "")[:64]),
+                ).rowcount
+                suppressed += int(bool(changed))
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return {"inserted": inserted, "advanced": advanced, "suppressed": suppressed,
+            "mode": mode}
+
+
+def latest_desk_preparations(con, item_hashes: list[str]) -> dict[str, dict]:
+    """Return the latest preparation for supplied IDs without arbitrary DB enumeration."""
+    values = [str(value)[:64] for value in item_hashes if str(value)]
+    if not values:
+        return {}
+    marks = ",".join("?" for _ in values)
+    rows = con.execute(
+        "SELECT d.* FROM desk_preparations d JOIN ("
+        " SELECT item_hash,MAX(prepared_at) prepared_at FROM desk_preparations"
+        f" WHERE item_hash IN ({marks}) GROUP BY item_hash"
+        ") latest ON latest.item_hash=d.item_hash AND latest.prepared_at=d.prepared_at",
+        values,
+    ).fetchall()
+    result = {}
+    for raw in rows:
+        row = dict(raw)
+        try:
+            row["source_leads"] = json.loads(row.pop("source_leads_json") or "[]")
+            row["related_keys"] = json.loads(row.pop("related_keys_json") or "[]")
+        except (TypeError, ValueError):
+            row["source_leads"], row["related_keys"] = [], []
+        result[row["item_hash"]] = row
+    return result
+
+
+def desk_preparation_summary(con, start: float, end: float) -> dict:
+    rows = con.execute(
+        "SELECT effective_route,COUNT(*) n,SUM(outcome!='model') failures,"
+        "SUM(protection_reason IS NOT NULL) protected FROM desk_preparations"
+        " WHERE prepared_at>=? AND prepared_at<? GROUP BY effective_route",
+        (float(start), float(end)),
+    ).fetchall()
+    result = {"advance": 0, "background": 0, "fail_open": 0, "protected": 0,
+              "sonnet_wakes_suppressed": 0}
+    for row in rows:
+        route = str(row["effective_route"] or "")
+        if route in result:
+            result[route] = int(row["n"] or 0)
+        result["fail_open"] += int(row["failures"] or 0)
+        result["protected"] += int(row["protected"] or 0)
+    suppressed = con.execute(
+        "SELECT COUNT(DISTINCT run_id) n FROM desk_preparations d"
+        " WHERE prepared_at>=? AND prepared_at<?"
+        " AND NOT EXISTS (SELECT 1 FROM desk_preparations x WHERE x.run_id=d.run_id"
+        "  AND x.effective_route='advance')",
+        (float(start), float(end)),
+    ).fetchone()
+    result["sonnet_wakes_suppressed"] = int(suppressed["n"] if suppressed else 0)
+    return result
+
+
+def recent_desk_backgrounds(con, start: float, end: float, limit: int = 25) -> list[dict]:
+    rows = con.execute(
+        "SELECT d.*,i.source,i.title,i.url,i.status,i.decision_stage,i.decision_category"
+        " FROM desk_preparations d JOIN items i ON i.url_hash=d.item_hash"
+        " WHERE d.prepared_at>=? AND d.prepared_at<? AND d.effective_route='background'"
+        " ORDER BY d.prepared_at DESC LIMIT ?",
+        (float(start), float(end), max(0, min(int(limit), 100))),
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def editorial_run_due(con, now: float | None = None, *, force: bool = False) -> bool:
@@ -465,31 +645,50 @@ def request_operator_action(con, item_hash: str, action: str) -> dict:
             triage = con.execute(
                 "SELECT route,promoted_at FROM intake_triage WHERE item_hash=?", (item_hash,)
             ).fetchone()
+            preparation = con.execute(
+                "SELECT run_id,effective_route,promoted_at FROM desk_preparations"
+                " WHERE item_hash=? ORDER BY prepared_at DESC LIMIT 1", (item_hash,)
+            ).fetchone()
             active = con.execute(
                 "SELECT 1 FROM operator_actions WHERE item_hash=?"
                 " AND state IN ('queued','processing') LIMIT 1", (item_hash,),
             ).fetchone()
-            if (not triage or triage["route"] != "background"
-                    or triage["promoted_at"] is not None
-                    or item["status"] != "skipped"
-                    or item["decision_stage"] != "intake_triage"
+            intake_ok = bool(
+                triage and triage["route"] == "background"
+                and triage["promoted_at"] is None
+                and item["decision_stage"] == "intake_triage"
+            )
+            prep_ok = bool(
+                preparation and preparation["effective_route"] == "background"
+                and preparation["promoted_at"] is None
+                and item["decision_stage"] == "desk_prep"
+            )
+            if (not (intake_ok or prep_ok) or item["status"] != "skipped"
                     or item["decision_category"] != "background" or active):
                 con.rollback()
-                return {"ok": False, "reason": "item is not an eligible intake background"}
+                return {"ok": False, "reason": "item is not an eligible background"}
             now = time.time()
+            gate = "intake_triage" if intake_ok else "desk_prep"
             cur = con.execute(
                 "INSERT INTO operator_actions(item_hash,story_key,action,gate,requested_at,"
                 "completed_at,state,original_status,original_note,result)"
                 " VALUES (?,?,?,NULL,?,?,'completed',?,?,?)",
                 (item_hash, item["story_key"], "promote", now, now,
-                 item["status"], item["note"], "owner sent intake background to desk"),
+                 item["status"], item["note"], "owner sent background to desk"),
             )
+            if intake_ok:
+                con.execute(
+                    "UPDATE intake_triage SET promoted_at=?"
+                    " WHERE item_hash=? AND promoted_at IS NULL", (now, item_hash),
+                )
+            else:
+                con.execute(
+                    "UPDATE desk_preparations SET promoted_at=?"
+                    " WHERE run_id=? AND item_hash=? AND promoted_at IS NULL",
+                    (now, preparation["run_id"], item_hash),
+                )
             con.execute(
-                "UPDATE intake_triage SET promoted_at=? WHERE item_hash=? AND promoted_at IS NULL",
-                (now, item_hash),
-            )
-            con.execute(
-                "UPDATE items SET status='new',note='owner sent intake background to desk',"
+                "UPDATE items SET status='new',note='owner sent background to desk',"
                 "defer_until=NULL,decision_stage='operator',decision_category='promoted'"
                 " WHERE url_hash=?", (item_hash,),
             )
@@ -499,7 +698,7 @@ def request_operator_action(con, item_hash: str, action: str) -> dict:
             )
             con.commit()
             return {"ok": True, "id": cur.lastrowid, "state": "completed",
-                    "gate": "intake_triage"}
+                    "gate": gate}
         if item["status"] != "held":
             con.rollback()
             return {"ok": False, "reason": f"item is {item['status']}, not held"}
@@ -729,6 +928,7 @@ def connect() -> sqlite3.Connection:
     _ensure_item_columns(con)
     _ensure_node_run_columns(con)
     _ensure_newsroom_columns(con)
+    _ensure_model_usage_columns(con)
     return con
 
 

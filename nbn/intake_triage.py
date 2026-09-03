@@ -225,7 +225,7 @@ def route_cycle(con, inserted: list[dict], *, run_id: str) -> dict:
     model_outcome = "empty"
     if model_rows:
         calls = store.model_usage_calls(con, seat="rss_triage", since=now - 3600)
-        v2_reserve = (config.RUN_NEWSROOM_MAX_ROUNDS * 2 + 1
+        v2_reserve = (config.editorial_reservation_calls(include_mailroom=False)
                       if config.EDITORIAL_ENGINE == "v2"
                       and config.RUN_NEWSROOM_MODE != "off" else 0)
         requested = 1 + v2_reserve

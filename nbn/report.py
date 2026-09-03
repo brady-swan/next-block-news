@@ -422,6 +422,20 @@ def _mailroom_control(row: dict, day: str) -> str:
             "<button type=submit>SEND TO DESK</button></form></div>")
 
 
+def _prep_control(row: dict, day: str) -> str:
+    if row.get("promoted_at") is not None:
+        return "<div class=itemacts><span class=actionstatus>sent to desk</span></div>"
+    if (row.get("status") != "skipped" or row.get("decision_stage") != "desk_prep"
+            or row.get("decision_category") != "background"):
+        return ""
+    hidden = (f"<input type=hidden name=k value='{_esc(config.REPORT_TOKEN)}'>"
+              f"<input type=hidden name=id value='{_esc(row.get('item_hash'))}'>"
+              f"<input type=hidden name=d value='{_esc(day)}'>")
+    return (f"<div class=itemacts><form method=post action='/item-action'>{hidden}"
+            "<input type=hidden name=action value=promote>"
+            "<button type=submit>SEND TO DESK</button></form></div>")
+
+
 def render(con, day: str = None) -> str:
     now = datetime.datetime.now(TZ)
     now_ts = time.time()
@@ -524,11 +538,26 @@ def render(con, day: str = None) -> str:
     mailroom = store.intake_triage_summary(con, s, e)
     mailroom_sources = store.intake_triage_source_summary(con, s, e, limit=12)
     mailroom_background = store.intake_triage_background(con, s, e, limit=25)
+    prep = store.desk_preparation_summary(con, s, e)
+    prep_usage = store.model_usage_seat_summary(
+        con, seat="desk_prep", since=s, until=e
+    )
+    research_assistant_usage = store.model_usage_seat_summary(
+        con, seat="research_assistant", since=s, until=e
+    )
+    prep_background = store.recent_desk_backgrounds(con, s, e, limit=25)
     try:
         next_editorial = float(store.kv_get(con, "editorial:next_run_at") or 0)
     except ValueError:
         next_editorial = 0
     latest_newsroom = store.latest_newsroom_run(con)
+    try:
+        latest_counters = (json.loads(latest_newsroom["counters_json"] or "{}")
+                           if latest_newsroom else {})
+        if not isinstance(latest_counters, dict):
+            latest_counters = {}
+    except (TypeError, ValueError):
+        latest_counters = {}
     latest_story_commits = []
     if latest_newsroom:
         latest_story_commits = con.execute(
@@ -559,6 +588,9 @@ def render(con, day: str = None) -> str:
         f"<span class=pill>editorial core: {_esc(config.EDITORIAL_ENGINE)}</span>"
         f"<span class=pill>mailroom: {_esc(config.INTAKE_TRIAGE_MODE)} · "
         f"{_esc(config.INTAKE_TRIAGE_MODEL.replace('claude-', ''))}</span>"
+        f"<span class=pill>assignment desk: {_esc(config.DESK_PREP_MODE)} · "
+        f"{_esc(config.DESK_PREP_MODEL.replace('claude-', ''))}</span>"
+        f"<span class=pill>Haiku reporting: {_esc(config.HAIKU_RESEARCH_MODE)}</span>"
         f"<span class=pill>desk every {config.DESK_INTERVAL_SECONDS // 60}m · "
         f"intake {config.DESK_CANDIDATE_MAX_AGE_HOURS:g}h</span>"
         f"<span class=pill>writer: {_esc(config.ANTHROPIC_MODEL.replace('claude-', ''))}"
@@ -576,7 +608,12 @@ def render(con, day: str = None) -> str:
         f" · {_bounded_count(usage.get('output_tokens', 0), 100000000)} output"
         f" · {_bounded_count(usage.get('cache_read_input_tokens', 0), 100000000)} cache-read"
         f" · estimated ${float(usage.get('estimated_cost_usd', 0) or 0):.4f}"
-        f" · rates {_esc(store.MODEL_RATE_VERSION)}</div>"
+        f" · rates {_esc(store.MODEL_RATE_VERSION)}<br>"
+        f"<b>Cost target</b> · ${config.MODEL_DAILY_TARGET_USD:.2f}/day"
+        + (" · <span class=suspect>above target</span>"
+           if float(usage.get('estimated_cost_usd', 0) or 0) > config.MODEL_DAILY_TARGET_USD
+           else " · within target")
+        + f" · projected 30d ${float(usage.get('estimated_cost_usd', 0) or 0) * 30:.2f}</div>"
     )
     if latest_newsroom:
         commit_bits = []
@@ -597,6 +634,16 @@ def render(con, day: str = None) -> str:
             "<div class=metaline><b>Latest newsroom lifecycle</b> · "
             f"{_esc(latest_newsroom['run_id'])} · {_esc(latest_newsroom['status'])} · "
             + ("<br>".join(commit_bits) if commit_bits else "no dossier stories")
+            + ("<br><b>Desk economy</b> · "
+               f"{_bounded_count(latest_counters.get('successful_newsdesk_calls', 0), 20)} "
+               "successful Sonnet calls"
+               f" · {_bounded_count(latest_counters.get('rounds', 0), 20)} API attempts"
+               f" · {_bounded_count(latest_counters.get('initial_packet_bytes', 0), 1000000)} "
+               "initial bytes"
+               f" · {_bounded_count(latest_counters.get('prefetch_successes', 0), 20)} "
+               "prefetch receipts"
+               f" · {_bounded_count(latest_counters.get('haiku_assignments', 0), 10)} "
+               "Haiku assignments")
             + (f"<br><b>Run issue</b> · {_esc(latest_newsroom['error_kind'])}: "
                f"{_esc(latest_newsroom['error_message'])}"
                if latest_newsroom["error_kind"] else "")
@@ -649,6 +696,33 @@ def render(con, day: str = None) -> str:
                 f"<div class=ttl>{_esc(row['title'])}</div>"
                 f"<div class=why>{_esc(row['reason'])}</div>"
                 f"{_mailroom_control(row, day)}</div>"
+            )
+        out.append("</details>")
+
+    # ── Haiku assignment desk ──────────────────────────────────────────────
+    out.append(
+        "<h2><span class=fill>Assignment desk</span>"
+        f"<span class='count o'>{prep['advance']}</span></h2>"
+        f"<div class=metaline><b>Selected day</b> · {prep['advance']} advanced · "
+        f"{prep['background']} background · {prep['protected']} protected · "
+        f"{prep['fail_open']} fail-open · {prep['sonnet_wakes_suppressed']} Sonnet wakes "
+        "suppressed<br>"
+        f"<b>Preparation Haiku</b> · {int(prep_usage.get('calls', 0) or 0)} calls · "
+        f"estimated ${float(prep_usage.get('estimated_cost_usd', 0) or 0):.4f}<br>"
+        f"<b>Reporting Haiku</b> · {int(research_assistant_usage.get('calls', 0) or 0)} calls · "
+        f"estimated ${float(research_assistant_usage.get('estimated_cost_usd', 0) or 0):.4f}</div>"
+    )
+    if prep_background:
+        out.append("<details class=skipbox><summary>Assignment backgrounds · latest 25</summary>")
+        for row_value in prep_background:
+            row = dict(row_value)
+            out.append(
+                "<div class='hentry mailentry'>"
+                f"<div class=m>{_ct(float(row['prepared_at']))} · {_esc(row['source'])} · "
+                f"{_esc(row['outcome'])} · <a href='{_esc(row['url'])}'>source ↗</a></div>"
+                f"<div class=ttl>{_esc(row['title'])}</div>"
+                f"<div class=why>{_esc(row.get('event_summary') or row.get('bitcoin_relevance'))}</div>"
+                f"{_prep_control(row, day)}</div>"
             )
         out.append("</details>")
 
