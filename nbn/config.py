@@ -131,11 +131,18 @@ NODE_READ_TOKEN = os.environ.get("NBN_NODE_READ_TOKEN", "")
 NODE_PULSE_MAX_AGE_SECONDS = int(
     os.environ.get("NBN_NODE_PULSE_MAX_AGE_SECONDS", "10800")
 )
-# "HH:MM,Title;HH:MM,Title" in UTC — after the Node's EIC (14:00) and PM intel (20:30) runs
+# Fresh EIC briefs remain a twice-daily discovery input for the one-off newsroom.
+EIC_DISCOVERY_SCHEDULE = [
+    tuple(x.split(",")) for x in
+    os.environ.get("NBN_EIC_DISCOVERY_UTC", "14:40,Morning;21:15,Afternoon").split(";") if x
+] if os.environ.get("NBN_EIC_DISCOVERY_ENABLED", "true").lower() == "true" else []
+
+# Legacy multi-story Block packaging is retained as an opt-in rollback path. One-offs are
+# the default product; a fresh EIC brief no longer implies a scheduled thread.
 BRIEFING_SCHEDULE = [
     tuple(x.split(",")) for x in
     os.environ.get("NBN_BRIEFING_UTC", "14:40,Morning;21:15,Afternoon").split(";") if x
-] if os.environ.get("NBN_BRIEFING_ENABLED", "true").lower() == "true" else []
+] if os.environ.get("NBN_BRIEFING_ENABLED", "false").lower() == "true" else []
 
 # Perception (api.perception.to). The deployed key is shared with the Marketing Node,
 # so /feed polling in either service consumes the same account budget. Activates when set.

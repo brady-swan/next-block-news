@@ -14,7 +14,7 @@ snapshot and repeatedly drifted from runtime. Read and edit the sources of truth
 | Provider claim support | `nbn/verify.py` (`CLAIM_SUPPORT_PROMPT`) | One provider-specific redraft | `NBN_MODEL` |
 | Legacy publishing editor | `nbn/editor.py` (`EDITOR_PROMPT`) | Gate-passed legacy candidates | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
 | Newsroom support editor | `nbn/editor.py` (`NEWSROOM_EDITOR_PROMPT`) | Independent, fail-closed claim and craft review against the exact selected receipt | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
-| Block thread | `nbn/briefing.py` (`BRIEFING_PROMPT`) | Weekday Morning/Afternoon Blocks | `NBN_MODEL` |
+| Legacy Block thread | `nbn/briefing.py` (`BRIEFING_PROMPT`) | Disabled rollback/experiment path | `NBN_MODEL` |
 | Daily audit | `nbn/audit.py` (`AUDIT_PROMPT`) | Receipt and class verification | `NBN_MODEL` |
 
 Prompts do not define the final publishing boundary. Deterministic vetoes and routing

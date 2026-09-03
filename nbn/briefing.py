@@ -1,8 +1,9 @@
-"""Morning/afternoon briefing thread, derived from the Marketing Node's Daily Intel brief.
+"""EIC discovery intake and the legacy Marketing Node briefing-thread builder.
 
 The Node's read API (GET /api/daily-intel/latest, bearer read token) serves the
 Brady-tuned brief: theme, body_md with inline citations, must_know, more_reads.
-This module rewrites it into a wire-voice X thread. Hard requirements:
+Fresh cited reads normally enter the one-off newsroom. The opt-in legacy path rewrites the
+brief into a wire-voice X thread with these hard requirements:
 - STRIP every Swan reference (brand separation is the point of the handle).
 - Facts and links only from the brief itself; the model never adds a URL.
 - One thread per window per day (DB-guarded).
@@ -15,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from . import config, lint, store
+from . import config, lint, sources, store
 
 log = logging.getLogger("nbn.briefing")
 EDITORIAL_TZ = ZoneInfo("America/Chicago")
@@ -142,6 +143,99 @@ def _brief_text(brief: dict) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+def _flat(value):
+    """Flatten the read API's bounded text wrappers."""
+    if isinstance(value, dict) and "text" in value:
+        return value["text"]
+    if isinstance(value, list):
+        return [_flat(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _flat(item) for key, item in value.items()}
+    return value
+
+
+def _discovery_items(brief_payload: dict, window_title: str) -> list[dict]:
+    """Project cited EIC reads into ordinary, untrusted one-off candidates."""
+    brief = _flat(brief_payload.get("daily_brief") or {})
+    context = json.dumps({
+        "untrusted_discovery_context": True,
+        "origin": "marketing_node_eic_brief",
+        "eic_window": window_title.lower(),
+        "eic_brief_workflow_run_id": brief.get("workflow_run_id"),
+        "source_daily_intel_run_id": brief.get("source_daily_intel_run_id"),
+        "theme": str(brief.get("theme") or "")[:240] or None,
+    }, separators=(",", ":"), ensure_ascii=False)
+    items, seen = [], set()
+    for raw in brief.get("more_reads") or []:
+        row = raw if isinstance(raw, dict) else {"title": str(raw)}
+        refs = row.get("source_refs") if isinstance(row.get("source_refs"), list) else []
+        if row.get("url"):
+            refs = [row, *refs]
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            url = str(ref.get("url") or ref.get("canonical_url") or "").strip()
+            if not url:
+                continue
+            try:
+                sources._assert_public_http_url(url)
+            except sources.UnsafeSourceURL:
+                continue
+            key = store.canonical_discovery_key(url)
+            if not key or key in seen:
+                continue
+            title = str(
+                ref.get("title") or ref.get("headline") or row.get("title") or ""
+            ).strip()
+            publisher = str(
+                ref.get("publisher") or ref.get("outlet") or ref.get("source")
+                or "Marketing Node"
+            ).strip()
+            if not title:
+                continue
+            items.append({
+                "source": publisher[:120],
+                "title": " ".join(title.split())[:240],
+                "url": url,
+                "published": str(
+                    ref.get("published_at") or ref.get("observed_at") or ""
+                )[:100],
+                "summary": "",
+                "discovery_origin": "marketing_node",
+                "discovery_context": context,
+            })
+            seen.add(key)
+            if len(items) >= 12:
+                return items
+    return items
+
+
+def maybe_ingest_discovery(con) -> bool:
+    """Once per fresh EIC window, add its cited reads to the one-off intake."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if now.weekday() >= 5:
+        return False
+    for hhmm, title in config.EIC_DISCOVERY_SCHEDULE:
+        h, m = hhmm.split(":")
+        fire = now.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
+        if not (fire <= now < fire + datetime.timedelta(minutes=60)):
+            continue
+        key = f"node:eic_discovery:{now:%Y-%m-%d}:{title.lower()}"
+        if store.kv_get(con, key):
+            return False
+        payload = fetch_brief(title, now=now)
+        if not payload:
+            return False
+        items = _discovery_items(payload, title)
+        inserted = store.upsert_new_items(con, items)
+        store.kv_set(con, key, json.dumps({
+            "seen": len(items), "inserted": len(inserted), "at": now.isoformat(),
+        }, separators=(",", ":")))
+        log.info("EIC %s discovery: %d cited reads, %d new", title, len(items), len(inserted))
+        return True
+    return False
+
+
 def _brief_urls(text: str) -> set:
     return set(re.findall(r"https?://[^\s)\"']+", text))
 
@@ -151,16 +245,7 @@ def build_thread(brief_payload: dict, window_title: str, wire_items: list = None
     from . import brain  # late import to avoid cycle
     wire_items = wire_items or []
     brief = brief_payload["daily_brief"]
-    # The read API wraps strings as {"text":..., "truncated":...}; flatten.
-    def flat(v):
-        if isinstance(v, dict) and "text" in v:
-            return v["text"]
-        if isinstance(v, list):
-            return [flat(x) for x in v]
-        if isinstance(v, dict):
-            return {k: flat(x) for k, x in v.items()}
-        return v
-    brief = flat(brief)
+    brief = _flat(brief)
     source_text = _brief_text(brief)
     if wire_items:
         source_text += "\n\nWire items:\n" + "\n".join(

@@ -50,8 +50,8 @@ return no items until their own timer is due.
 | NBN poll of Marketing Node | Every 5 minutes | Each valid Wire Pulse is consumed once; pulse must be no more than three hours old |
 | Marketing Node Wire Pulse | Hourly, **5:00 a.m.-8:00 p.m. America/Chicago**, every day | Searches the preceding eight hours; returns at most 24 curated candidates |
 | Automatic research retry | Five minutes after a retryable fetch/search failure | At most one normal automatic retry after the initial attempt |
-| Morning Block | Weekdays at 14:40 UTC | 9:40 a.m. CDT / 8:40 a.m. CST; one-hour catch-up window |
-| Afternoon Block | Weekdays at 21:15 UTC | 4:15 p.m. CDT / 3:15 p.m. CST; one-hour catch-up window |
+| Morning EIC cited reads | Weekdays at 14:40 UTC | Enter ordinary one-off intake; one-hour catch-up window |
+| Afternoon EIC cited reads | Weekdays at 21:15 UTC | Enter ordinary one-off intake; one-hour catch-up window |
 
 Autopost does not affect discovery, triage, research, writing, or editing. It only changes
 the final Typefully delivery mode for copy that survives the complete funnel.
@@ -358,24 +358,16 @@ The same complete stack runs whether autopost is on or off.
 - **Researching/retry:** an external fetch or search failed transiently and will retry.
 - **Tape/failed/uncertain:** the publishing rail could not give a normal confirmed result.
 
-## 6. Morning and Afternoon Blocks
+## 6. Morning and Afternoon EIC discovery
 
-Blocks are a separate batch product, not another one-off candidate feed. On weekdays NBN
-fetches the latest Marketing Node EIC brief, removes Swan-specific framing, adds
-independent one-off wire items published since the previous Block, and builds a 5-9 post
-thread from citations already present in those inputs.
+The scheduled multi-story Blocks are disabled. On weekdays NBN still fetches the latest
+Marketing Node EIC brief at 14:40 and 21:15 UTC, verifies its date, window, source Daily Intel
+run, receipt timestamp, generation timestamp, and maximum age, then adds up to 12 cited
+`more_reads` links to ordinary one-off intake. Node prose remains an untrusted discovery aid,
+never evidence. Each story must be researched, selected, written, and edited independently.
 
-- Morning Block: 14:40 UTC.
-- Afternoon Block: 21:15 UTC.
-- Each has a one-hour catch-up window and a once-per-window database guard.
-- The morning brief follows the Node's 06:10 CT synthesis/EIC path. A successful 20:30
-  UTC PM Daily Intel run explicitly chains a quiet EIC refresh for the afternoon brief.
-- NBN verifies the brief's editorial date, morning/afternoon window, exact source Daily
-  Intel run ID and receipt timestamp, EIC generation timestamp, and maximum age. If any
-  field is missing or mismatched, the Block is not generated from the stale brief.
-
-If Wire Pulse v2 is healthy, the Daily Intel brief does not normally feed individual NBN
-posts. Its `more_reads` list is retained only as the Wire Pulse fallback described above.
+The former 5-9 post Block builder remains in `nbn/briefing.py` behind the explicit
+`NBN_BRIEFING_ENABLED=true` rollback/experiment flag. It is off by default and in production.
 
 ## 7. Current overlap and how to measure it
 

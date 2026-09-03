@@ -10,8 +10,9 @@ switch paging Brady on silence. Four stories found and published autonomously in
 first ~30 hours; two voice defects caught on the live timeline and made structurally
 impossible; zero factual errors; first editor verdict on record.
 
-**Monday 2026-08-31 is the real test**: first weekday news cycle — regulators awake,
-EDGAR flowing, the 14:40 UTC Morning Block firing on its own.
+The first weekday cycles showed that scheduled multi-story Blocks delayed and duplicated
+material that works better as timely one-offs. On 2026-09-03 the Block product was disabled;
+fresh EIC citations still feed the ordinary newsroom.
 
 ## Week 1 (launch weekend) — ALL SHIPPED ✅
 
@@ -38,14 +39,10 @@ intake gate · time-varying freshness · heartbeat/healthchecks · real logo + f
 **Build queue, in order:**
 1. **Editor casebook** — once ~a week of agree/overrule gradings exists, quote the best
    as precedents inside the editor prompt. The closest thing to training we have.
-2. **Block number cross-check** — verify the brief's figures against wire-verified items
-   and cited sources before threading (the "60%" fix). Prerequisite for promoting
-   `briefing` to autopost.
-3. **`briefing` autopost decision** — after ~5 good Blocks + the cross-check.
-4. **Data posts class** — computed from CoinGecko/mempool (daily close, difficulty,
+2. **Data posts class** — computed from CoinGecko/mempool (daily close, difficulty,
    halving milestones; ETF flows once Farside is read properly). Zero-hallucination
    cadence filler; activates the dormant `data` autopost class.
-5. **Small queued fixes**: no-verdict triage requeue · retry infra-failed verifications
+3. **Small queued fixes**: no-verdict triage requeue · retry infra-failed verifications
    (search-quota holds) · ⚠️ **regenerate the shared X bearer** (partial chat exposure
    8/30) and update Node + wire envs.
 
@@ -114,7 +111,7 @@ except what shipped.)*
 - Evidence-component refinement: replace greedy owner/artifact/near-copy collapse with
   connected components if live observe data shows bridge-chain false corroboration.
 - Editor casebook (precedent-quoting from Brady's gradings) — week 2 queue.
-- Block number cross-check → `briefing` autopost — week 2 queue.
+- Evaluate a single end-of-day recap only after one-off volume and reader demand justify it.
 - Data-posts generator — week 2 queue.
 - No-verdict triage requeue · infra-failed verification retry · X bearer regeneration.
 - X-API direct write path — only if Typefully's scheduled-post loophole closes.

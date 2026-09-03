@@ -36,7 +36,7 @@ every 60 seconds
        ├─ RSS + EDGAR → Haiku mailroom (priority / candidate / background)
        │                    └─ background is audited, not sent to Sonnet
        │
-       ├─ scheduled Morning/Afternoon Block and daily audit keep their own cadence
+       ├─ fresh AM/PM EIC citations enter one-off intake; daily audit keeps its cadence
        │
        └─ every 15 minutes, if the desk is non-empty
             fresh run-scoped Sonnet story desk
@@ -224,12 +224,14 @@ Cost is explicitly an estimate. The rate table version is
 `anthropic-public-2026-09-02-v1`; five-minute cache writes use the documented 1.25× input
 multiplier and cache hits use 0.1×.
 
-## Blocks and audit
+## EIC discovery, legacy Blocks, and audit
 
-The Morning and Afternoon Blocks keep their existing independent pipeline and strict legacy
-gates. Each Block requires a fresh, provenance-valid Marketing Node EIC brief inside the
-configured age window; stale briefs do not publish. The daily audit re-checks recent output
-and stages corrections for human review.
+Fresh, provenance-valid Morning and Afternoon Marketing Node EIC briefs remain discovery
+inputs. Their cited reads enter the ordinary one-off intake and must earn publication through
+the same newsroom and editor as every other candidate. The scheduled multi-story Block product
+is disabled by default; its implementation remains behind `NBN_BRIEFING_ENABLED=true` as a
+rollback/experiment path. The daily audit re-checks recent output and stages corrections for
+human review.
 
 ## Operations
 
@@ -243,6 +245,7 @@ and stages corrections for human review.
   `NBN_INTAKE_TRIAGE_MODE=off|observe|enforce`,
   `NBN_INTAKE_TRIAGE_MODEL=claude-haiku-4-5`,
   `NBN_INTAKE_TRIAGE_MAX_CALLS_PER_HOUR=8`,
+  `NBN_EIC_DISCOVERY_ENABLED`, `NBN_EIC_DISCOVERY_UTC`,
   `NBN_RUN_NEWSROOM_MODE=shadow|draft|live`, `NBN_AUTOPOST_ENABLED`,
   `NBN_AUTOPOST_CLASSES`, `NBN_EDITOR_MODEL`, and `NBN_SOURCE_POLICY_MODE`.
 - `NBN_EDITORIAL_ENGINE=v1` is a short-lived manual rollback switch only. It is never an

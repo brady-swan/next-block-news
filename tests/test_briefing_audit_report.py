@@ -32,6 +32,15 @@ def fresh_brief_payload(window="afternoon"):
             "source_daily_intel_run_id": 42,
             "source_daily_intel_received_at": "2026-08-31T20:30:00+00:00",
             "source_daily_intel_run_window": window,
+            "more_reads": [{
+                "title": {"text": "A cited Bitcoin development", "truncated": False},
+                "source_refs": [{
+                    "title": "A cited Bitcoin development",
+                    "publisher": "Primary Newsroom",
+                    "url": "https://example.com/cited-bitcoin-development",
+                    "published_at": "2026-08-31T20:31:00+00:00",
+                }],
+            }],
         },
     }
 
@@ -139,6 +148,23 @@ class AfternoonDateTime(datetime.datetime):
 
 
 class BriefingScheduleTests(unittest.TestCase):
+    def test_fresh_eic_reads_enter_one_off_intake_once(self):
+        with temporary_store() as con, \
+                patch.object(briefing.datetime, "datetime", AfternoonDateTime), \
+                patch.object(config, "EIC_DISCOVERY_SCHEDULE", [("21:15", "Afternoon")]), \
+                patch.object(briefing, "fetch_brief", return_value=fresh_brief_payload()):
+            self.assertTrue(briefing.maybe_ingest_discovery(con))
+            self.assertFalse(briefing.maybe_ingest_discovery(con))
+            row = con.execute(
+                "SELECT source,title,url,discovery_origin,discovery_context FROM items"
+            ).fetchone()
+        self.assertEqual(row["source"], "Primary Newsroom")
+        self.assertEqual(row["title"], "A cited Bitcoin development")
+        self.assertEqual(row["discovery_origin"], "marketing_node")
+        context = json.loads(row["discovery_context"])
+        self.assertTrue(context["untrusted_discovery_context"])
+        self.assertEqual(context["origin"], "marketing_node_eic_brief")
+
     def test_afternoon_block_has_sixty_minute_catch_up_window(self):
         with temporary_store() as con, \
                 patch.object(briefing.datetime, "datetime", AfternoonDateTime), \

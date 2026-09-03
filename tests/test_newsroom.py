@@ -701,6 +701,8 @@ class NewsroomCycleTests(unittest.TestCase):
             brain.consume_model_call(token)
             stack.enter_context(patch.object(publisher, "reconcile_publications"))
             stack.enter_context(patch.object(main, "_cycle_locked", return_value={"ok": 1}))
+            discovery_call = stack.enter_context(
+                patch.object(main.briefing, "maybe_ingest_discovery"))
             briefing_call = stack.enter_context(patch.object(main.briefing, "maybe_run"))
             stack.enter_context(patch.object(config, "NODE_READ_TOKEN", "configured"))
             stack.enter_context(patch.object(config, "AUDIT_UTC", ""))
@@ -708,6 +710,7 @@ class NewsroomCycleTests(unittest.TestCase):
         self.assertEqual(result, {"ok": 1})
         self.assertIsNone(brain._active_reservation.get())
         self.assertEqual(brain.reservation_remaining(token), 0)
+        discovery_call.assert_called_once()
         briefing_call.assert_called_once()
 
 

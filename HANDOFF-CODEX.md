@@ -193,8 +193,8 @@ PYTHONPATH=. NBN_DATA_DIR=/tmp/x railway run python3 test.py   # local pipeline 
 ## Open queue (in priority order)
 
 1. ⚠️ Regenerate the shared X bearer (Brady coordinates; update Node + wire envs).
-2. Watch the first full weekday cycle — Morning Block fires 14:40 UTC weekdays
-   (`nbn/briefing.py`, stages as DRAFT; number cross-check before it ever autoposts).
+2. Watch one-off conversion from the twice-daily fresh EIC cited reads; scheduled Blocks
+   were disabled on 2026-09-03 and remain only as an explicit rollback/experiment path.
 3. Grade-then-build (ROADMAP): editor casebook from Brady's gradings; no-verdict triage
    requeue; retry infra-failed verifications; data-posts lane design (own convention,
    never NEW).

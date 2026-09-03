@@ -28,7 +28,7 @@ poll -> RSS/EDGAR Haiku mailroom -> run-scoped Sonnet newsroom -> gates -> publi
 | `nbn/lint.py` | Scope, style, mention, URL, attribution, and number-integrity vetoes |
 | `nbn/editor.py` | Last-mile reader-value and feed-context judgment for autonomous posts |
 | `nbn/publisher.py` | Typefully-first output routing plus the daily tape |
-| `nbn/briefing.py` | Weekday Morning and Afternoon Block threads |
+| `nbn/briefing.py` | Fresh AM/PM EIC one-off discovery; legacy Block builder (disabled) |
 | `nbn/audit.py` | Daily receipt and class audit; stages material correction drafts |
 | `nbn/report.py` | Token-protected Desk report |
 | `nbn/main.py` | Poll loop, orchestration, health/status HTTP server |
@@ -145,7 +145,7 @@ code rollback. Once this release is installed, `python scripts/backup_db.py` is 
 online-backup command for later maintenance.
 
 The worker uses a short expiring SQLite lease, renewed by a background heartbeat, across
-news, briefing, and audit work. Overlapping deploy processes or an accidental `run_once`
+news, scheduled discovery, and audit work. Overlapping deploy processes or an accidental `run_once`
 invocation cannot execute external work concurrently, while an orphaned deploy lease
 expires within two minutes. Fresh persisted resolutions are reused across worker restarts.
 

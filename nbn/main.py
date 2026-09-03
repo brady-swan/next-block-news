@@ -227,10 +227,12 @@ def _lease_run(con, scheduled: bool) -> dict:
         publisher.reconcile_publications(con)
         result = _cycle_locked(con, owner)
         # The newsroom reservation belongs only to the one-off news cycle. Release any
-        # remainder before independent scheduled Block/audit work asks for model capacity.
+        # remainder before independent scheduled discovery/audit work asks for capacity.
         brain.release_active_model_reservation()
         if scheduled:
             if config.NODE_READ_TOKEN:
+                briefing.maybe_ingest_discovery(con)
+                # Legacy Block packaging is an explicit opt-in rollback path.
                 briefing.maybe_run(con)
             if config.AUDIT_UTC:
                 from . import audit
@@ -268,7 +270,7 @@ def cycle(con) -> dict:
 
 
 def worker_iteration(con) -> dict:
-    """Run news, briefing, and audit as one cross-process critical section."""
+    """Run news, scheduled EIC discovery, optional legacy Blocks, and audit under one lease."""
     return _lease_run(con, scheduled=True)
 
 
@@ -700,8 +702,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
 
     if config.EDITORIAL_ENGINE == "v2" and config.RUN_NEWSROOM_MODE != "off":
         from . import newsroom
-        # Intake, publication reconciliation, health, Blocks, and audits still run each
-        # minute. Only the expensive editorial seats are cadence-gated.
+        # Intake, publication reconciliation, health, EIC discovery, and audits still run
+        # each minute. Only the expensive editorial seats are cadence-gated.
         force_desk = bool(overrides or retry_verdicts)
         due = store.editorial_run_due(con, now=run_started, force=force_desk)
         if not due:

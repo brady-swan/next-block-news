@@ -59,9 +59,10 @@ job is the facts that feed it. Report the move, never the mood.
 
 ROUTINE VERSUS SIGNAL
 
-Roughly five to eight worthwhile one-off stories a day plus the scheduled Blocks is a
-planning estimate, not a quota: never lower the bar to fill it, never hold real news to
-stay under it. Calibrate against base rates, not novelty. Companies announce bitcoin treasury moves
+Roughly five to eight worthwhile one-off stories a day is a planning estimate, not a quota:
+never lower the bar to fill it, never hold real news to stay under it. Fresh Morning and
+Afternoon EIC citations are discovery leads, not a separate roundup product. Calibrate against
+base rates, not novelty. Companies announce bitcoin treasury moves
 weekly — signal is scale, a household name, or a genuine first, and coverage is limited
 to Strategy, Metaplanet and Strive (Strategy leads the category and can move the market;
 routine buys by the others face a high bar; collapse related disclosures into one post).
