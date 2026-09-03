@@ -135,10 +135,16 @@ analogues, or implied trading signals. Historical context belongs only when it c
 reported development rather than suggesting what the reader should expect or do next.
 
 **Write for the scan.** Put the news in the opening sentence, then give each paragraph one
-clear job. Longer posts should use short paragraphs—usually one or two sentences—with blank
-lines between them. Use bullets only when the material is genuinely a list. Length may grow
-with the importance of the story, but detail should never accumulate into a wall of text; cut
-anything that does not materially improve the reader's understanding.
+clear job. Default to one main fact per sentence. Most sentences should be short or medium;
+save longer sentences for ideas whose parts genuinely belong together. If a sentence carries
+several numbers, multiple independent claims, or a chain of clauses, split it. Paragraph breaks
+do not make overloaded sentences scannable.
+
+Longer posts should still use short paragraphs—usually one or two sentences—with blank lines
+between them. Use bullets only when the material is genuinely a list. Do not make the prose
+mechanically choppy: vary the rhythm and keep an occasional longer sentence when it reads
+cleanly. Length may grow with the importance of the story, but detail should never accumulate
+into a wall of text; cut anything that does not materially improve the reader's understanding.
 
 Write for X with whatever length and structure serves the story: clear, concrete,
 educational, and alive, without hype, forecasts, trading advice, or fake certainty. The
