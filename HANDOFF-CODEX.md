@@ -31,6 +31,19 @@ the first SerpAPI 429 opens a run-local circuit instead of wasting research turn
 `SYSTEM.md` and `PLAN-0051-EDITORIAL-FLOW-RELIABILITY.md` for the current contract; the older
 pipeline/doctrine sections below are historical context, not v2 authority.
 
+**Plan 0051 live proof:** NBN commits `854e4f8`, `3772a39`, and `37fa47e` shipped in
+Railway deployment `dd614f64-f672-4ed2-84a6-18485d2cf994`. The first smoke exposed that
+Anthropic's strict-tool subset rejects JSON Schema `maxItems`; all candidates deferred safely,
+the unsupported keywords were removed, and the same bounds remain explicit in the prompt and
+enforced in code. The next natural 25-item run (`cycle:1788467199:c93f9a5a`) completed six desk
+rounds and one editor call, inspected eight pages, and created two terminal story commits. The
+editor dropped an unreliable market-cap comparison and approved Pocket Bitcoin's incident
+disclosure, which landed in Typefully as draft `10614819` because autopublish remained off.
+One SerpAPI failure opened the circuit: two model search requests caused only one HTTP attempt,
+and the run continued with `search_degraded=true`. Production database integrity is `ok`, the
+largest current workbench is below 70 KiB, the Desk exposes both commit states and search
+degradation, and the complete Python 3.13 suite passes 301 tests.
+
 **Live proof, 2026-09-02:** commits `3956883`, `e51ca8d`, and `7ae5f10` are deployed in
 Railway deployment `58d2d08d-519d-4406-94ad-390501759b3a`. The first non-empty live v2
 run reviewed 38 eligible candidates, used six Sonnet desk rounds plus one independent

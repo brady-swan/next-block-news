@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-02. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-03. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It ingests news every minute, opens a fresh Sonnet
