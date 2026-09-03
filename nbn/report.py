@@ -595,8 +595,11 @@ def render(con, day: str = None) -> str:
             commit_bits.append(_esc(label))
         out.append(
             "<div class=metaline><b>Latest newsroom lifecycle</b> · "
-            f"{_esc(latest_newsroom['run_id'])} · "
+            f"{_esc(latest_newsroom['run_id'])} · {_esc(latest_newsroom['status'])} · "
             + ("<br>".join(commit_bits) if commit_bits else "no dossier stories")
+            + (f"<br><b>Run issue</b> · {_esc(latest_newsroom['error_kind'])}: "
+               f"{_esc(latest_newsroom['error_message'])}"
+               if latest_newsroom["error_kind"] else "")
             + "</div>"
         )
     try:
@@ -801,9 +804,9 @@ def render(con, day: str = None) -> str:
                 f"{_bounded_count(newsroom_run.get('fetches', 0))} fetches · "
                 f"{_bounded_count(newsroom_run.get('search_http_attempts', 0))} search HTTP"
                 + (" · search degraded" if newsroom_run.get("search_degraded") else "")
-                + (f"<br><b>Fallback</b> · {_esc(newsroom_run.get('error_kind'))}: "
+                + (f"<br><b>Run issue</b> · {_esc(newsroom_run.get('error_kind'))}: "
                    f"{_esc(newsroom_run.get('error'))}"
-                   if newsroom_run.get("status") == "fallback" else "")
+                   if newsroom_run.get("status") in {"fallback", "deferred"} else "")
                 + "</div>"
             )
         out.append("<div class=hstack>")

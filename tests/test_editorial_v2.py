@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from contextlib import ExitStack
 
 from nbn import (
-    brain, config, editor, lint, main, newsroom, publisher, search, source_policy, sources, store,
+    brain, config, editor, lint, main, newsroom, publisher, report, search, source_policy, sources, store,
     verify,
 )
 from tests.support import temporary_store
@@ -794,6 +794,27 @@ class EditorialV2Tests(unittest.TestCase):
             self.assertEqual(commit["state"], "observed")
             self.assertEqual(json.loads(commit["details_json"])["shadow"],
                              "shadow_observation_only")
+
+    def test_desk_escapes_and_exposes_latest_commit_and_run_issue(self):
+        with temporary_store() as con:
+            store.start_newsroom_run(
+                con, "run:<unsafe>", "live", config.ANTHROPIC_MODEL,
+                newsroom.PROMPT_VERSION, ["candidate"],
+            )
+            store.init_newsroom_story_commits(con, "run:<unsafe>", [{
+                "story_id": "story:<unsafe>", "state": "held",
+                "details": {"reason": "defer:<unsafe>", "warnings": ["warn"]},
+            }], "c" * 64)
+            store.set_newsroom_state(
+                con, "run:<unsafe>", "deferred", error_kind="Bad<Request>",
+                error_message="schema <failed>", counters={},
+            )
+            html = report.render(con)
+            self.assertIn("Latest newsroom lifecycle", html)
+            self.assertIn("Run issue", html)
+            self.assertIn("run:&lt;unsafe&gt;", html)
+            self.assertIn("schema &lt;failed&gt;", html)
+            self.assertNotIn("schema <failed>", html)
 
     def test_editor_payload_bound_preserves_selected_receipts_and_defers_whole_cards(self):
         body = "Bitcoin evidence. " * 470
