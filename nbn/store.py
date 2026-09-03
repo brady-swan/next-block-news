@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS newsroom_story_commits (
   state TEXT NOT NULL,
   dossier_digest TEXT NOT NULL,
   delivery_ref TEXT,
+  details_json TEXT NOT NULL DEFAULT '{}',
   updated_at REAL NOT NULL,
   PRIMARY KEY(run_id, story_id)
 );
@@ -194,6 +195,7 @@ CREATE TABLE IF NOT EXISTS newsroom_story_memory (
   canonical_key TEXT PRIMARY KEY,
   state TEXT NOT NULL,
   attempts_json TEXT NOT NULL DEFAULT '[]',
+  evidence_pool_json TEXT NOT NULL DEFAULT '[]',
   editor_json TEXT NOT NULL DEFAULT '{}',
   delivery_json TEXT NOT NULL DEFAULT '{}',
   created_at REAL NOT NULL,
@@ -272,6 +274,14 @@ NODE_RUN_COLUMNS = {
     "diagnostics_json": "TEXT NOT NULL DEFAULT '{}'",
 }
 
+NEWSROOM_COMMIT_COLUMNS = {
+    "details_json": "TEXT NOT NULL DEFAULT '{}'",
+}
+
+NEWSROOM_MEMORY_COLUMNS = {
+    "evidence_pool_json": "TEXT NOT NULL DEFAULT '[]'",
+}
+
 
 def _ensure_post_columns(con):
     """Apply additive post migrations without masking unexpected SQLite failures."""
@@ -312,6 +322,18 @@ def _ensure_node_run_columns(con):
     for name, declaration in NODE_RUN_COLUMNS.items():
         if name not in existing:
             con.execute(f"ALTER TABLE node_discovery_runs ADD COLUMN {name} {declaration}")
+    con.commit()
+
+
+def _ensure_newsroom_columns(con):
+    for table, columns in (
+        ("newsroom_story_commits", NEWSROOM_COMMIT_COLUMNS),
+        ("newsroom_story_memory", NEWSROOM_MEMORY_COLUMNS),
+    ):
+        existing = {r["name"] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, declaration in columns.items():
+            if name not in existing:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
     con.commit()
 
 
@@ -633,8 +655,10 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "error_kind": str(newsroom.get("error_kind") or "")[:80],
             "error": str(newsroom.get("error") or "")[:500],
             **{key: safe_count(newsroom.get(key, 0)) for key in (
-                "rounds", "tool_calls", "searches", "fetches", "fetch_chars",
+                "rounds", "tool_calls", "searches", "search_http_attempts",
+                "search_failures", "fetches", "fetch_chars",
                 "duration_seconds", "stories")},
+            "search_degraded": bool(newsroom.get("search_degraded")),
         }
     for field, allowed in (
         ("resolver_paths", {"direct", "node_ref", "guide_ref", "serpapi", "hosted_web",
@@ -704,6 +728,7 @@ def connect() -> sqlite3.Connection:
     _ensure_post_columns(con)
     _ensure_item_columns(con)
     _ensure_node_run_columns(con)
+    _ensure_newsroom_columns(con)
     return con
 
 
@@ -1100,25 +1125,74 @@ def set_newsroom_state(con, run_id: str, status: str, *, error_kind: str = "",
     con.commit()
 
 
-def init_newsroom_story_commits(con, run_id: str, story_ids: list[str], digest: str) -> None:
+_NEWSROOM_STORY_STATES = {"pending", "materialized", "delivered", "held", "observed"}
+_NEWSROOM_COMMIT_DETAILS_MAX_BYTES = 12 * 1024
+
+
+def _bounded_commit_details(value: dict | None) -> str:
+    payload = value if isinstance(value, dict) else {}
+    encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode("utf-8")) <= _NEWSROOM_COMMIT_DETAILS_MAX_BYTES:
+        return encoded
+    fallback = {
+        "validation": str(payload.get("validation") or "")[:80],
+        "reason": _utf8_prefix(payload.get("reason"), 1000),
+        "warnings": [str(v)[:300] for v in list(payload.get("warnings") or [])[:8]],
+        "editor": {
+            "verdict": str((payload.get("editor") or {}).get("verdict") or "")[:40],
+            "reason": _utf8_prefix((payload.get("editor") or {}).get("reason"), 1000),
+        } if isinstance(payload.get("editor"), dict) else None,
+        "delivery": payload.get("delivery") if isinstance(payload.get("delivery"), dict) else None,
+    }
+    encoded = json.dumps(fallback, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode("utf-8")) <= _NEWSROOM_COMMIT_DETAILS_MAX_BYTES:
+        return encoded
+    # Never byte-slice serialized JSON: diagnostics must remain parseable even when an
+    # upstream model returns pathologically large metadata.
+    return json.dumps({
+        "validation": fallback["validation"],
+        "reason": _utf8_prefix(fallback["reason"], 500),
+        "details_truncated": True,
+    }, separators=(",", ":"), ensure_ascii=False)
+
+
+def init_newsroom_story_commits(con, run_id: str, stories: list, digest: str) -> None:
     now = time.time()
-    for story_id in story_ids:
+    for raw in stories:
+        if isinstance(raw, dict):
+            story_id = str(raw.get("story_id") or "")[:80]
+            state = str(raw.get("state") or "pending")
+            details = _bounded_commit_details(raw.get("details"))
+        else:
+            story_id, state, details = str(raw or "")[:80], "pending", "{}"
+        if not story_id:
+            continue
+        if state not in _NEWSROOM_STORY_STATES:
+            raise ValueError("invalid newsroom story state")
         con.execute(
             "INSERT OR IGNORE INTO newsroom_story_commits(run_id,story_id,state,"
-            "dossier_digest,updated_at) VALUES (?,?,'pending',?,?)",
-            (run_id, str(story_id)[:80], digest[:64], now),
+            "dossier_digest,details_json,updated_at) VALUES (?,?,?,?,?,?)",
+            (run_id, story_id, state, digest[:64], details, now),
         )
     con.commit()
 
 
 def set_newsroom_story_state(con, run_id: str, story_id: str, state: str,
-                             delivery_ref: str = "") -> None:
-    if state not in {"pending", "materialized", "delivered", "held"}:
+                             delivery_ref: str = "", details: dict | None = None) -> None:
+    if state not in _NEWSROOM_STORY_STATES:
         raise ValueError("invalid newsroom story state")
+    row = con.execute(
+        "SELECT details_json FROM newsroom_story_commits WHERE run_id=? AND story_id=?",
+        (run_id, story_id),
+    ).fetchone()
+    current = _safe_json_object(row["details_json"]) if row else {}
+    if isinstance(details, dict):
+        current.update(details)
     con.execute(
-        "UPDATE newsroom_story_commits SET state=?,delivery_ref=?,updated_at=?"
+        "UPDATE newsroom_story_commits SET state=?,delivery_ref=?,details_json=?,updated_at=?"
         " WHERE run_id=? AND story_id=?",
-        (state, str(delivery_ref or "")[:200], time.time(), run_id, story_id),
+        (state, str(delivery_ref or "")[:200], _bounded_commit_details(current),
+         time.time(), run_id, story_id),
     )
     con.commit()
 
@@ -1141,9 +1215,11 @@ def prune_newsroom_runs(con, days: float = 14.0) -> None:
 
 _STORY_MEMORY_STATES = {"research_pending", "editor_feedback", "delivered", "dropped"}
 _STORY_MEMORY_TTL_SECONDS = 72 * 3600
-_STORY_MEMORY_ATTEMPT_MAX_BYTES = 80 * 1024
+_STORY_MEMORY_ATTEMPT_MAX_BYTES = 18 * 1024
+_STORY_MEMORY_EVIDENCE_POOL_MAX_BYTES = 70 * 1024
 _STORY_MEMORY_ROW_MAX_BYTES = 96 * 1024
 _STORY_MEMORY_MAX_ATTEMPTS = 12
+_STORY_MEMORY_MAX_EVIDENCE = 8
 
 
 def _utf8_prefix(value, max_bytes: int) -> str:
@@ -1182,12 +1258,10 @@ def _bounded_memory_attempt(raw: dict) -> dict:
 
 
 def _compact_memory_attempts(attempts: list[dict]) -> str:
-    """Keep recent detail while enforcing a hard serialized-row budget."""
+    """Keep recent editorial history; full evidence text lives in the shared pool."""
     rows = [_bounded_memory_attempt(row) for row in attempts if isinstance(row, dict)]
     rows = rows[-_STORY_MEMORY_MAX_ATTEMPTS:]
-    # Full evidence text is useful for the current attempt. Historical attempts retain
-    # provenance and fingerprints without multiplying the row size.
-    for row in rows[:-1]:
+    for row in rows:
         for evidence in row["evidence"]:
             evidence["text"] = ""
 
@@ -1195,18 +1269,64 @@ def _compact_memory_attempts(attempts: list[dict]) -> str:
         return json.dumps(rows, separators=(",", ":"), ensure_ascii=False)
 
     value = encoded()
-    if len(value.encode("utf-8")) > _STORY_MEMORY_ATTEMPT_MAX_BYTES:
-        for evidence in rows[-1].get("evidence", []) if rows else []:
-            evidence["text"] = evidence["text"][:4096]
-        value = encoded()
-    if len(value.encode("utf-8")) > _STORY_MEMORY_ATTEMPT_MAX_BYTES:
-        for evidence in rows[-1].get("evidence", []) if rows else []:
-            evidence["text"] = evidence["text"][:1024]
-        value = encoded()
     while rows and len(value.encode("utf-8")) > _STORY_MEMORY_ATTEMPT_MAX_BYTES:
         rows.pop(0)
         value = encoded()
     return value if len(value.encode("utf-8")) <= _STORY_MEMORY_ATTEMPT_MAX_BYTES else "[]"
+
+
+def _bounded_memory_evidence(raw: dict) -> dict:
+    return {
+        "inspected_at": round(float(raw.get("inspected_at") or time.time()), 3),
+        "requested_url": str(raw.get("requested_url") or "")[:2000],
+        "final_url": str(raw.get("final_url") or "")[:2000],
+        "canonical_url": str(raw.get("canonical_url") or raw.get("final_url") or "")[:2000],
+        "source_label": str(raw.get("source_label") or "")[:160],
+        "byline": str(raw.get("byline") or "")[:200],
+        "content_fingerprint": str(raw.get("content_fingerprint") or "")[:400],
+        "text": _utf8_prefix(raw.get("text"), 8192),
+    }
+
+
+def _merge_memory_evidence(*groups: list[dict]) -> str:
+    """Merge newest evidence without allowing mirrors to create fake independence."""
+    rows = []
+    for group in groups:
+        rows.extend(_bounded_memory_evidence(raw) for raw in group if isinstance(raw, dict))
+    rows.sort(key=lambda row: float(row.get("inspected_at") or 0), reverse=True)
+    kept = []
+    seen_urls: set[str] = set()
+    seen_fingerprints: set[str] = set()
+    for row in rows:
+        url = source_policy.normalize_url(row.get("canonical_url") or row.get("final_url") or "")
+        fingerprint = str(row.get("content_fingerprint") or "")
+        if not row.get("text") or not url or url in seen_urls:
+            continue
+        if fingerprint and fingerprint in seen_fingerprints:
+            continue
+        row["canonical_url"] = url
+        seen_urls.add(url)
+        if fingerprint:
+            seen_fingerprints.add(fingerprint)
+        kept.append(row)
+        if len(kept) >= _STORY_MEMORY_MAX_EVIDENCE:
+            break
+
+    def encoded() -> str:
+        return json.dumps(kept, separators=(",", ":"), ensure_ascii=False)
+
+    value = encoded()
+    # Preserve provenance cards and newest evidence longest; trim older bodies first.
+    for limit in (4096, 2048, 1024, 0):
+        if len(value.encode("utf-8")) <= _STORY_MEMORY_EVIDENCE_POOL_MAX_BYTES:
+            break
+        for row in reversed(kept[1:]):
+            row["text"] = _utf8_prefix(row.get("text"), limit)
+        value = encoded()
+    while kept and len(value.encode("utf-8")) > _STORY_MEMORY_EVIDENCE_POOL_MAX_BYTES:
+        kept.pop()
+        value = encoded()
+    return value if len(value.encode("utf-8")) <= _STORY_MEMORY_EVIDENCE_POOL_MAX_BYTES else "[]"
 
 
 def _safe_json_object(value: str) -> dict:
@@ -1225,6 +1345,99 @@ def _safe_json_array(value: str) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
+def _story_memory_size(key: str, state: str, attempts: str, evidence: str,
+                       editor: str, delivery: str) -> int:
+    return sum(len(str(value or "").encode("utf-8")) for value in (
+        key, state, attempts, evidence, editor, delivery,
+    ))
+
+
+def _fit_story_memory_row(key: str, state: str, attempts_json: str,
+                          evidence_json: str, editor_json: str,
+                          delivery_json: str) -> tuple[str, str, str, str]:
+    """Enforce the total durable-workbench ceiling without corrupting JSON.
+
+    Attempt history is compacted before reusable evidence. If exceptional URL metadata
+    still makes the row too large, older evidence bodies are shortened before cards are
+    removed. The newest valid receipt is the last thing sacrificed.
+    """
+    attempts = _safe_json_array(attempts_json)
+    evidence = _safe_json_array(evidence_json)
+    editor = _safe_json_object(editor_json)
+    delivery = _safe_json_object(delivery_json)
+
+    def encode(value) -> str:
+        return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+    def values() -> tuple[str, str, str, str]:
+        return encode(attempts), encode(evidence), encode(editor), encode(delivery)
+
+    def too_large() -> bool:
+        current = values()
+        return _story_memory_size(key, state, *current) > _STORY_MEMORY_ROW_MAX_BYTES
+
+    while len(attempts) > 1 and too_large():
+        attempts.pop(0)
+    if too_large() and attempts:
+        latest = attempts[-1]
+        attempts[:] = [{
+            "at": latest.get("at"), "story_id": latest.get("story_id", ""),
+            "members": list(latest.get("members") or [])[:25],
+            "submitted_story_key": latest.get("submitted_story_key", ""),
+            "existing_cluster_key": latest.get("existing_cluster_key", ""),
+            "proposed_post": _utf8_prefix(latest.get("proposed_post"), 2048),
+            "failure": str(latest.get("failure") or "")[:500],
+            "objective": str(latest.get("objective") or "")[:500],
+            "evidence": list(latest.get("evidence") or [])[:8],
+        }]
+    if too_large() and editor.get("post"):
+        editor["post"] = _utf8_prefix(editor.get("post"), 2048)
+        editor["post_truncated"] = True
+    for limit in (2048, 1024, 0):
+        if not too_large():
+            break
+        for row in reversed(evidence[1:]):
+            if isinstance(row, dict):
+                row["text"] = _utf8_prefix(row.get("text"), limit)
+    while len(evidence) > 1 and too_large():
+        evidence.pop()
+    if too_large() and evidence and isinstance(evidence[0], dict):
+        evidence[0]["text"] = _utf8_prefix(evidence[0].get("text"), 2048)
+        evidence[0]["text_truncated_for_row_bound"] = True
+    if too_large() and attempts:
+        latest = attempts[-1]
+        attempts[:] = [{
+            "at": latest.get("at"), "story_id": latest.get("story_id", ""),
+            "failure": latest.get("failure", ""),
+            "objective": _utf8_prefix(latest.get("objective"), 300),
+            "evidence": [], "details_truncated_for_row_bound": True,
+        }]
+    # The field-level bounds above make this final branch extraordinarily defensive.
+    # Keep valid JSON and provenance rather than ever writing an oversized/corrupt row.
+    if too_large():
+        evidence = []
+    return values()
+
+
+def _enforce_story_memory_row_bound(con, canonical_key: str) -> None:
+    row = con.execute(
+        "SELECT canonical_key,state,attempts_json,evidence_pool_json,editor_json,delivery_json"
+        " FROM newsroom_story_memory WHERE canonical_key=?",
+        (canonical_key,),
+    ).fetchone()
+    if not row:
+        return
+    fields = _fit_story_memory_row(
+        row["canonical_key"], row["state"], row["attempts_json"],
+        row["evidence_pool_json"], row["editor_json"], row["delivery_json"],
+    )
+    con.execute(
+        "UPDATE newsroom_story_memory SET attempts_json=?,evidence_pool_json=?,"
+        "editor_json=?,delivery_json=? WHERE canonical_key=?",
+        (*fields, canonical_key),
+    )
+
+
 def save_newsroom_story_attempt(con, canonical_key: str, state: str, attempt: dict,
                                 *, now: float | None = None) -> None:
     """Append one bounded editorial attempt to an informational story workbench."""
@@ -1234,22 +1447,33 @@ def save_newsroom_story_attempt(con, canonical_key: str, state: str, attempt: di
     if not key:
         return
     current = con.execute(
-        "SELECT attempts_json,created_at FROM newsroom_story_memory WHERE canonical_key=?",
+        "SELECT attempts_json,evidence_pool_json,created_at FROM newsroom_story_memory"
+        " WHERE canonical_key=?",
         (key,),
     ).fetchone()
     attempts = _safe_json_array(current["attempts_json"]) if current else []
+    pool = _safe_json_array(current["evidence_pool_json"]) if current else []
+    if not pool:
+        pool = [
+            evidence for prior in reversed(attempts) if isinstance(prior, dict)
+            for evidence in list(prior.get("evidence") or []) if isinstance(evidence, dict)
+        ]
+    evidence_pool = _merge_memory_evidence(pool, list(attempt.get("evidence") or []))
     attempts.append(attempt)
     stamp = float(now if now is not None else time.time())
     con.execute(
-        "INSERT INTO newsroom_story_memory(canonical_key,state,attempts_json,editor_json,"
-        "delivery_json,created_at,updated_at,expires_at) VALUES (?,?,?,'{}','{}',?,?,?)"
+        "INSERT INTO newsroom_story_memory(canonical_key,state,attempts_json,evidence_pool_json,"
+        "editor_json,delivery_json,created_at,updated_at,expires_at)"
+        " VALUES (?,?,?,?,'{}','{}',?,?,?)"
         " ON CONFLICT(canonical_key) DO UPDATE SET state=excluded.state,"
-        "attempts_json=excluded.attempts_json,updated_at=excluded.updated_at,"
+        "attempts_json=excluded.attempts_json,evidence_pool_json=excluded.evidence_pool_json,"
+        "updated_at=excluded.updated_at,"
         "expires_at=excluded.expires_at",
-        (key, state, _compact_memory_attempts(attempts),
+        (key, state, _compact_memory_attempts(attempts), evidence_pool,
          float(current["created_at"]) if current else stamp, stamp,
          stamp + _STORY_MEMORY_TTL_SECONDS),
     )
+    _enforce_story_memory_row_bound(con, key)
     con.commit()
 
 
@@ -1270,6 +1494,7 @@ def save_newsroom_editor_feedback(con, canonical_key: str, *, verdict: str, reas
         " WHERE canonical_key=?",
         (state, payload, stamp, stamp + _STORY_MEMORY_TTL_SECONDS, key),
     )
+    _enforce_story_memory_row_bound(con, key)
     con.commit()
 
 
@@ -1290,6 +1515,7 @@ def save_newsroom_delivery(con, canonical_key: str, *, mode: str, backend_ref: s
         "expires_at=? WHERE canonical_key=?",
         (payload, stamp, stamp + _STORY_MEMORY_TTL_SECONDS, key),
     )
+    _enforce_story_memory_row_bound(con, key)
     con.commit()
 
 
@@ -1305,20 +1531,38 @@ def newsroom_story_memories(con, *, limit: int = 12, now: float | None = None) -
     out = []
     for row in rows:
         if sum(len(str(row[field] or "").encode("utf-8")) for field in (
-            "canonical_key", "state", "attempts_json", "editor_json", "delivery_json"
+            "canonical_key", "state", "attempts_json", "evidence_pool_json",
+            "editor_json", "delivery_json"
         )) > _STORY_MEMORY_ROW_MAX_BYTES:
             continue
         attempts = _safe_json_array(row["attempts_json"])
         if not attempts:
             continue
+        pool = _safe_json_array(row["evidence_pool_json"])
+        if not pool:
+            # Lazy additive migration: seed old rows from every surviving attempt,
+            # newest-first, while preserving original inspection timestamps.
+            seeded = [
+                evidence for prior in reversed(attempts) if isinstance(prior, dict)
+                for evidence in list(prior.get("evidence") or []) if isinstance(evidence, dict)
+            ]
+            encoded = _merge_memory_evidence(seeded)
+            pool = _safe_json_array(encoded)
+            if pool:
+                con.execute(
+                    "UPDATE newsroom_story_memory SET evidence_pool_json=? WHERE canonical_key=?",
+                    (encoded, row["canonical_key"]),
+                )
         out.append({
             "canonical_key": row["canonical_key"], "state": row["state"],
             "attempts": attempts[-_STORY_MEMORY_MAX_ATTEMPTS:],
+            "evidence_pool": pool[:_STORY_MEMORY_MAX_EVIDENCE],
             "editor": _safe_json_object(row["editor_json"]),
             "delivery": _safe_json_object(row["delivery_json"]),
             "created_at": float(row["created_at"]), "updated_at": float(row["updated_at"]),
             "expires_at": float(row["expires_at"]),
         })
+    con.commit()
     return out
 
 

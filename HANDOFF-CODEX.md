@@ -16,6 +16,21 @@ Tier 1/2 report; elevated claims need a primary artifact or two credible indepen
 The Desk exposes the live orientation brief and selected-day model token/cost telemetry.
 `NBN_EDITORIAL_ENGINE=v1` is a short-lived manual rollback switch only.
 
+**Operational update, 2026-09-03 (Plan 0051):** v2 now treats the source registry,
+corroboration count, semantic identity, freshness, numerical materiality, scope, and novelty as
+visible editorial inputs rather than hidden deterministic vetoes. Hard code rails are limited
+to safe/usable fetches, structural dossier integrity, exact-delivery idempotency, publisher
+constraints, unsupported verbatim quotations, verified mentions, investment instructions,
+worker lease, and the kill switch. Any safely fetched nonempty public page is inspectable and
+is labeled by evidence capability; social posts prove only what the account said, while
+aggregators and syndication never count as independent. The editor sees pooled receipts and may
+publish, revise, draft, or drop. Conflicting canonical families never merge and are forced to a
+human draft under an isolated review key. Story workbenches preserve up to eight receipts across
+retries under a 96 KiB row ceiling; every dossier story now has a visible commit lifecycle; and
+the first SerpAPI 429 opens a run-local circuit instead of wasting research turns. Read
+`SYSTEM.md` and `PLAN-0051-EDITORIAL-FLOW-RELIABILITY.md` for the current contract; the older
+pipeline/doctrine sections below are historical context, not v2 authority.
+
 **Live proof, 2026-09-02:** commits `3956883`, `e51ca8d`, and `7ae5f10` are deployed in
 Railway deployment `58d2d08d-519d-4406-94ad-390501759b3a`. The first non-empty live v2
 run reviewed 38 eligible candidates, used six Sonnet desk rounds plus one independent

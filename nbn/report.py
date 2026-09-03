@@ -528,6 +528,14 @@ def render(con, day: str = None) -> str:
         next_editorial = float(store.kv_get(con, "editorial:next_run_at") or 0)
     except ValueError:
         next_editorial = 0
+    latest_newsroom = store.latest_newsroom_run(con)
+    latest_story_commits = []
+    if latest_newsroom:
+        latest_story_commits = con.execute(
+            "SELECT story_id,state,details_json FROM newsroom_story_commits"
+            " WHERE run_id=? ORDER BY story_id LIMIT 25",
+            (latest_newsroom["run_id"],),
+        ).fetchall()
 
     out = ["<!doctype html><meta charset=utf-8>"
            "<meta name=viewport content='width=device-width,initial-scale=1'>"
@@ -570,6 +578,27 @@ def render(con, day: str = None) -> str:
         f" · estimated ${float(usage.get('estimated_cost_usd', 0) or 0):.4f}"
         f" · rates {_esc(store.MODEL_RATE_VERSION)}</div>"
     )
+    if latest_newsroom:
+        commit_bits = []
+        for row in latest_story_commits:
+            try:
+                detail = json.loads(row["details_json"] or "{}")
+            except (TypeError, ValueError):
+                detail = {}
+            warning_count = len(detail.get("warnings") or []) if isinstance(detail, dict) else 0
+            reason = str(detail.get("reason") or "")[:120] if isinstance(detail, dict) else ""
+            label = f"{row['story_id']}: {row['state']}"
+            if warning_count:
+                label += f" · {warning_count} warning{'s' if warning_count != 1 else ''}"
+            if reason:
+                label += f" · {reason}"
+            commit_bits.append(_esc(label))
+        out.append(
+            "<div class=metaline><b>Latest newsroom lifecycle</b> · "
+            f"{_esc(latest_newsroom['run_id'])} · "
+            + ("<br>".join(commit_bits) if commit_bits else "no dossier stories")
+            + "</div>"
+        )
     try:
         from .newsroom import ORIENTATION_BRIEF
         orientation = ORIENTATION_BRIEF
@@ -769,7 +798,9 @@ def render(con, day: str = None) -> str:
                 f"{_bounded_count(newsroom_run.get('stories', 0))} stories · "
                 f"{_bounded_count(newsroom_run.get('rounds', 0))} model rounds · "
                 f"{_bounded_count(newsroom_run.get('tool_calls', 0))} research tools · "
-                f"{_bounded_count(newsroom_run.get('fetches', 0))} fetches"
+                f"{_bounded_count(newsroom_run.get('fetches', 0))} fetches · "
+                f"{_bounded_count(newsroom_run.get('search_http_attempts', 0))} search HTTP"
+                + (" · search degraded" if newsroom_run.get("search_degraded") else "")
                 + (f"<br><b>Fallback</b> · {_esc(newsroom_run.get('error_kind'))}: "
                    f"{_esc(newsroom_run.get('error'))}"
                    if newsroom_run.get("status") == "fallback" else "")

@@ -112,19 +112,21 @@ One clean retry is allowed for a run-level model/transport failure. If that also
 items remain pending with a typed technical defer. V2 never automatically falls into the
 legacy triage/writer/resolver stack.
 
-Before evidence validation, v2 arbitrates exact-event identity. One canonical family already
-attached to the member items wins; conflicting families hold without merging. Sonnet may also
-select an exact key exposed by the coverage or continuity board. Only then may code register
-the newly proposed slug as an alias. There is no fuzzy automatic merge, and Node theme IDs
-remain too broad to serve as event keys.
+Before materialization, v2 reconciles exact-event identity. One canonical family already
+attached to the member items wins. If a proposed story crosses conflicting existing families,
+code does not merge or overwrite them: it creates an isolated review key, warns the editor,
+preserves every member key, and forces any resulting output to a Typefully draft. Sonnet may
+also select an exact key exposed by the coverage or continuity board. Only an unambiguous
+one-family match may register the newly proposed slug as an alias. There is no fuzzy automatic
+merge, and Node theme IDs remain too broad to serve as event keys.
 
 When research is incomplete, v2 retains the canonical key, proposed post, inspected evidence,
 and a code-mapped objective such as “find one independent second report.” The next fresh desk
 sees this on `continuity_board` and can continue rather than rediscovering the story. Stored
-evidence is citable for at most 24 hours and only after its fingerprint, public URL, current
-source classification, eligibility, and independence are recomputed. It receives a fresh
+evidence is citable for at most 24 hours and only after its fingerprint, public URL, and current
+source classification are recomputed. It receives a fresh
 run-owned `memory_*` fetch ID; stale or corrupt evidence cannot satisfy a gate.
-If final lint defers a story, the exact quote/scope/URL/length issue and inspected evidence
+If final lint defers a story, the exact verbatim-quote/URL/length issue and inspected evidence
 also become the next workbench objective rather than being reduced to a transient item note.
 
 ## Editorial doctrine
@@ -151,16 +153,20 @@ For a routine factual claim, one inspected official, original, Tier 1, or reliab
 report may be sufficient. Primary sources are preferred, not mandatory. The Block and
 CoinDesk are Tier 2 reporting sources in the registry.
 
-Allegations, hacks, crime, disputed claims, and consequential legal assertions need a
-primary artifact or two credible independent reports. Discovery tweets and search snippets
-never count as evidence. A named data provider must appear in inspected evidence.
+For allegations, hacks, crime, disputed claims, and consequential legal assertions, a primary
+artifact or two credible independent reports is the normal ideal. When that is unavailable,
+the editor may narrow and attribute the claim, route it to human draft, or drop it. Source count
+is not a hidden code veto. Discovery tweets and search snippets never count as evidence. A
+captured X post proves what that account said, not the underlying claim; aggregators, wrappers,
+and syndicated copies are not independent corroboration.
 
 The desk and editor may use all inspected receipts together. The linked receipt is the best
 useful source for the reader; it is not required to reproduce every harmless detail alone.
 The source registry is strong guidance rather than a closed universe: Sonnet may inspect and
 use a safely fetched public page outside the list, and the independent editor judges its
-credibility. Explicit aggregators, syndication, blocked pages, and social discovery posts
-remain tips only.
+credibility. Aggregators, syndication, and social posts carry explicit capability warnings;
+they are not silently promoted to official or independent evidence, but code does not veto a
+narrow, honestly attributed draft merely because the domain is absent from the registry.
 
 Numerical agreement is judged for meaning. `2.99%` may be written as “roughly 3%,” and
 `159.95` versus `160.1` does not fail merely because the strings differ. Verbatim quotations
@@ -173,7 +179,6 @@ V2 code blocks only what it can determine reliably:
 - unsafe/private URLs and dangerous redirects;
 - exact duplicate body or receipt delivery;
 - empty copy, embedded receipt URLs, excessive length;
-- clearly out-of-scope non-Bitcoin token coverage;
 - direct investment instructions;
 - unverified or excessive X mentions; and
 - verbatim quotations absent from all inspected receipts.
@@ -198,6 +203,10 @@ specific action is not contradicted by an older general intention; when current 
 supports a narrower accurate version, the editor should revise rather than drop useful news.
 Its bounded verdict, reason, and copy are retained as context for later related candidates.
 That feedback is not a hidden rejection rule.
+
+The editor payload is bounded to 256 KiB. Repeated evidence bodies are cataloged once; selected
+receipts and warnings take priority. If an entire candidate cannot fit without losing its
+selected receipt, it is staged as a human draft and labeled `editor_payload_capacity`.
 
 ## Delivery classes and safety
 
@@ -237,7 +246,14 @@ human review.
 
 - Database: `/data/nbn.db`; tape: `/data/tapes/`.
 - Cross-run story workbench: `newsroom_story_memory`, 72-hour row TTL, 24-hour evidence
-  eligibility, 12 attempts and roughly 96 KiB maximum serialized row size per event.
+  eligibility, eight pooled receipts, 12 attempts, and a 96 KiB maximum serialized row size
+  per event. A later empty retry cannot erase earlier valid inspected evidence.
+- Every dossier story has a `newsroom_story_commits` lifecycle row with bounded validation,
+  warning, editor, force-draft, and delivery details. Shadow observations terminate as
+  `observed`; `pending` means materialization is genuinely unfinished.
+- SerpAPI opens a run-local circuit after its first 429 or second transport failure. Later
+  calls return `search_unavailable_for_run` without spending more HTTP attempts; the Desk and
+  run counters expose the degraded state.
 - Health: `/health`; status: `/status`; owner Desk: token-gated `/report`.
 - Deploy: `railway up --detach` from this linked repository.
 - Important knobs: `NBN_EDITORIAL_ENGINE=v2`, `NBN_DESK_INTERVAL_SECONDS=900`,

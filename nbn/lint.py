@@ -132,8 +132,8 @@ def check(post: str, meta: dict, item: dict) -> list:
     return errors
 
 
-def check_v2(post: str, meta: dict, item: dict) -> list:
-    """Small, consequential hard rails for editorial core v2.
+def hard_rails_v2(post: str, meta: dict, item: dict) -> list:
+    """Small, consequential mechanical rails for editorial core v2.
 
     Freshness, semantic novelty, rounding, numerical materiality, and story importance
     are deliberately absent: those belong to the Sonnet desk and independent editor.
@@ -145,8 +145,6 @@ def check_v2(post: str, meta: dict, item: dict) -> list:
     if URL_RE.search(post):
         errors.append("URL in post body (the receipt is system-attached)")
     unquoted = _outside_quotes(post)
-    if m := NON_BITCOIN_TOKENS.search(unquoted):
-        errors.append(f"non-Bitcoin token/scope: {m.group(0)!r}")
     if any(value.lower() in post.lower() for value in (
             "you should buy", "time to buy", "buy the dip", "load up")):
         errors.append("investment instruction")
@@ -167,3 +165,28 @@ def check_v2(post: str, meta: dict, item: dict) -> list:
     if len(post) > 2800:
         errors.append(f"post too long ({len(post)} chars)")
     return errors
+
+
+def editorial_warnings_v2(post: str, meta: dict, item: dict) -> list:
+    """Concerns for the editor to judge; none of these may secretly veto delivery."""
+    if not post:
+        return []
+    warnings = []
+    unquoted = _outside_quotes(post)
+    if m := NON_BITCOIN_TOKENS.search(unquoted):
+        warnings.append(f"Bitcoin-scope ambiguity: {m.group(0)!r}")
+    if m := BANNED_WORDS.search(post):
+        warnings.append(f"hype/emotional framing: {m.group(0)!r}")
+    if m := FORECAST.search(post):
+        warnings.append(f"forecast/trading framing: {m.group(0)!r}")
+    if "?" in unquoted:
+        warnings.append("question/speculative framing")
+    if m := re.search(r"\bper\s+(BeInCrypto|CryptoPotato|U\.?Today|Coinpedia|AMBCrypto|"
+                      r"CryptoNews|NewsBTC|Bitcoinist|ZyCrypto|CoinGape)\b", post, re.I):
+        warnings.append(f"second-tier aggregator attribution: {m.group(1)!r}")
+    return warnings[:12]
+
+
+def check_v2(post: str, meta: dict, item: dict) -> list:
+    """Compatibility name for callers/tests; returns only hard v2 rails."""
+    return hard_rails_v2(post, meta, item)

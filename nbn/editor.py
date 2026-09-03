@@ -1,14 +1,5 @@
-"""The Editor: last-mile judgment before an autonomous publish.
-
-Runs AFTER every deterministic gate has passed. The gates check the post in isolation
-(facts, numbers, scope, style); the editor checks it against the FEED — the two things
-gates structurally cannot see: contextual duplication and craft. Born 2026-08-30 after
-two live incidents (triple attribution, duplicate lede) that were exactly this class.
-
-Powers: publish | revise (edit DOWNWARD only; re-linted, falls back to original on
-failure) | spike (held, with the editor's reasoning in the Desk Report — during tuning
-week Brady edits the editor).
-"""
+"""Independent editorial judgment between the run desk and the mechanical delivery shell."""
+import hashlib
 import json
 import logging
 import time
@@ -16,6 +7,8 @@ import time
 from . import config, lint, store
 
 log = logging.getLogger("nbn.editor")
+
+EDITOR_PAYLOAD_MAX_BYTES = 256 * 1024
 
 EDITOR_PROMPT = """You are the publishing editor of Next Block News, a Bitcoin news wire
 on X. A post has passed all factual and style gates and is seconds from publishing. You
@@ -83,7 +76,14 @@ For each candidate, use practical editorial judgment:
   unwise; drop true redundancy, unsupported material claims, non-stories, and bad framing;
 - routine factual claims may rest on one credible inspected official/Tier 1/Tier 2 receipt;
   allegations, hacks, crime, disputed claims, or consequential legal assertions need a
-  primary artifact or two credible independent reports;
+  primary artifact or two credible independent reports as the normal ideal. If the ideal is
+  unavailable, use judgment: narrow and attribute, route to human draft, or drop. Do not demand
+  unimpeachable proof when the supplied evidence supports useful, proportionate copy;
+- source capability labels and editorial_warnings are cautions to resolve, not automatic vetoes.
+  Unknown material is not first-party merely because someone calls it official. An inspected X
+  post proves what that account said, not the underlying claim. Aggregators, wrappers, and
+  syndicated copies are not independent corroboration;
+- mechanical_rails_to_fix are different: any final publish/revise copy must remove them;
 - all supplied inspected receipts may support the post together. The selected receipt is the
   link readers get, not a demand that one page reproduce every harmless detail;
 - judge rounding and numerical differences for materiality. Roughly 3% may describe 2.99%.
@@ -96,6 +96,10 @@ For each candidate, use practical editorial judgment:
 - if revision removes the actual new development and leaves only a static total or background
   fact, drop the story rather than publish a fact with no news peg;
 - preserve or improve effective structure and length. Do not add facts absent from evidence.
+
+The payload stores receipt bodies once in evidence_catalog. Each candidate names its
+selected_evidence_ref and inspected_evidence_refs; use those references to inspect every
+receipt available to that story. Never treat an absent catalog body as inspected evidence.
 
 Return ONLY JSON:
 {"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
@@ -199,6 +203,86 @@ def review_newsroom(post: str, item: dict, con, *, source_text: str,
     }
 
 
+def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[dict, list[str]]:
+    """Build one bounded evidence-deduplicated editor desk.
+
+    Selected evidence and warnings are never silently truncated. Candidates that cannot fit
+    retain their desk copy for a human Typefully draft outside the autonomous editor call.
+    """
+    catalog: dict[str, dict] = {}
+    cards = []
+    selected_refs: set[str] = set()
+    for candidate in candidates:
+        refs = []
+        selected_fetch_id = str((candidate.get("selected_receipt") or {}).get("fetch_id") or "")
+        selected_ref = ""
+        for evidence in list(candidate.get("inspected_evidence") or [])[:8]:
+            text = str(evidence.get("text") or "")[:8000]
+            fingerprint = str(evidence.get("content_fingerprint") or "")
+            key = fingerprint or hashlib.sha256(text.encode()).hexdigest()
+            if key not in catalog:
+                catalog[key] = {
+                    **evidence, "text": text,
+                    "evidence_ref": "evidence_" + hashlib.sha256(key.encode()).hexdigest()[:24],
+                }
+            ref = catalog[key]["evidence_ref"]
+            if ref not in refs:
+                refs.append(ref)
+            if str(evidence.get("fetch_id") or "") == selected_fetch_id:
+                selected_ref = ref
+                selected_refs.add(ref)
+        cards.append({
+            "story_id": candidate["story_id"], "post": candidate["post"],
+            "reader_value": candidate.get("reader_value", ""),
+            "selected_receipt": candidate.get("selected_receipt", {}),
+            "selected_evidence_ref": selected_ref,
+            "inspected_evidence_refs": refs,
+            "elevated_claim": bool(candidate.get("elevated_claim")),
+            "mechanical_rails_to_fix": candidate.get("mechanical_rails_to_fix", []),
+            "editorial_warnings": candidate.get("editorial_warnings", []),
+        })
+    feed = [{
+        "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
+        "class": r["class"], "post": r["body"][:1000],
+        "mode": r["mode"], "story_key": r["story_key"],
+        "performance_advisory": {
+            "impressions": (r.get("performance") or {}).get("impressions"),
+            "likes": (r.get("performance") or {}).get("likes"),
+            "reposts": (r.get("performance") or {}).get("reposts"),
+            "comments": (r.get("performance") or {}).get("comments"),
+            "metrics_as_of_epoch": r.get("performance_synced_at") or None,
+            "use": "weak_age_dependent_craft_signal_not_news_judgment",
+        },
+    } for r in recent]
+
+    def assemble(active_cards: list[dict]) -> dict:
+        used = {ref for card in active_cards for ref in card["inspected_evidence_refs"]}
+        return {
+            "candidates": active_cards,
+            "evidence_catalog": [row for row in catalog.values()
+                                 if row["evidence_ref"] in used],
+            "recent_feed_newest_first": feed,
+        }
+
+    active = list(cards)
+    payload = assemble(active)
+    if len(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()) \
+            > EDITOR_PAYLOAD_MAX_BYTES:
+        for evidence in catalog.values():
+            if evidence["evidence_ref"] not in selected_refs:
+                evidence["text"] = evidence["text"][:2000]
+        for row in feed:
+            row["post"] = row["post"][:300]
+        payload = assemble(active)
+    deferred = []
+    while active and len(json.dumps(
+            payload, separators=(",", ":"), ensure_ascii=False).encode()
+    ) > EDITOR_PAYLOAD_MAX_BYTES:
+        deferred.append(active.pop()["story_id"])
+        payload = assemble(active)
+    return payload, deferred
+
+
 def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                           reservation: str | None = None) -> dict:
     """One clean Sonnet editor call for the complete run; outage stages safe drafts."""
@@ -208,29 +292,9 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         limit=config.DESK_RECENT_FEED_LIMIT,
         modes=("IMMEDIATE", "DRAFT", "UNCERTAIN"),
     )
-    payload = {
-        "candidates": [{
-            "story_id": row["story_id"], "post": row["post"],
-            "reader_value": row.get("reader_value", ""),
-            "selected_receipt": row.get("selected_receipt", {}),
-            "inspected_evidence": row.get("inspected_evidence", [])[:8],
-            "elevated_claim": bool(row.get("elevated_claim")),
-            "code_notes_to_fix_before_delivery": row.get("hard_rail_notes_for_revision", []),
-        } for row in candidates],
-        "recent_feed_newest_first": [{
-            "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
-            "class": r["class"], "post": r["body"][:1000],
-            "mode": r["mode"], "story_key": r["story_key"],
-            "performance_advisory": {
-                "impressions": (r.get("performance") or {}).get("impressions"),
-                "likes": (r.get("performance") or {}).get("likes"),
-                "reposts": (r.get("performance") or {}).get("reposts"),
-                "comments": (r.get("performance") or {}).get("comments"),
-                "metrics_as_of_epoch": r.get("performance_synced_at") or None,
-                "use": "weak_age_dependent_craft_signal_not_news_judgment",
-            },
-        } for r in recent],
-    }
+    payload, payload_deferred = _batch_editor_payload(candidates, recent)
+    if not payload["candidates"]:
+        return {"ok": True, "decisions": {}, "payload_deferred": payload_deferred}
     called_at = time.monotonic()
     try:
         resp = brain._create(
@@ -248,7 +312,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         rows = out.get("decisions")
         if not isinstance(rows, list):
             raise ValueError("editor omitted decisions")
-        allowed = {row["story_id"] for row in candidates}
+        allowed = {row["story_id"] for row in payload["candidates"]}
         decisions = {}
         for row in rows:
             story_id = str(row.get("story_id") or "")
@@ -263,7 +327,8 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 "verdict": verdict, "post": final,
                 "reason": str(row.get("reason") or "")[:500],
             }
-        return {"ok": True, "decisions": decisions}
+        return {"ok": True, "decisions": decisions,
+                "payload_deferred": payload_deferred}
     except Exception as exc:  # noqa: BLE001 - preserve good desk work as drafts
         store.record_model_usage(
             con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
@@ -271,4 +336,5 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
             outcome="error",
         )
         log.warning("batch editor unavailable; staging candidates as drafts: %s", exc)
-        return {"ok": False, "error": str(exc)[:300], "decisions": {}}
+        return {"ok": False, "error": str(exc)[:300], "decisions": {},
+                "payload_deferred": payload_deferred}

@@ -146,6 +146,13 @@ def _finish_actions(con, item, state: str, result: str) -> None:
         store.finish_operator_action(con, action_id, state, result)
 
 
+def _v2_member_story_key(member: dict, draft: dict, output_key: str) -> str | None:
+    """Keep established families intact during an identity-conflict review draft."""
+    if draft.get("preserve_member_story_keys") and member.get("story_key"):
+        return None
+    return output_key
+
+
 def _hold(con, item, result, note):
     store.set_status(con, item["url_hash"], "held", item.get("story_key"), note[:300])
     store.finish_research_job(con, item["url_hash"])
@@ -389,7 +396,18 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         "prompt_version": newsroom.PROMPT_VERSION, **outcome.counters,
         "stories": len(outcome.dossier.get("stories") or []),
     }
+    commit_rows = outcome.story_commits or [
+        {"story_id": story_id, "state": "pending", "details": {"validation": "accepted"}}
+        for story_id in sorted(set(outcome.story_ids.values()))
+    ]
+    store.init_newsroom_story_commits(con, pipeline_run_id, commit_rows, outcome.digest)
     if config.RUN_NEWSROOM_MODE == "shadow":
+        for commit in commit_rows:
+            if commit.get("state") == "pending":
+                store.set_newsroom_story_state(
+                    con, pipeline_run_id, commit["story_id"], "observed",
+                    details={"shadow": "shadow_observation_only"},
+                )
         store.set_newsroom_state(con, pipeline_run_id, "completed", counters=outcome.counters)
         result["newsroom"]["status"] = "completed"
         store.record_decision_run(con, pending, outcome.verdicts, result, run_started,
@@ -404,7 +422,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             continue
         canonical_key = attempt["canonical_key"]
         submitted = attempt.get("submitted_story_key") or ""
-        if submitted and submitted != canonical_key:
+        if attempt.get("allow_alias", True) and submitted and submitted != canonical_key:
             canonical_key = store.register_story_alias(
                 con, submitted, canonical_key,
                 "editorial v2: validated same-event workbench identity",
@@ -417,8 +435,6 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         )
 
     store.set_newsroom_state(con, pipeline_run_id, "materializing")
-    valid_story_ids = sorted(set(outcome.story_ids.values()))
-    store.init_newsroom_story_commits(con, pipeline_run_id, valid_story_ids, outcome.digest)
 
     # Completed editorial drops are terminal; defers remain in the next clean desk.
     for verdict in outcome.verdicts:
@@ -446,7 +462,11 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         draft = outcome.drafts[anchor["url_hash"]]
         post = str(draft.get("post") or "").strip()
         source_text = str(draft.get("_source_text") or resolution.selected_text or "")
-        hard_errors = lint.check_v2(post, {"_source_text": source_text}, anchor)
+        hard_errors = lint.hard_rails_v2(post, {"_source_text": source_text}, anchor)
+        editorial_warnings = list(draft.get("editorial_warnings") or [])
+        editorial_warnings.extend(
+            lint.editorial_warnings_v2(post, {"_source_text": source_text}, anchor)
+        )
         evidence_ids = list(draft.get("evidence_fetch_ids") or [])
         fetches = [outcome.fetches[value] for value in evidence_ids
                    if value in outcome.fetches]
@@ -454,37 +474,61 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             note = "defer:no_inspected_evidence_materialized"
             for member in members:
                 store.defer_item(con, member["url_hash"], note,
-                                 story_key=resolution.story_key, stage="research",
+                                 story_key=_v2_member_story_key(
+                                     member, draft, resolution.story_key
+                                 ), stage="research",
                                  category="technical_defer")
             result["held"] += len(members)
-            store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held")
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, story_id, "held",
+                details={"validation": "held", "reason": note},
+            )
             continue
         selected = outcome.fetches.get(str(draft.get("selected_fetch_id") or ""), fetches[0])
         if store.exact_output_exists(con, post, selected.final_url):
             for member in members:
-                store.set_status(con, member["url_hash"], "skipped", resolution.story_key,
+                store.set_status(con, member["url_hash"], "skipped",
+                                 _v2_member_story_key(member, draft, resolution.story_key),
                                  "exact output or receipt already queued")
-            store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held")
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, story_id, "held",
+                details={"validation": "held", "reason": "exact_output_or_receipt_exists"},
+            )
             continue
         row = {
             "story_id": story_id, "post": post,
             "reader_value": draft.get("reader_value", ""),
-            "selected_receipt": {"url": selected.final_url,
+            "selected_receipt": {"fetch_id": selected.fetch_id,
+                                 "url": selected.final_url,
                                  "source": selected.source.display_name,
-                                 "tier": selected.source.tier},
+                                 "tier": selected.source.tier,
+                                 "receipt_role": selected.source.receipt_role,
+                                 "official": selected.source.official,
+                                 "evidence_capability": selected.evidence_capability},
             "inspected_evidence": [{"fetch_id": record.fetch_id,
                                     "source": record.source.display_name,
                                     "tier": record.source.tier,
+                                    "receipt_role": record.source.receipt_role,
+                                    "official": record.source.official,
+                                    "evidence_capability": record.evidence_capability,
+                                    "independent_report": record.independent_report,
+                                    "content_fingerprint": record.content_fingerprint,
                                     "url": record.final_url,
                                     "text": record.text[:8000]} for record in fetches],
             "elevated_claim": bool(draft.get("needs_second_source")),
-            "hard_rail_notes_for_revision": hard_errors,
+            "mechanical_rails_to_fix": hard_errors,
+            "editorial_warnings": list(dict.fromkeys(editorial_warnings))[:16],
         }
         candidates.append(row)
         candidate_rows[story_id] = {
             "members": members, "resolution": resolution, "draft": draft,
             "selected": selected, "fetches": fetches,
         }
+        store.set_newsroom_story_state(
+            con, pipeline_run_id, story_id, "pending",
+            details={"warnings": row["editorial_warnings"],
+                     "mechanical_rails": hard_errors},
+        )
 
     editorial = editor.review_newsroom_batch(
         candidates, con, run_id=pipeline_run_id, reservation=reservation,
@@ -494,7 +538,11 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         resolution = candidate["resolution"]
         selected = candidate["selected"]
         decision = editorial["decisions"].get(story_id)
-        if not editorial["ok"] or decision is None:
+        payload_deferred = story_id in set(editorial.get("payload_deferred") or [])
+        if payload_deferred:
+            verdict, post = "draft", candidate["draft"]["post"]
+            reason = "editor_payload_capacity"
+        elif not editorial["ok"] or decision is None:
             verdict, post = "draft", candidate["draft"]["post"]
             reason = ("editor unavailable; staged for review" if not editorial["ok"]
                       else "editor omitted story; staged for review")
@@ -504,15 +552,30 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         store.save_newsroom_editor_feedback(
             con, resolution.story_key, verdict=verdict, reason=reason, post=post,
         )
+        store.set_newsroom_story_state(
+            con, pipeline_run_id, story_id, "pending",
+            details={"editor": {"verdict": verdict, "reason": reason},
+                     "force_draft_reason": (
+                         candidate["draft"].get("force_draft_reason") or
+                         ("editor_payload_capacity" if payload_deferred else "")
+                     )},
+        )
         if verdict == "drop":
             for member in members:
-                store.set_status(con, member["url_hash"], "skipped", resolution.story_key,
+                store.set_status(con, member["url_hash"], "skipped",
+                                 _v2_member_story_key(
+                                     member, candidate["draft"], resolution.story_key
+                                 ),
                                  f"editor dropped: {reason}"[:300], stage="editor",
                                  category="editorial_drop")
-            store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held")
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, story_id, "held",
+                details={"editor": {"verdict": verdict, "reason": reason}},
+            )
             continue
-        errors = lint.check_v2(str(post or ""),
-                               {"_source_text": resolution.selected_text}, members[0])
+        errors = lint.hard_rails_v2(
+            str(post or ""), {"_source_text": resolution.selected_text}, members[0]
+        )
         if errors:
             store.save_newsroom_story_attempt(
                 con, resolution.story_key, "research_pending", {
@@ -543,20 +606,33 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 store.defer_item(
                     con, member["url_hash"],
                     ("defer:editor_hard_rail:" + "; ".join(errors))[:300],
-                    story_key=resolution.story_key, stage="hard_rail",
+                    story_key=_v2_member_story_key(
+                        member, candidate["draft"], resolution.story_key
+                    ), stage="hard_rail",
                     category="technical_defer",
                 )
             result["held"] += len(members)
-            store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held")
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, story_id, "held",
+                details={"validation": "held", "reason": "defer:editor_hard_rail",
+                         "mechanical_rails": errors,
+                         "editor": {"verdict": verdict, "reason": reason}},
+            )
             continue
-        independent = {record.source.independence_key for record in candidate["fetches"]}
+        independent = {
+            record.source.independence_key for record in candidate["fetches"]
+            if record.independent_report
+        }
         klass = ("primary" if selected.source.official else
                  "corroborated" if len(independent) >= 2 else "secondary")
         for member in members:
             store.persist_resolution(con, outcome.resolutions[member["url_hash"]],
                                      config.SOURCE_POLICY_MODE)
-        force_draft = (config.RUN_NEWSROOM_MODE == "draft" or verdict == "draft"
-                       or any(_action_ids(member) for member in members))
+        force_draft = (
+            config.RUN_NEWSROOM_MODE == "draft" or verdict == "draft"
+            or bool(candidate["draft"].get("force_draft_reason"))
+            or any(_action_ids(member) for member in members)
+        )
         if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
             raise RuntimeError("cycle lease lost before v2 delivery")
         mode, publisher_ref = publisher.publish(
@@ -566,8 +642,11 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                      "TAPE": ("taped", "taped")}
         status, counter = lifecycle.get(mode, ("failed", "failed"))
         for index, member in enumerate(members):
+            member_key = _v2_member_story_key(
+                member, candidate["draft"], resolution.story_key
+            )
             store.set_status(con, member["url_hash"], status if index == 0 else "skipped",
-                             resolution.story_key,
+                             member_key,
                              "" if index == 0 else "same story materialized from pooled evidence",
                              stage="delivery", category="output")
             _finish_actions(con, member, "completed", f"delivery result: {mode}")
@@ -581,7 +660,10 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         )
         store.set_newsroom_story_state(
             con, pipeline_run_id, story_id,
-            "delivered" if mode != "FAILED" else "held", publisher_ref or "")
+            "delivered" if mode != "FAILED" else "held", publisher_ref or "",
+            details={"delivery": {"mode": mode, "backend_ref": publisher_ref or ""},
+                     "editor": {"verdict": verdict, "reason": reason}},
+        )
         result[counter] += 1
 
     store.set_newsroom_state(con, pipeline_run_id, "completed", counters=outcome.counters)

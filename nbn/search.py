@@ -16,6 +16,10 @@ _SEARCH_URL = "https://serpapi.com/search.json"
 class SearchError(Exception):
     """A retryable SerpAPI transport or response failure."""
 
+    def __init__(self, message: str, *, kind: str = "transport"):
+        super().__init__(message)
+        self.kind = kind
+
 
 def google(query: str, *, max_results: int | None = None) -> list[dict]:
     """Return bounded Google organic results without model judgment.
@@ -53,20 +57,25 @@ def google(query: str, *, max_results: int | None = None) -> list[dict]:
                 follow_redirects=False,
             )
         except httpx.HTTPError as exc:
-            raise SearchError(f"serpapi transport error: {type(exc).__name__}") from exc
+            raise SearchError(
+                f"serpapi transport error: {type(exc).__name__}", kind="transport"
+            ) from exc
     finally:
         httpx_log.setLevel(prior_level)
     if not response.is_success:
-        raise SearchError(f"serpapi HTTP {response.status_code}")
+        raise SearchError(
+            f"serpapi HTTP {response.status_code}",
+            kind="rate_limited" if response.status_code == 429 else "http",
+        )
     try:
         body = response.json()
     except ValueError as exc:
-        raise SearchError("serpapi returned invalid JSON") from exc
+        raise SearchError("serpapi returned invalid JSON", kind="invalid_response") from exc
     if not isinstance(body, dict) or body.get("error"):
-        raise SearchError("serpapi returned an error response")
+        raise SearchError("serpapi returned an error response", kind="provider_error")
     metadata_status = (body.get("search_metadata") or {}).get("status")
     if metadata_status and metadata_status != "Success":
-        raise SearchError("serpapi search did not complete")
+        raise SearchError("serpapi search did not complete", kind="provider_error")
     return _organic_results(body, limit)
 
 
