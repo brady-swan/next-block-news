@@ -1,10 +1,12 @@
 """SQLite state: seen items, story-level dedup, post log."""
 import hashlib
 import datetime
+import ipaddress
 import json
 import sqlite3
 import time
 import unicodedata
+import uuid
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from . import config, guide_context, source_policy, theme_context
@@ -235,6 +237,8 @@ CREATE TABLE IF NOT EXISTS desk_preparations (
   research_objective TEXT NOT NULL DEFAULT '',
   source_leads_json TEXT NOT NULL DEFAULT '[]',
   related_keys_json TEXT NOT NULL DEFAULT '[]',
+  event_group TEXT NOT NULL DEFAULT '',
+  companion_anchor_hash TEXT,
   protection_reason TEXT,
   model TEXT NOT NULL,
   prompt_version TEXT NOT NULL,
@@ -251,6 +255,72 @@ CREATE INDEX IF NOT EXISTS idx_desk_prep_item_time
   ON desk_preparations(item_hash, prepared_at DESC);
 CREATE INDEX IF NOT EXISTS idx_desk_prep_route_time
   ON desk_preparations(effective_route, prepared_at DESC);
+CREATE TABLE IF NOT EXISTS search_provider_state (
+  provider TEXT PRIMARY KEY,
+  state TEXT NOT NULL DEFAULT 'unknown',
+  plan_name TEXT NOT NULL DEFAULT '',
+  plan_renewal_date TEXT NOT NULL DEFAULT '',
+  searches_per_month INTEGER,
+  this_month_usage INTEGER,
+  total_searches_left INTEGER,
+  this_hour_searches INTEGER,
+  last_hour_searches INTEGER,
+  account_rate_limit_per_hour INTEGER,
+  last_status_attempt_at REAL,
+  last_status_success_at REAL,
+  next_search_at REAL,
+  last_search_success_at REAL,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  error_kind TEXT,
+  error_message TEXT,
+  status_claim_token TEXT,
+  status_claimed_at REAL,
+  status_expires_at REAL,
+  probe_claim_token TEXT,
+  probe_claimed_at REAL,
+  probe_expires_at REAL,
+  updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS search_query_cache (
+  cache_key TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  engine TEXT NOT NULL,
+  normalized_query TEXT NOT NULL,
+  locale_gl TEXT NOT NULL,
+  locale_hl TEXT NOT NULL,
+  result_limit INTEGER NOT NULL,
+  page_start INTEGER NOT NULL,
+  results_json TEXT NOT NULL,
+  created_at REAL NOT NULL,
+  expires_at REAL NOT NULL,
+  hit_count INTEGER NOT NULL DEFAULT 0,
+  last_hit_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_search_cache_expiry
+  ON search_query_cache(expires_at);
+CREATE TABLE IF NOT EXISTS search_result_pointers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope_type TEXT NOT NULL,
+  scope_key TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  url TEXT NOT NULL,
+  outlet TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT '',
+  snippet TEXT NOT NULL DEFAULT '',
+  observed_at REAL NOT NULL,
+  expires_at REAL NOT NULL,
+  UNIQUE(scope_type, scope_key, provider, url)
+);
+CREATE INDEX IF NOT EXISTS idx_search_pointers_scope
+  ON search_result_pointers(scope_type, scope_key, expires_at DESC);
+CREATE TABLE IF NOT EXISTS search_activity (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  event TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT '',
+  at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_search_activity_at ON search_activity(at);
 CREATE TABLE IF NOT EXISTS intake_triage (
   item_hash TEXT PRIMARY KEY,
   route TEXT NOT NULL,
@@ -316,6 +386,17 @@ MODEL_USAGE_COLUMNS = {
     "cache_creation_1h_input_tokens": "INTEGER NOT NULL DEFAULT 0",
 }
 
+DESK_PREPARATION_COLUMNS = {
+    "event_group": "TEXT NOT NULL DEFAULT ''",
+    "companion_anchor_hash": "TEXT",
+}
+
+SEARCH_PROVIDER_COLUMNS = {
+    "status_claim_token": "TEXT",
+    "status_claimed_at": "REAL",
+    "status_expires_at": "REAL",
+}
+
 
 def _ensure_post_columns(con):
     """Apply additive post migrations without masking unexpected SQLite failures."""
@@ -379,6 +460,28 @@ def _ensure_model_usage_columns(con):
     con.commit()
 
 
+def _ensure_desk_preparation_columns(con):
+    existing = {r["name"] for r in con.execute("PRAGMA table_info(desk_preparations)").fetchall()}
+    for name, declaration in DESK_PREPARATION_COLUMNS.items():
+        if name not in existing:
+            con.execute(f"ALTER TABLE desk_preparations ADD COLUMN {name} {declaration}")
+    con.commit()
+
+
+def _ensure_search_provider_columns(con):
+    existing = {
+        row["name"] for row in con.execute(
+            "PRAGMA table_info(search_provider_state)"
+        ).fetchall()
+    }
+    for name, declaration in SEARCH_PROVIDER_COLUMNS.items():
+        if name not in existing:
+            con.execute(
+                f"ALTER TABLE search_provider_state ADD COLUMN {name} {declaration}"
+            )
+    con.commit()
+
+
 def kv_get(con, k: str) -> str:
     row = con.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
     return row["v"] if row else ""
@@ -387,6 +490,566 @@ def kv_get(con, k: str) -> str:
 def kv_set(con, k: str, v: str):
     con.execute("INSERT INTO kv(k, v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
     con.commit()
+
+
+_SEARCH_CACHE_MAX_BYTES = 20 * 1024
+_SEARCH_POINTER_MAX_AGE_SECONDS = 24 * 3600
+_SEARCH_QUOTA_FALLBACK_SECONDS = 6 * 3600
+_SEARCH_EVENTS = {
+    "cache_hit", "cache_miss", "provider_http_attempt", "provider_skip",
+    "provider_failure", "pointer_reuse", "account_status_success", "account_status_failure",
+}
+
+
+def _ensure_search_provider_row(con, provider: str, now: float | None = None) -> None:
+    stamp = float(now if now is not None else time.time())
+    con.execute(
+        "INSERT OR IGNORE INTO search_provider_state(provider,state,updated_at)"
+        " VALUES (?,'unknown',?)",
+        (str(provider or "")[:40], stamp),
+    )
+
+
+def search_provider_state(con, provider: str = "serpapi") -> dict:
+    row = con.execute(
+        "SELECT * FROM search_provider_state WHERE provider=?", (str(provider)[:40],)
+    ).fetchone()
+    return dict(row) if row else {"provider": str(provider)[:40], "state": "unknown"}
+
+
+def claim_search_status_check(con, provider: str, *, ttl_seconds: int,
+                              lease_seconds: float = 30,
+                              now: float | None = None) -> dict:
+    """Claim one throttled account-status request across runs/processes."""
+    stamp = float(now if now is not None else time.time())
+    cutoff = stamp - max(30, min(int(ttl_seconds), 3600))
+    token = uuid.uuid4().hex
+    expiry = stamp + max(5.0, min(float(lease_seconds), 300.0))
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        _ensure_search_provider_row(con, provider, stamp)
+        row = con.execute(
+            "SELECT last_status_attempt_at,status_claim_token,status_expires_at,"
+            "probe_claim_token,probe_expires_at FROM search_provider_state WHERE provider=?",
+            (str(provider)[:40],),
+        ).fetchone()
+        status_active = bool(
+            row and row["status_claim_token"]
+            and float(row["status_expires_at"] or 0) > stamp
+        )
+        probe_active = bool(
+            row and row["probe_claim_token"]
+            and float(row["probe_expires_at"] or 0) > stamp
+        )
+        if status_active or probe_active:
+            con.commit()
+            return {"token": "", "reason": "in_progress"}
+        due = not row or row["last_status_attempt_at"] is None \
+            or float(row["last_status_attempt_at"]) <= cutoff
+        if not due:
+            con.commit()
+            return {"token": "", "reason": "throttled"}
+        con.execute(
+            "UPDATE search_provider_state SET last_status_attempt_at=?,"
+            "status_claim_token=?,status_claimed_at=?,status_expires_at=?,updated_at=?"
+            " WHERE provider=?",
+            (stamp, token, stamp, expiry, stamp, str(provider)[:40]),
+        )
+        con.commit()
+        return {"token": token, "reason": "claimed"}
+    except Exception:
+        con.rollback()
+        raise
+
+
+def _renewal_epoch(value: str, now: float) -> float:
+    try:
+        parsed = datetime.datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        stamp = parsed.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return now + _SEARCH_QUOTA_FALLBACK_SECONDS
+    return stamp if stamp > now else now + _SEARCH_QUOTA_FALLBACK_SECONDS
+
+
+def record_search_account_status(con, snapshot: dict, *, status_token: str = "",
+                                 now: float | None = None) -> bool:
+    """Persist only the allowlisted capacity fields from a successful free account check."""
+    stamp = float(now if now is not None else time.time())
+    provider = str(snapshot.get("provider") or "serpapi")[:40]
+
+    def optional_int(name: str):
+        value = snapshot.get(name)
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            return max(0, min(int(value), 1_000_000_000))
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        _ensure_search_provider_row(con, provider, stamp)
+        current = con.execute(
+            "SELECT * FROM search_provider_state WHERE provider=?", (provider,)
+        ).fetchone()
+        if status_token and (
+            not current or current["status_claim_token"] != str(status_token)[:64]
+        ):
+            con.commit()
+            return False
+        if current and current["probe_claim_token"] \
+                and float(current["probe_expires_at"] or 0) > stamp:
+            con.commit()
+            return False
+
+        remaining = optional_int("total_searches_left")
+        renewal = str(snapshot.get("plan_renewal_date") or "")[:40] or str(
+            current["plan_renewal_date"] if current else ""
+        )
+        prior_state = str(current["state"] if current else "unknown")
+        prior_next = current["next_search_at"] if current else None
+        prior_failures = int(current["consecutive_failures"] if current else 0)
+        if snapshot.get("state") == "unconfigured":
+            state, next_search, failures = "unconfigured", None, prior_failures
+        elif prior_state == "quota_exhausted" and remaining is None:
+            state, next_search, failures = prior_state, prior_next, prior_failures
+        elif remaining == 0:
+            state = "quota_exhausted"
+            next_search = _renewal_epoch(renewal, stamp)
+            failures = prior_failures
+        elif prior_state == "quota_exhausted" and remaining is not None and remaining > 0:
+            state, next_search, failures = "healthy", None, 0
+        elif prior_state in {"rate_limited", "degraded"}:
+            state, next_search, failures = prior_state, prior_next, prior_failures
+        elif remaining is not None:
+            state, next_search, failures = "healthy", prior_next, prior_failures
+        else:
+            state, next_search, failures = "unknown", prior_next, prior_failures
+
+        preserve_error = state in {"quota_exhausted", "rate_limited", "degraded"}
+        error_kind = current["error_kind"] if current and preserve_error else None
+        error_message = current["error_message"] if current and preserve_error else None
+
+        def snapshot_or_prior(name: str):
+            value = optional_int(name)
+            return value if value is not None else (current[name] if current else None)
+
+        status_where = "provider=?"
+        status_values: tuple = (provider,)
+        if status_token:
+            status_where += " AND status_claim_token=?"
+            status_values += (str(status_token)[:64],)
+        cur = con.execute(
+            "UPDATE search_provider_state SET state=?,plan_name=?,plan_renewal_date=?,"
+            "searches_per_month=?,this_month_usage=?,total_searches_left=?,"
+            "this_hour_searches=?,last_hour_searches=?,account_rate_limit_per_hour=?,"
+            "last_status_success_at=?,next_search_at=?,consecutive_failures=?,error_kind=?,"
+            "error_message=?,status_claim_token=?,status_claimed_at=?,status_expires_at=?,"
+            f"updated_at=? WHERE {status_where}",
+            (state, str(snapshot.get("plan_name") or "")[:80]
+             or str(current["plan_name"] if current else ""), renewal,
+             snapshot_or_prior("searches_per_month"),
+             snapshot_or_prior("this_month_usage"),
+             remaining if remaining is not None else (
+                 current["total_searches_left"] if current else None
+             ),
+             snapshot_or_prior("this_hour_searches"),
+             snapshot_or_prior("last_hour_searches"),
+             snapshot_or_prior("account_rate_limit_per_hour"),
+             stamp, next_search, failures, error_kind, error_message,
+             None if status_token else current["status_claim_token"],
+             None if status_token else current["status_claimed_at"],
+             None if status_token else current["status_expires_at"],
+             stamp, *status_values),
+        )
+        con.commit()
+        return cur.rowcount == 1
+    except Exception:
+        con.rollback()
+        raise
+
+
+def record_search_account_failure(con, provider: str, kind: str, message: str,
+                                  *, status_token: str = "",
+                                  now: float | None = None) -> bool:
+    """Record a failed status attempt without destroying the last good capacity snapshot."""
+    stamp = float(now if now is not None else time.time())
+    _ensure_search_provider_row(con, provider, stamp)
+    where = "provider=?"
+    values: tuple = (str(provider)[:40],)
+    if status_token:
+        where += " AND status_claim_token=?"
+        values += (str(status_token)[:64],)
+    release = int(bool(status_token))
+    cur = con.execute(
+        "UPDATE search_provider_state SET error_kind=?,error_message=?,"
+        "status_claim_token=CASE WHEN ?=1 THEN NULL ELSE status_claim_token END,"
+        "status_claimed_at=CASE WHEN ?=1 THEN NULL ELSE status_claimed_at END,"
+        "status_expires_at=CASE WHEN ?=1 THEN NULL ELSE status_expires_at END,updated_at=?"
+        f" WHERE {where}",
+        (f"account_{str(kind or 'error')[:70]}", str(message or "")[:240],
+         release, release, release, stamp, *values),
+    )
+    con.commit()
+    return cur.rowcount == 1
+
+
+def fail_search_status_and_claim_probe(
+        con, provider: str, kind: str, message: str, *, status_token: str,
+        probe_lease_seconds: float, now: float | None = None) -> dict:
+    """Atomically finish a failed status check and, when due, own its quota probe."""
+    stamp = float(now if now is not None else time.time())
+    provider = str(provider)[:40]
+    status_token = str(status_token)[:64]
+    probe_token = uuid.uuid4().hex
+    probe_expiry = stamp + max(5.0, min(float(probe_lease_seconds), 300.0))
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT state,next_search_at,status_claim_token,probe_claim_token,"
+            "probe_claimed_at,probe_expires_at FROM search_provider_state WHERE provider=?",
+            (provider,),
+        ).fetchone()
+        if not row or row["status_claim_token"] != status_token:
+            con.commit()
+            return {"recorded": False, "probe_token": ""}
+        should_probe = bool(
+            row["state"] == "quota_exhausted"
+            and float(row["next_search_at"] or 0) <= stamp
+            and (
+                not row["probe_claim_token"]
+                or float(row["probe_expires_at"] or 0) <= stamp
+            )
+        )
+        con.execute(
+            "UPDATE search_provider_state SET error_kind=?,error_message=?,"
+            "status_claim_token=NULL,status_claimed_at=NULL,status_expires_at=NULL,"
+            "probe_claim_token=?,probe_claimed_at=?,probe_expires_at=?,updated_at=?"
+            " WHERE provider=? AND status_claim_token=?",
+            (f"account_{str(kind or 'error')[:70]}", str(message or "")[:240],
+             probe_token if should_probe else row["probe_claim_token"],
+             stamp if should_probe else row["probe_claimed_at"],
+             probe_expiry if should_probe else row["probe_expires_at"],
+             stamp, provider, status_token),
+        )
+        con.commit()
+        return {"recorded": True, "probe_token": probe_token if should_probe else ""}
+    except Exception:
+        con.rollback()
+        raise
+
+
+def claim_search_probe(con, provider: str, *, lease_seconds: float,
+                       now: float | None = None) -> str:
+    """Atomically claim or reclaim one half-open quota probe."""
+    stamp = float(now if now is not None else time.time())
+    token = uuid.uuid4().hex
+    expiry = stamp + max(5.0, min(float(lease_seconds), 300.0))
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        _ensure_search_provider_row(con, provider, stamp)
+        cur = con.execute(
+            "UPDATE search_provider_state SET probe_claim_token=?,probe_claimed_at=?,"
+            "probe_expires_at=?,updated_at=? WHERE provider=? AND state='quota_exhausted'"
+            " AND COALESCE(next_search_at,0)<=?"
+            " AND (status_claim_token IS NULL OR COALESCE(status_expires_at,0)<=?)"
+            " AND (probe_claim_token IS NULL OR COALESCE(probe_expires_at,0)<=?)",
+            (token, stamp, expiry, stamp, str(provider)[:40], stamp, stamp, stamp),
+        )
+        con.commit()
+        return token if cur.rowcount == 1 else ""
+    except Exception:
+        con.rollback()
+        raise
+
+
+def record_search_success(con, provider: str, *, probe_token: str = "",
+                          now: float | None = None) -> bool:
+    stamp = float(now if now is not None else time.time())
+    where = "provider=?"
+    values: tuple = (str(provider)[:40],)
+    if probe_token:
+        where += " AND probe_claim_token=?"
+        values += (str(probe_token)[:64],)
+    else:
+        where += " AND (probe_claim_token IS NULL OR COALESCE(probe_expires_at,0)<=?)"
+        values += (stamp,)
+    cur = con.execute(
+        "UPDATE search_provider_state SET state='healthy',next_search_at=NULL,"
+        "last_search_success_at=?,consecutive_failures=0,error_kind=NULL,error_message=NULL,"
+        "probe_claim_token=NULL,probe_claimed_at=NULL,probe_expires_at=NULL,updated_at=?"
+        f" WHERE {where}",
+        (stamp, stamp, *values),
+    )
+    con.commit()
+    return cur.rowcount == 1
+
+
+def record_search_failure(con, provider: str, kind: str, message: str, *,
+                          retry_after_seconds: int = 0, probe_token: str = "",
+                          cooldown_seconds: int = 300,
+                          now: float | None = None) -> bool:
+    stamp = float(now if now is not None else time.time())
+    provider = str(provider)[:40]
+    _ensure_search_provider_row(con, provider, stamp)
+    current = con.execute(
+        "SELECT state,next_search_at,plan_renewal_date,consecutive_failures"
+        " FROM search_provider_state"
+        " WHERE provider=?", (provider,),
+    ).fetchone()
+    failure_kind = str(kind or "provider_error")[:80]
+    if failure_kind == "quota_exhausted":
+        state = "quota_exhausted"
+        next_search = _renewal_epoch(
+            current["plan_renewal_date"] if current else "", stamp
+        )
+    elif failure_kind == "rate_limited":
+        state = "rate_limited"
+        next_search = stamp + max(1, min(
+            int(retry_after_seconds or cooldown_seconds), 3600
+        ))
+    else:
+        failure_count = int(current["consecutive_failures"] if current else 0) + 1
+        if probe_token or failure_count >= 2:
+            state = "degraded"
+            next_search = stamp + max(30, min(int(cooldown_seconds), 3600))
+        else:
+            prior_state = str(current["state"] if current else "unknown")
+            state = prior_state if prior_state in {"healthy", "unknown"} else "unknown"
+            next_search = current["next_search_at"] if current else None
+    where = "provider=?"
+    values: tuple = (provider,)
+    if probe_token:
+        where += " AND probe_claim_token=?"
+        values += (str(probe_token)[:64],)
+    else:
+        where += " AND (probe_claim_token IS NULL OR COALESCE(probe_expires_at,0)<=?)"
+        values += (stamp,)
+    cur = con.execute(
+        "UPDATE search_provider_state SET state=?,next_search_at=?,"
+        "consecutive_failures=consecutive_failures+1,error_kind=?,error_message=?,"
+        "probe_claim_token=NULL,probe_claimed_at=NULL,probe_expires_at=NULL,updated_at=?"
+        f" WHERE {where}",
+        (state, next_search, failure_kind, str(message or "")[:240], stamp, *values),
+    )
+    con.commit()
+    return cur.rowcount == 1
+
+
+def _valid_search_result(raw: dict) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    url = str(raw.get("url") or "").strip()
+    outlet = str(raw.get("outlet") or "")
+    title = str(raw.get("title") or "")
+    snippet = str(raw.get("snippet") or "")
+    if len(url) > 2000 or len(outlet) > 160 or len(title) > 300 or len(snippet) > 1200:
+        return None
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").rstrip(".").lower()
+        if parts.scheme not in {"http", "https"} or not host or parts.username or parts.password:
+            return None
+        if host == "localhost" or host.endswith(".local"):
+            return None
+        try:
+            address = ipaddress.ip_address(host)
+            if not address.is_global:
+                return None
+        except ValueError:
+            pass
+    except (TypeError, ValueError):
+        return None
+    try:
+        rank = max(1, min(int(raw.get("rank") or 1), 100))
+    except (TypeError, ValueError):
+        return None
+    return {
+        "rank": rank,
+        "url": url,
+        "outlet": outlet,
+        "title": title,
+        "snippet": snippet,
+    }
+
+
+def search_cache_get(con, identity: dict, *, now: float | None = None) -> list[dict] | None:
+    stamp = float(now if now is not None else time.time())
+    row = con.execute(
+        "SELECT * FROM search_query_cache WHERE cache_key=? AND expires_at>?",
+        (str(identity.get("cache_key") or "")[:64], stamp),
+    ).fetchone()
+    if not row:
+        return None
+    expected = (
+        str(identity.get("provider") or ""), str(identity.get("engine") or ""),
+        str(identity.get("query") or ""), str(identity.get("gl") or ""),
+        str(identity.get("hl") or ""), int(identity.get("limit") or 0),
+        int(identity.get("start") or 0),
+    )
+    actual = (
+        row["provider"], row["engine"], row["normalized_query"], row["locale_gl"],
+        row["locale_hl"], int(row["result_limit"]), int(row["page_start"]),
+    )
+    try:
+        encoded = str(row["results_json"] or "")
+        parsed = json.loads(encoded)
+    except (TypeError, ValueError):
+        parsed, encoded = None, ""
+    valid = [] if isinstance(parsed, list) else None
+    if valid is not None:
+        for raw in parsed[:8]:
+            item = _valid_search_result(raw)
+            if item:
+                valid.append(item)
+    if expected != actual or len(encoded.encode("utf-8")) > _SEARCH_CACHE_MAX_BYTES \
+            or valid is None or len(valid) != len(parsed):
+        con.execute("DELETE FROM search_query_cache WHERE cache_key=?", (row["cache_key"],))
+        con.commit()
+        return None
+    con.execute(
+        "UPDATE search_query_cache SET hit_count=hit_count+1,last_hit_at=? WHERE cache_key=?",
+        (stamp, row["cache_key"]),
+    )
+    con.commit()
+    return valid[:int(identity.get("limit") or 5)]
+
+
+def search_cache_put(con, identity: dict, results: list[dict], *, ttl_seconds: int,
+                     now: float | None = None) -> list[dict]:
+    stamp = float(now if now is not None else time.time())
+    bounded = []
+    for raw in list(results or [])[:min(8, int(identity.get("limit") or 5))]:
+        value = _valid_search_result(raw)
+        if value:
+            bounded.append(value)
+    encoded = json.dumps(bounded, separators=(",", ":"), ensure_ascii=False)
+    while bounded and len(encoded.encode("utf-8")) > _SEARCH_CACHE_MAX_BYTES:
+        bounded.pop()
+        encoded = json.dumps(bounded, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > _SEARCH_CACHE_MAX_BYTES:
+        bounded, encoded = [], "[]"
+    con.execute(
+        "INSERT INTO search_query_cache(cache_key,provider,engine,normalized_query,locale_gl,"
+        "locale_hl,result_limit,page_start,results_json,created_at,expires_at,hit_count,last_hit_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,0,NULL) ON CONFLICT(cache_key) DO UPDATE SET"
+        " results_json=excluded.results_json,created_at=excluded.created_at,"
+        "expires_at=excluded.expires_at,hit_count=0,last_hit_at=NULL",
+        (str(identity.get("cache_key") or "")[:64], str(identity.get("provider") or "")[:40],
+         str(identity.get("engine") or "")[:40], str(identity.get("query") or "")[:400],
+         str(identity.get("gl") or "")[:10], str(identity.get("hl") or "")[:10],
+         int(identity.get("limit") or 5), int(identity.get("start") or 0), encoded,
+         stamp, stamp + max(60, min(int(ttl_seconds), 86400))),
+    )
+    con.commit()
+    return bounded
+
+
+def save_search_pointers(con, scopes: list[tuple[str, str]], results: list[dict], *,
+                         provider: str = "serpapi", ttl_seconds: int = 21600,
+                         now: float | None = None) -> int:
+    stamp = float(now if now is not None else time.time())
+    expiry = stamp + max(300, min(int(ttl_seconds), _SEARCH_POINTER_MAX_AGE_SECONDS))
+    safe_scopes = list(dict.fromkeys(
+        (str(kind)[:20], str(key)[:180]) for kind, key in scopes
+        if kind in {"candidate", "story"} and str(key)
+    ))[:16]
+    bounded = [value for raw in list(results or [])[:5]
+               if (value := _valid_search_result(raw))]
+    inserted = 0
+    for scope_type, scope_key in safe_scopes:
+        for row in bounded:
+            cur = con.execute(
+                "INSERT INTO search_result_pointers(scope_type,scope_key,provider,url,outlet,"
+                "title,snippet,observed_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(scope_type,scope_key,provider,url) DO UPDATE SET"
+                " outlet=excluded.outlet,title=excluded.title,snippet=excluded.snippet,"
+                "observed_at=excluded.observed_at,expires_at=excluded.expires_at",
+                (scope_type, scope_key, str(provider)[:40], row["url"], row["outlet"],
+                 row["title"], row["snippet"], stamp, expiry),
+            )
+            inserted += int(bool(cur.rowcount))
+    con.commit()
+    return inserted
+
+
+def search_pointers_for_scopes(con, scopes: list[tuple[str, str]], *, limit: int = 12,
+                               now: float | None = None) -> list[dict]:
+    stamp = float(now if now is not None else time.time())
+    rows, seen = [], set()
+    for scope_type, scope_key in list(dict.fromkeys(scopes))[:16]:
+        if scope_type not in {"candidate", "story"} or not scope_key:
+            continue
+        found = con.execute(
+            "SELECT * FROM search_result_pointers WHERE scope_type=? AND scope_key=?"
+            " AND expires_at>? ORDER BY observed_at DESC,id DESC LIMIT ?",
+            (scope_type, str(scope_key)[:180], stamp, max(1, min(int(limit), 20))),
+        ).fetchall()
+        for raw in found:
+            value = _valid_search_result(dict(raw))
+            normalized = source_policy.normalize_url(value["url"]) if value else ""
+            if not value or normalized in seen:
+                continue
+            seen.add(normalized)
+            rows.append({**value, "provider": raw["provider"],
+                         "observed_at": float(raw["observed_at"])})
+            if len(rows) >= max(1, min(int(limit), 20)):
+                return rows
+    return rows
+
+
+def record_search_activity(con, run_id: str, event: str, kind: str = "", *,
+                           now: float | None = None) -> None:
+    if event not in _SEARCH_EVENTS:
+        return
+    con.execute(
+        "INSERT INTO search_activity(run_id,event,kind,at) VALUES (?,?,?,?)",
+        (str(run_id or "")[:120], event, str(kind or "")[:80],
+         float(now if now is not None else time.time())),
+    )
+    con.commit()
+
+
+def search_health(con, *, since: float | None = None, now: float | None = None) -> dict:
+    stamp = float(now if now is not None else time.time())
+    start = float(since if since is not None else stamp - 86400)
+    provider = search_provider_state(con)
+    activity = {
+        row["event"]: int(row["n"]) for row in con.execute(
+            "SELECT event,COUNT(*) n FROM search_activity WHERE at>=? GROUP BY event", (start,)
+        ).fetchall()
+    }
+    failures = {
+        row["kind"] or "unknown": int(row["n"]) for row in con.execute(
+            "SELECT kind,COUNT(*) n FROM search_activity"
+            " WHERE at>=? AND event='provider_failure' GROUP BY kind", (start,)
+        ).fetchall()
+    }
+    cache = con.execute(
+        "SELECT COUNT(*) n FROM search_query_cache WHERE expires_at>?", (stamp,)
+    ).fetchone()
+    pointers = con.execute(
+        "SELECT COUNT(*) n FROM search_result_pointers WHERE expires_at>?", (stamp,)
+    ).fetchone()
+    return {"provider": provider, "activity": activity, "failures": failures,
+            "cache_entries": int(cache["n"] if cache else 0),
+            "pointer_entries": int(pointers["n"] if pointers else 0)}
+
+
+def prune_search_state(con, *, now: float | None = None, activity_days: int = 14) -> dict:
+    stamp = float(now if now is not None else time.time())
+    cache = con.execute("DELETE FROM search_query_cache WHERE expires_at<=?", (stamp,)).rowcount
+    pointers = con.execute(
+        "DELETE FROM search_result_pointers WHERE expires_at<=?", (stamp,)
+    ).rowcount
+    activity = con.execute(
+        "DELETE FROM search_activity WHERE at<?",
+        (stamp - max(1, min(int(activity_days), 90)) * 86400,),
+    ).rowcount
+    con.commit()
+    return {"cache": int(cache), "pointers": int(pointers), "activity": int(activity)}
 
 
 _MODEL_RATES = {
@@ -491,9 +1154,9 @@ def save_desk_preparations(con, rows: list[dict], *, mode: str) -> dict:
                 "INSERT OR REPLACE INTO desk_preparations("
                 "run_id,item_hash,model_route,effective_route,event_summary,"
                 "bitcoin_relevance,freshness_note,research_objective,source_leads_json,"
-                "related_keys_json,protection_reason,model,prompt_version,outcome,error_kind,"
-                "mode,application_state,prepared_at,applied_at,promoted_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                "related_keys_json,event_group,companion_anchor_hash,protection_reason,model,"
+                "prompt_version,outcome,error_kind,mode,application_state,prepared_at,applied_at,"
+                "promoted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
                 (str(value.get("run_id") or "")[:120],
                  str(value.get("item_hash") or "")[:64],
                  str(value.get("model_route") or "advance")[:20], effective,
@@ -501,6 +1164,8 @@ def save_desk_preparations(con, rows: list[dict], *, mode: str) -> dict:
                  str(value.get("bitcoin_relevance") or "")[:300],
                  str(value.get("freshness_note") or "")[:240],
                  str(value.get("research_objective") or "")[:400], leads, related,
+                 str(value.get("event_group") or "")[:80],
+                 str(value.get("companion_anchor_hash") or "")[:64] or None,
                  str(value.get("protection_reason") or "")[:80] or None,
                  str(value.get("model") or "")[:80],
                  str(value.get("prompt_version") or "")[:80],
@@ -855,9 +1520,15 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "error": str(newsroom.get("error") or "")[:500],
             **{key: safe_count(newsroom.get(key, 0)) for key in (
                 "rounds", "tool_calls", "searches", "search_http_attempts",
-                "search_failures", "fetches", "fetch_chars",
+                "search_failures", "search_cache_hits", "search_cache_misses",
+                "search_provider_skips", "search_pointer_reuse", "fetches", "fetch_chars",
                 "duration_seconds", "stories")},
             "search_degraded": bool(newsroom.get("search_degraded")),
+            "fetch_failure_kinds": {
+                str(key)[:80]: safe_count(value) for key, value in
+                dict(newsroom.get("fetch_failure_kinds") or {}).items()
+                if safe_count(value) > 0
+            },
         }
     for field, allowed in (
         ("resolver_paths", {"direct", "node_ref", "guide_ref", "serpapi", "hosted_web",
@@ -929,6 +1600,8 @@ def connect() -> sqlite3.Connection:
     _ensure_node_run_columns(con)
     _ensure_newsroom_columns(con)
     _ensure_model_usage_columns(con)
+    _ensure_desk_preparation_columns(con)
+    _ensure_search_provider_columns(con)
     return con
 
 

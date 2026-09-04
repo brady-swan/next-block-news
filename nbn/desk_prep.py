@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 
@@ -11,7 +12,7 @@ import anthropic
 from . import brain, config, guide_context, source_policy, store, theme_context
 
 log = logging.getLogger("nbn.desk_prep")
-PROMPT_VERSION = "haiku-assignment-desk-v1"
+PROMPT_VERSION = "haiku-assignment-desk-v2"
 ROUTES = {"advance", "background"}
 
 SYSTEM = """You prepare the assignment desk for Next Block News, an automated Bitcoin wire.
@@ -28,7 +29,9 @@ no new fact. A source being obscure is not a reason to background it.
 
 For each candidate, distill what appears to have happened, why it could matter to a Bitcoin reader,
 what freshness question exists, and the most useful research objective. Source/search leads are
-short suggestions, not evidence. Copy related keys only from supplied_coverage_keys.
+short suggestions, not evidence. Copy related keys only from supplied_coverage_keys. Assign a
+short run-local event_group: exact same-event candidates share a value; unrelated candidates use
+different values. This is desk organization only, not canonical identity or evidence.
 
 Return exactly one bounded decision for every supplied candidate through the required tool."""
 
@@ -50,10 +53,11 @@ TOOL = {
                     "research_objective": {"type": "string", "maxLength": 400},
                     "source_leads": {"type": "array", "items": {"type": "string"}},
                     "related_keys": {"type": "array", "items": {"type": "string"}},
+                    "event_group": {"type": "string", "minLength": 1, "maxLength": 80},
                 },
                 "required": ["candidate_id", "route", "event_summary", "bitcoin_relevance",
                              "freshness_note", "research_objective", "source_leads",
-                             "related_keys"],
+                             "related_keys", "event_group"],
             }},
         },
         "required": ["decisions"],
@@ -70,6 +74,11 @@ class PreparationResult:
 
 def _text(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
+
+
+def _event_group(value, fallback: str) -> str:
+    group = re.sub(r"[^a-z0-9_-]+", "-", str(value or "").strip().lower()).strip("-")
+    return (group[:80] or f"candidate-{fallback[:24]}")
 
 
 def protection_reason(item: dict, continuity_ids: set[str]) -> str:
@@ -142,6 +151,8 @@ def _synthetic(item: dict, *, run_id: str, reason: str, protection: str = "",
         "bitcoin_relevance": reason[:300], "freshness_note": "",
         "research_objective": "Let Sonnet inspect and make the editorial call.",
         "source_leads": [], "related_keys": [], "protection_reason": protection,
+        "event_group": f"candidate-{str(item.get('url_hash') or '')[:24]}",
+        "companion_anchor_hash": "",
         "model": config.DESK_PREP_MODEL, "prompt_version": PROMPT_VERSION,
         "outcome": outcome, "error_kind": error_kind, "prepared_at": time.time(),
     }
@@ -184,11 +195,13 @@ def _parse(response, inventory: list[dict], *, run_id: str,
                  if _text(value, 300)]
         related = [str(value)[:160] for value in list(raw.get("related_keys") or [])[:3]
                    if str(value) in allowed_keys]
+        supplied_group = str(raw.get("event_group") or "").strip()
         valid = (route in ROUTES and bool(strings["event_summary"])
                  and isinstance(raw.get("source_leads"), list)
                  and len(raw.get("source_leads") or []) <= 3
                  and isinstance(raw.get("related_keys"), list)
-                 and len(raw.get("related_keys") or []) <= 3)
+                 and len(raw.get("related_keys") or []) <= 3
+                 and bool(supplied_group) and len(supplied_group) <= 80)
         if not valid:
             rows.append(_synthetic(
                 item, run_id=run_id, reason="Haiku preparation was invalid; advanced.",
@@ -201,6 +214,8 @@ def _parse(response, inventory: list[dict], *, run_id: str,
             "run_id": run_id, "item_hash": item_hash, "model_route": route,
             "effective_route": "advance" if protection else route, **strings,
             "source_leads": leads, "related_keys": related,
+            "event_group": _event_group(supplied_group, item_hash),
+            "companion_anchor_hash": "",
             "protection_reason": protection, "model": config.DESK_PREP_MODEL,
             "prompt_version": PROMPT_VERSION, "outcome": "model", "error_kind": "",
             "prepared_at": time.time(),
@@ -293,6 +308,21 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
             protection=protection_reason(item, continuity_ids),
             outcome="overflow_fail_open", error_kind="batch_capacity",
         ))
+    if config.DESK_CLUSTER_COMPANIONS_ENABLED:
+        grouped: dict[str, list[dict]] = {}
+        for row in rows:
+            grouped.setdefault(str(row.get("event_group") or ""), []).append(row)
+        for members in grouped.values():
+            anchors = [row for row in members if row.get("effective_route") == "advance"]
+            if not anchors:
+                continue
+            anchor = min(anchors, key=lambda row: str(row.get("item_hash") or ""))
+            for row in members:
+                if row.get("effective_route") != "background":
+                    continue
+                row["effective_route"] = "advance"
+                row["protection_reason"] = "same_event_companion"
+                row["companion_anchor_hash"] = str(anchor.get("item_hash") or "")[:64]
     saved = store.save_desk_preparations(con, rows, mode=mode)
     advanced = tuple(row["item_hash"] for row in rows
                      if mode == "observe" or row["effective_route"] == "advance")

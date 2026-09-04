@@ -26,7 +26,7 @@ poll -> RSS/EDGAR Haiku mailroom -> Haiku assignment desk -> Sonnet newsroom -> 
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
 | `config/source_tiers.toml` | Canonical P0/T1/T2/T3/T4 source registry |
 | `nbn/source_policy.py` | Validated source classification, normalization, and ranking |
-| `nbn/search.py` | Bounded model-free SerpAPI discovery; returned links are untrusted pointers |
+| `nbn/search.py` | Bounded model-free SerpAPI discovery with typed failures and safe account status; returned links are untrusted pointers |
 | `nbn/verify.py` | Typed source metadata and legacy claim-support machinery |
 | `nbn/lint.py` | V2 mechanical delivery rails plus advisory warnings; legacy lint remains separate |
 | `nbn/editor.py` | Independent support, source-sufficiency, novelty, framing, and craft judgment |
@@ -65,6 +65,11 @@ inspectable in v2, but every receipt is labeled by capability: known reporting/r
 known first-party statement, unknown-domain material, social statement, guide/discovery,
 aggregator/wrapper, or syndication. The editor sees those labels and every inspected body.
 Search snippets remain pointers, never evidence.
+
+Optional search resilience adds a complete-query SQLite cache, exact-candidate/story pointer
+reuse, and a shared quota/rate-limit circuit. It never turns a search result into evidence;
+Sonnet must still fetch the page. Enable it with `NBN_SEARCH_RESILIENCE_ENABLED=true`; same-event
+Haiku companion routing is a separate `NBN_DESK_CLUSTER_COMPANIONS_ENABLED=true` rollout flag.
 
 ## Output modes
 

@@ -837,6 +837,21 @@ def render(con, day: str = None) -> str:
         f"{_esc(label)} {_bounded_count(len(typed_failure_sets[key]))}"
         for key, label in failure_labels.items() if typed_failure_sets[key]
     ) or "none"
+    search_health = store.search_health(con)
+    search_provider = search_health.get("provider") or {}
+    search_activity = search_health.get("activity") or {}
+    search_failures = search_health.get("failures") or {}
+    remaining = search_provider.get("total_searches_left")
+    allowance = search_provider.get("searches_per_month")
+    capacity = (f"{_bounded_count(remaining, 1_000_000_000)} / "
+                f"{_bounded_count(allowance, 1_000_000_000)} remaining"
+                if remaining is not None and allowance is not None else "capacity unknown")
+    status_at = search_provider.get("last_status_success_at")
+    status_text = _ct(float(status_at)) if status_at else "never"
+    search_failure_text = " · ".join(
+        f"{_esc(key)} {_bounded_count(value)}"
+        for key, value in sorted(search_failures.items()) if _bounded_count(value)
+    ) or "none"
     out.append(
         "<h2><span class=fill>Research health</span></h2>"
         f"<div class=metaline><b>Backlog now</b> · pending {int(backlog.get('pending', 0))}"
@@ -845,7 +860,19 @@ def render(con, day: str = None) -> str:
         f"<b>Selected CT day · distinct items</b> · {activity_text}<br>"
         f"<b>Selected CT day · typed failures</b> · {failure_text}<br>"
         f"<b>Last decision run · paths</b> · {path_text}<br>"
-        f"<b>Last decision run · outcomes</b> · {outcome_text}</div>"
+        f"<b>Last decision run · outcomes</b> · {outcome_text}<br>"
+        f"<b>Search · shared account</b> · {_esc(search_provider.get('state') or 'unknown')}"
+        f" · {_esc(search_provider.get('plan_name') or 'plan unknown')} · {_esc(capacity)}"
+        f" · renews {_esc(search_provider.get('plan_renewal_date') or 'unknown')}"
+        f" · checked {_esc(status_text)}<br>"
+        f"<b>Search · NBN last 24h</b> · provider HTTP "
+        f"{_bounded_count(search_activity.get('provider_http_attempt', 0))} · local cache hits "
+        f"{_bounded_count(search_activity.get('cache_hit', 0))} · local misses "
+        f"{_bounded_count(search_activity.get('cache_miss', 0))} · provider skips "
+        f"{_bounded_count(search_activity.get('provider_skip', 0))} · pointer reuse "
+        f"{_bounded_count(search_activity.get('pointer_reuse', 0))} · live cache entries "
+        f"{_bounded_count(search_health.get('cache_entries', 0))} · failures {search_failure_text}"
+        "</div>"
     )
 
     # ── Last completed non-empty decision run ───────────────────────────────
@@ -877,7 +904,15 @@ def render(con, day: str = None) -> str:
                 f"{_bounded_count(newsroom_run.get('tool_calls', 0))} research tools · "
                 f"{_bounded_count(newsroom_run.get('fetches', 0))} fetches · "
                 f"{_bounded_count(newsroom_run.get('search_http_attempts', 0))} search HTTP"
+                f" · {_bounded_count(newsroom_run.get('search_cache_hits', 0))} cache hits"
+                f" · {_bounded_count(newsroom_run.get('search_provider_skips', 0))} provider skips"
+                f" · {_bounded_count(newsroom_run.get('search_pointer_reuse', 0))} pointer reuse"
                 + (" · search degraded" if newsroom_run.get("search_degraded") else "")
+                + ("<br><b>Fetch failures</b> · " + _esc(" · ".join(
+                    f"{key} {_bounded_count(value)}" for key, value in
+                    sorted((newsroom_run.get("fetch_failure_kinds") or {}).items())
+                    if _bounded_count(value)
+                )) if newsroom_run.get("fetch_failure_kinds") else "")
                 + (f"<br><b>Run issue</b> · {_esc(newsroom_run.get('error_kind'))}: "
                    f"{_esc(newsroom_run.get('error'))}"
                    if newsroom_run.get("status") in {"fallback", "deferred"} else "")

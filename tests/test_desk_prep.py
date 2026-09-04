@@ -1,5 +1,3 @@
-import json
-import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -25,6 +23,7 @@ def decision(candidate_id, route="advance"):
         "freshness_note": "Reported today.",
         "research_objective": "Find the most useful source.",
         "source_leads": ["official page"], "related_keys": [],
+        "event_group": f"candidate-{candidate_id}",
     }
 
 
@@ -110,6 +109,60 @@ class DeskPreparationTests(unittest.TestCase):
             saved = store.latest_desk_preparations(con, [second["url_hash"]])
             self.assertEqual(saved[second["url_hash"]]["outcome"],
                              "validation_fail_open")
+
+    def test_same_event_background_is_promoted_with_auditable_anchor(self):
+        with temporary_store() as con:
+            lead = self.saved_item(con, url="https://example.com/lead")
+            alternate = self.saved_item(con, url="https://example.com/alternate")
+            lead_decision = decision(lead["url_hash"], "advance")
+            alternate_decision = decision(alternate["url_hash"], "background")
+            lead_decision["event_group"] = "imf-el-salvador"
+            alternate_decision["event_group"] = "imf-el-salvador"
+            api = Mock()
+            api.messages.create.return_value = response_for([
+                lead_decision, alternate_decision,
+            ])
+            with patch.object(desk_prep.anthropic, "Anthropic", return_value=api), \
+                    patch.object(desk_prep.brain, "consume_model_call"), \
+                    patch.object(config, "DESK_CLUSTER_COMPANIONS_ENABLED", True):
+                result = desk_prep.prepare(
+                    con, run_id="companions", inventory=[lead, alternate],
+                    coverage_keys=[], continuity_ids=set(), reservation="r", mode="enforce",
+                )
+            self.assertEqual(set(result.advanced_ids), {
+                lead["url_hash"], alternate["url_hash"],
+            })
+            saved = store.latest_desk_preparations(
+                con, [lead["url_hash"], alternate["url_hash"]]
+            )
+            promoted = saved[alternate["url_hash"]]
+            self.assertEqual(promoted["model_route"], "background")
+            self.assertEqual(promoted["effective_route"], "advance")
+            self.assertEqual(promoted["protection_reason"], "same_event_companion")
+            self.assertEqual(promoted["event_group"], "imf-el-salvador")
+            self.assertEqual(promoted["companion_anchor_hash"], lead["url_hash"])
+
+    def test_all_background_event_group_remains_background(self):
+        with temporary_store() as con:
+            first = self.saved_item(con, url="https://example.com/background-one")
+            second = self.saved_item(con, url="https://example.com/background-two")
+            decisions = [decision(first["url_hash"], "background"),
+                         decision(second["url_hash"], "background")]
+            for value in decisions:
+                value["event_group"] = "same-background-event"
+            api = Mock()
+            api.messages.create.return_value = response_for(decisions)
+            with patch.object(desk_prep.anthropic, "Anthropic", return_value=api), \
+                    patch.object(desk_prep.brain, "consume_model_call"), \
+                    patch.object(config, "DESK_CLUSTER_COMPANIONS_ENABLED", True):
+                result = desk_prep.prepare(
+                    con, run_id="all-background", inventory=[first, second],
+                    coverage_keys=[], continuity_ids=set(), reservation="r", mode="enforce",
+                )
+            self.assertEqual(result.advanced_ids, ())
+            self.assertEqual({row["status"] for row in con.execute(
+                "SELECT status FROM items"
+            )}, {"skipped"})
 
     def test_all_protected_skips_haiku_and_advances(self):
         with temporary_store() as con:

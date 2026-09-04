@@ -98,7 +98,8 @@ are transactional and crash-safe.
 
 At each due boundary, a second run-scoped Haiku assignment desk sees every eligible lead across
 all intake lanes. It distills the apparent event, Bitcoin relevance, freshness question,
-research objective, source leads, and supplied related event keys. It may mark a card Background
+research objective, source leads, supplied related event keys, and a run-local same-event group.
+It may mark a card Background
 only when it is facially outside scope, contains no development, or is an exact code-identified
 duplicate. Guide tips, Node-curated leads, official/primary items, operator promotions, research
 retries, and unresolved continuity are code-protected and advance even if Haiku disagrees. Every
@@ -109,6 +110,11 @@ In enforce mode, a batch containing only Background cards uses no Sonnet call. T
 visible on the Desk with **SEND TO DESK**. For advanced cards, code may prefetch up to six unique
 likely receipts and 24,000 characters, while reserving at least eight fetches and 80,000 characters
 for Sonnet's own reporting. Fetch results—not Haiku prose—are the evidence.
+
+When one member of a Haiku same-event group advances, any Background companions in that exact
+run-local group advance with it. This changes only which leads reach Sonnet; it is not canonical
+identity, evidence, corroboration, or approval. The persisted preparation records name the
+companion anchor that caused the promotion. An all-Background group remains Background.
 
 Each non-empty prepared run gets a new Sonnet context. It receives a run brief, one clean card per
 candidate, the Haiku preparation, safe reference pointers, prepared receipts, recent coverage/open
@@ -279,9 +285,17 @@ human review.
 - Every dossier story has a `newsroom_story_commits` lifecycle row with bounded validation,
   warning, editor, force-draft, and delivery details. Shadow observations terminate as
   `observed`; `pending` means materialization is genuinely unfinished.
-- SerpAPI opens a run-local circuit after its first 429 or second transport failure. Later
-  calls return `search_unavailable_for_run` without spending more HTTP attempts; the Desk and
-  run counters expose the degraded state.
+- With `NBN_SEARCH_RESILIENCE_ENABLED=true`, SerpAPI requests use a complete, versioned identity
+  and a bounded one-hour SQLite result cache. Result URLs are revalidated on both write and read;
+  snippets remain untrusted pointers. Search pointers are attached only to the exact candidate or
+  pre-existing story scopes Sonnet supplied, and may reappear on a later desk for up to six hours.
+- A free, throttled SerpAPI account-status check supplies shared capacity state. Confirmed quota
+  exhaustion and rate limits open a durable cross-run circuit until renewal or cooldown, while
+  cached results remain usable. If the status endpoint is unavailable at renewal, one worker may
+  hold a short expiring half-open probe lease; an abandoned lease can be reclaimed and a stale
+  probe cannot overwrite newer state. Typed fetch and search failures are visible on the Desk.
+- With resilience disabled, the legacy run-local circuit remains the rollback path: first 429 or
+  second transport failure stops later provider calls in that run.
 - Health: `/health`; status: `/status`; owner Desk: token-gated `/report`.
 - Deploy: `railway up --detach` from this linked repository.
 - Important knobs: `NBN_EDITORIAL_ENGINE=v2`, `NBN_DESK_INTERVAL_SECONDS=900`,
@@ -291,6 +305,9 @@ human review.
   `NBN_INTAKE_TRIAGE_MAX_CALLS_PER_HOUR=8`,
   `NBN_DESK_PREP_MODE=off|observe|enforce`, `NBN_COMPACT_DESK_ENABLED`,
   `NBN_HAIKU_RESEARCH_MODE=off|on`, `NBN_RUN_NEWSROOM_MAX_ROUNDS`,
+  `NBN_SEARCH_RESILIENCE_ENABLED`, `NBN_SEARCH_ACCOUNT_TTL_SECONDS`,
+  `NBN_SEARCH_CACHE_TTL_SECONDS`, `NBN_SEARCH_POINTER_TTL_SECONDS`,
+  `NBN_SEARCH_PROVIDER_COOLDOWN_SECONDS`, `NBN_DESK_CLUSTER_COMPANIONS_ENABLED`,
   `NBN_MODEL_DAILY_TARGET_USD`,
   `NBN_EIC_DISCOVERY_ENABLED`, `NBN_EIC_DISCOVERY_UTC`,
   `NBN_RUN_NEWSROOM_MODE=shadow|draft|live`, `NBN_AUTOPOST_ENABLED`,

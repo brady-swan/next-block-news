@@ -23,7 +23,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.6"
+PROMPT_VERSION = "editorial-core-v2.7"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -226,6 +226,11 @@ HOW TO WORK
   a reason to prefer a popular subject over a more important one.
 - You may submit the dossier immediately, or search/fetch selectively. Fetch a page before
   treating it as evidence. If the original page is adequate, stop searching.
+- Before searching, inspect a promising supplied receipt, same-event companion, reusable evidence,
+  or prior-search pointer when it appears likely to answer the question. Search fills a real gap;
+  it is not a ritual every candidate must pass.
+- When calling search_web, include the candidate_ids the query is researching. That lets useful
+  result pointers return with those exact candidates in a later fresh newsroom session.
 - Routine prepared stories may already have a safely inspected receipt. Finish in one response
   when that is enough. Use read_desk_context only for indexed history you actually need. Use
   assign_haiku_research for one focused, multi-step source-resolution problem; its prose is an
@@ -413,7 +418,11 @@ TOOLS: list[dict[str, Any]] = [
         "strict": True,
         "input_schema": {
             "type": "object", "additionalProperties": False,
-            "properties": {"query": {"type": "string", "minLength": 3, "maxLength": 400}},
+            "properties": {
+                "query": {"type": "string", "minLength": 3, "maxLength": 400},
+                "candidate_ids": {"type": "array", "maxItems": 8,
+                                  "items": {"type": "string"}},
+            },
             "required": ["query"],
         },
     },
@@ -670,8 +679,13 @@ class NewsroomSession:
         self.search_http_attempts = 0
         self.search_failures = 0
         self.search_circuit_open = False
+        self.search_cache_hits = 0
+        self.search_cache_misses = 0
+        self.search_provider_skips = 0
+        self.search_pointer_reuse = 0
         self.fetch_count = 0
         self.fetch_chars = 0
+        self.fetch_failure_kinds: dict[str, int] = {}
         self.dossier_tool_id = ""
         self._patch_used = False
         self.preparations: dict[str, dict] = {}
@@ -799,6 +813,11 @@ class NewsroomSession:
             "search_http_attempts": self.search_http_attempts,
             "search_failures": self.search_failures,
             "search_degraded": self.search_circuit_open,
+            "search_cache_hits": self.search_cache_hits,
+            "search_cache_misses": self.search_cache_misses,
+            "search_provider_skips": self.search_provider_skips,
+            "search_pointer_reuse": self.search_pointer_reuse,
+            "fetch_failure_kinds": dict(sorted(self.fetch_failure_kinds.items())),
             "fetch_chars": self.fetch_chars,
             "successful_newsdesk_calls": self.successful_newsdesk_calls,
             "newsdesk_retry_used": self.newsdesk_retry_used,
@@ -874,12 +893,36 @@ class NewsroomSession:
         candidates.append((2, str(item.get("url") or "")))
         return sorted(candidates, key=lambda value: value[0])
 
+    def _candidate_scopes(self, item: dict) -> list[tuple[str, str]]:
+        """Return only exact/code-owned durable pointer scopes for one candidate."""
+        candidate_id = str(item.get("url_hash") or "")[:64]
+        scopes = [("candidate", candidate_id)] if candidate_id else []
+        persisted_key = str(item.get("story_key") or "")[:180]
+        if persisted_key:
+            canonical = store.canonical_story_key(self.con, persisted_key)
+            if canonical:
+                scopes.append(("story", canonical[:180]))
+        return scopes
+
+    def _search_scopes(self, candidate_ids: list[Any]) -> tuple[list[tuple[str, str]], str]:
+        requested = list(dict.fromkeys(str(value) for value in candidate_ids))
+        if len(requested) > 8:
+            return [], "candidate_scope_capacity"
+        unknown = [value for value in requested if value not in self.by_hash]
+        if unknown:
+            return [], "unknown_candidate_scope"
+        scopes = []
+        for candidate_id in requested:
+            scopes.extend(self._candidate_scopes(self.by_hash[candidate_id]))
+        return list(dict.fromkeys(scopes))[:16], ""
+
     def prefetch_prepared_receipts(self) -> None:
         if not self.inventory:
             return
         order = {"operator_requested": 0, "research_retry": 0,
                  "unresolved_continuity": 0, "guide_account": 1,
-                 "node_curated": 1, "official_primary": 1}
+                 "node_curated": 1, "official_primary": 1,
+                 "same_event_companion": 1}
         ranked = sorted(self.inventory, key=lambda row: (
             order.get(str(self.preparations.get(row["url_hash"], {}).get(
                 "protection_reason") or ""), 2),
@@ -992,7 +1035,8 @@ class NewsroomSession:
 
             def add_pointer(url: Any, *, kind: str, publisher: Any = "",
                             title: Any = "", published_at: Any = "",
-                            upstream_role: Any = "") -> None:
+                            upstream_role: Any = "", snippet: Any = "",
+                            observed_at: Any = None) -> None:
                 clean_url = _clean_text(url, 2000)
                 if not clean_url:
                     return
@@ -1010,6 +1054,8 @@ class NewsroomSession:
                     "title": _clean_text(title, 300),
                     "published_at": _clean_text(published_at, 100),
                     "upstream_role_hint": _clean_text(upstream_role, 80),
+                    "snippet": _clean_text(snippet, 1200),
+                    "observed_at_epoch": observed_at,
                     "registry_tier": classified.tier,
                     "registry_receipt_role": classified.receipt_role,
                     "fetch_allowed_by_registry": classified.base_receipt_eligible,
@@ -1036,6 +1082,25 @@ class NewsroomSession:
                     )
             for url in list(guide.get("outbound_urls") or [])[:4]:
                 add_pointer(url, kind="guide_outbound_lead", upstream_role="outbound_link")
+            if config.SEARCH_RESILIENCE_ENABLED:
+                reusable = store.search_pointers_for_scopes(
+                    self.con, self._candidate_scopes(item), limit=5,
+                )
+                pointer_count_before = len(pointers)
+                for prior in reusable:
+                    add_pointer(
+                        prior.get("url"), kind="prior_search_result",
+                        publisher=prior.get("outlet"), title=prior.get("title"),
+                        published_at="", upstream_role="search_pointer_only",
+                        snippet=prior.get("snippet"), observed_at=prior.get("observed_at"),
+                    )
+                reused = len(pointers) - pointer_count_before
+                if reused:
+                    self.search_pointer_reuse += reused
+                    for _ in range(reused):
+                        store.record_search_activity(
+                            self.con, self.run_id, "pointer_reuse", "prior_search_result"
+                        )
 
             guide_tip = None
             if guide:
@@ -1447,10 +1512,17 @@ class NewsroomSession:
                 "content": json.dumps(value, separators=(",", ":"), ensure_ascii=False),
                 "is_error": error}
 
+    def _fetch_failure(self, result: dict) -> dict:
+        kind = _clean_text(result.get("error_kind") or result.get("kind") or "unknown", 80)
+        self.fetch_failure_kinds[kind] = self.fetch_failure_kinds.get(kind, 0) + 1
+        return result
+
     def _fetch(self, url: str, *, intake: dict | None = None,
                char_limit: int | None = None, adapter_provenance: str = "") -> dict:
         if self.fetch_count >= config.RUN_NEWSROOM_MAX_FETCHES:
-            return {"ok": False, "kind": "fetch_capacity", "message": "fetch limit reached"}
+            return self._fetch_failure(
+                {"ok": False, "kind": "fetch_capacity", "message": "fetch limit reached"}
+            )
         normalized = source_policy.normalize_url(url)
         if normalized in self.fetch_by_url:
             return self._fetch_payload(self.fetches[self.fetch_by_url[normalized]], cached=True)
@@ -1458,15 +1530,21 @@ class NewsroomSession:
             try:
                 sources._assert_public_http_url(url)
             except sources.UnsafeSourceURL as exc:
-                return {"ok": False, "kind": "unsafe_url", "message": str(exc)[:200]}
+                return self._fetch_failure(
+                    {"ok": False, "kind": "unsafe_url", "message": str(exc)[:200]}
+                )
             pre = source_policy.classify(url, "")
             if config.EDITORIAL_ENGINE != "v2" and (
                     not pre.base_receipt_eligible or pre.tier not in {"p0", "t1", "t2"}):
-                return {"ok": False, "kind": "ineligible_source",
-                        "message": "source policy does not allow this page as evidence"}
+                return self._fetch_failure({
+                    "ok": False, "kind": "ineligible_source",
+                    "message": "source policy does not allow this page as evidence",
+                })
         remaining = config.RUN_NEWSROOM_MAX_FETCH_TOTAL_CHARS - self.fetch_chars
         if remaining <= 0:
-            return {"ok": False, "kind": "context_capacity", "message": "fetch text budget reached"}
+            return self._fetch_failure({
+                "ok": False, "kind": "context_capacity", "message": "fetch text budget reached",
+            })
         limit = min(config.RUN_NEWSROOM_MAX_FETCH_CHARS, remaining)
         if char_limit is not None:
             limit = min(limit, max(1, int(char_limit)))
@@ -1489,7 +1567,7 @@ class NewsroomSession:
                 result["suggested_search_query"] = _clean_text(
                     f'{intake.get("title", "")} {intake.get("source", "")}', 400
                 )
-            return result
+            return self._fetch_failure(result)
         final_url = str(fetched.get("final_url") or url)
         final_ref = source_policy.classify(final_url, intake.get("source", "") if intake else "")
         text = str(fetched["text"])
@@ -1723,6 +1801,167 @@ class NewsroomSession:
             }
         return {"ok": False, "kind": "haiku_round_limit"}
 
+    def _refresh_search_account(self) -> dict:
+        if not config.SEARCH_RESILIENCE_ENABLED:
+            return {"outcome": "disabled", "probe_token": ""}
+        claim = store.claim_search_status_check(
+            self.con, "serpapi", ttl_seconds=config.SEARCH_ACCOUNT_TTL_SECONDS,
+            lease_seconds=config.SERPAPI_TIMEOUT_SECONDS + 15,
+        )
+        token = str(claim.get("token") or "")
+        if not token:
+            return {"outcome": str(claim.get("reason") or "throttled"),
+                    "probe_token": ""}
+        try:
+            snapshot = search.account_status()
+            if not store.record_search_account_status(
+                    self.con, snapshot, status_token=token):
+                return {"outcome": "stale", "probe_token": ""}
+            store.record_search_activity(
+                self.con, self.run_id, "account_status_success", snapshot.get("state", "")
+            )
+            return {"outcome": "success", "probe_token": ""}
+        except search.SearchError as exc:
+            failure = store.fail_search_status_and_claim_probe(
+                self.con, "serpapi", exc.kind, str(exc), status_token=token,
+                probe_lease_seconds=config.SERPAPI_TIMEOUT_SECONDS + 15,
+            )
+            store.record_search_activity(
+                self.con, self.run_id, "account_status_failure", exc.kind
+            )
+            return {
+                "outcome": "failed" if failure["recorded"] else "stale",
+                "probe_token": str(failure.get("probe_token") or ""),
+            }
+
+    def _search_web(self, value: dict) -> dict:
+        query = str(value.get("query") or "")
+        candidate_ids = list(value.get("candidate_ids") or [])
+        scopes, scope_error = self._search_scopes(candidate_ids)
+        if scope_error:
+            return {"ok": False, "kind": scope_error}
+        identity = search.request_identity(query, max_results=5)
+        if not identity.get("query"):
+            return {"ok": False, "kind": "empty_query"}
+        if (not config.SEARCH_RESILIENCE_ENABLED
+                and self.searches >= config.RUN_NEWSROOM_MAX_SEARCHES):
+            return {"ok": False, "kind": "search_capacity"}
+        self.searches += 1
+        if not config.SEARCH_RESILIENCE_ENABLED and self.search_circuit_open:
+            return {
+                "ok": False, "kind": "search_unavailable_for_run",
+                "message": "Search provider is degraded for this run. Use direct URLs, "
+                           "reusable evidence, or narrower attributed copy; do not retry search.",
+            }
+        if config.SEARCH_RESILIENCE_ENABLED:
+            cached = store.search_cache_get(self.con, identity)
+            if cached is not None:
+                self.search_cache_hits += 1
+                store.record_search_activity(self.con, self.run_id, "cache_hit")
+                if scopes:
+                    store.save_search_pointers(
+                        self.con, scopes, cached,
+                        ttl_seconds=config.SEARCH_POINTER_TTL_SECONDS,
+                    )
+                return {"ok": True, "cached": True, "results": cached}
+            self.search_cache_misses += 1
+            store.record_search_activity(self.con, self.run_id, "cache_miss")
+            refresh = self._refresh_search_account()
+            refresh_result = str(refresh.get("outcome") or "stale")
+            provider_state = store.search_provider_state(self.con)
+            state = str(provider_state.get("state") or "unknown")
+            now = time.time()
+            next_search = float(provider_state.get("next_search_at") or 0)
+            probe_token = ""
+            if state == "unconfigured":
+                self.search_provider_skips += 1
+                store.record_search_activity(
+                    self.con, self.run_id, "provider_skip", "unconfigured"
+                )
+                return {"ok": False, "kind": "search_unconfigured"}
+            if state == "quota_exhausted":
+                if next_search > now:
+                    self.search_provider_skips += 1
+                    self.search_circuit_open = True
+                    store.record_search_activity(
+                        self.con, self.run_id, "provider_skip", "quota_exhausted"
+                    )
+                    return {
+                        "ok": False, "kind": "search_unavailable_for_run",
+                        "reason": "quota_exhausted", "retry_at_epoch": round(next_search, 3),
+                        "message": "Shared search capacity is exhausted. Use supplied receipts, "
+                                   "reusable evidence, or narrower attributed copy.",
+                    }
+                probe_token = str(refresh.get("probe_token") or "")
+                if refresh_result != "failed" or not probe_token:
+                    self.search_provider_skips += 1
+                    self.search_circuit_open = True
+                    reason = {
+                        "in_progress": "account_refresh_in_progress",
+                        "failed": "account_refresh_failed",
+                    }.get(refresh_result, "account_refresh_throttled")
+                    store.record_search_activity(
+                        self.con, self.run_id, "provider_skip", reason
+                    )
+                    return {"ok": False, "kind": "search_unavailable_for_run",
+                            "reason": reason}
+            elif state in {"rate_limited", "degraded"} and next_search > now:
+                self.search_provider_skips += 1
+                self.search_circuit_open = True
+                store.record_search_activity(self.con, self.run_id, "provider_skip", state)
+                return {
+                    "ok": False, "kind": "search_unavailable_for_run", "reason": state,
+                    "retry_at_epoch": round(next_search, 3),
+                }
+        else:
+            probe_token = ""
+
+        if self.search_http_attempts >= config.RUN_NEWSROOM_MAX_SEARCHES:
+            return {"ok": False, "kind": "search_capacity"}
+        self.search_http_attempts += 1
+        if config.SEARCH_RESILIENCE_ENABLED:
+            store.record_search_activity(self.con, self.run_id, "provider_http_attempt")
+        try:
+            results = search.google(query, max_results=5)
+        except search.SearchError as exc:
+            self.search_failures += 1
+            self.search_circuit_open = bool(
+                exc.kind in {"quota_exhausted", "rate_limited"}
+                or self.search_failures >= 2
+            )
+            if config.SEARCH_RESILIENCE_ENABLED:
+                store.record_search_failure(
+                    self.con, "serpapi", exc.kind, str(exc),
+                    retry_after_seconds=exc.retry_after_seconds,
+                    probe_token=probe_token,
+                    cooldown_seconds=config.SEARCH_PROVIDER_COOLDOWN_SECONDS,
+                )
+                durable = store.search_provider_state(self.con)
+                self.search_circuit_open = bool(
+                    self.search_circuit_open
+                    or durable.get("state") in {"quota_exhausted", "rate_limited", "degraded"}
+                )
+                store.record_search_activity(
+                    self.con, self.run_id, "provider_failure", exc.kind
+                )
+            return {
+                "ok": False,
+                "kind": ("search_unavailable_for_run" if self.search_circuit_open
+                         else "search_retryable"),
+                "reason": exc.kind, "message": str(exc)[:200],
+            }
+        if config.SEARCH_RESILIENCE_ENABLED:
+            store.record_search_success(self.con, "serpapi", probe_token=probe_token)
+            results = store.search_cache_put(
+                self.con, identity, results, ttl_seconds=config.SEARCH_CACHE_TTL_SECONDS,
+            )
+            if scopes:
+                store.save_search_pointers(
+                    self.con, scopes, results,
+                    ttl_seconds=config.SEARCH_POINTER_TTL_SECONDS,
+                )
+        return {"ok": True, "cached": False, "results": results}
+
     def _dispatch(self, block, *, allow_assignment: bool = True,
                   fetch_char_limit: int | None = None) -> dict:
         name, value = block.name, block.input
@@ -1746,32 +1985,7 @@ class NewsroomSession:
                                      char_limit=fetch_char_limit)
             return self._tool_result(block.id, result, error=not result.get("ok"))
         if name == "search_web":
-            if self.searches >= config.RUN_NEWSROOM_MAX_SEARCHES:
-                result = {"ok": False, "kind": "search_capacity"}
-            elif self.search_circuit_open:
-                self.searches += 1
-                result = {
-                    "ok": False, "kind": "search_unavailable_for_run",
-                    "message": "Search provider is degraded for this run. Use direct URLs, "
-                               "reusable evidence, or narrower attributed copy; do not retry search.",
-                }
-            else:
-                self.searches += 1
-                self.search_http_attempts += 1
-                try:
-                    result = {"ok": True, "results": search.google(str(value.get("query") or ""), max_results=5)}
-                except search.SearchError as exc:
-                    self.search_failures += 1
-                    self.search_circuit_open = bool(
-                        getattr(exc, "kind", "") == "rate_limited"
-                        or self.search_failures >= 2
-                    )
-                    result = {
-                        "ok": False,
-                        "kind": ("search_unavailable_for_run" if self.search_circuit_open
-                                 else "search_retryable"),
-                        "message": str(exc)[:200],
-                    }
+            result = self._search_web(value)
             return self._tool_result(block.id, result, error=not result.get("ok"))
         if name == "fetch_source":
             result = self._fetch(str(value.get("url") or ""),

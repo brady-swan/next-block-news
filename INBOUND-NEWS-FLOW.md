@@ -1,6 +1,6 @@
 # Next Block News: Inbound News Flow
 
-**Production reference — September 1, 2026**
+**Production reference — September 4, 2026**
 
 This document describes every path by which a news candidate currently reaches Next
 Block News (NBN), when each path runs, and how all paths converge into the same editorial
@@ -246,9 +246,13 @@ All sources converge before model judgment.
    candidates from every lane as `advance` or `background`. Guide, Node, official, operator,
    retry, and unresolved-continuity work is protected; every error fails open. In enforce mode,
    an all-Background batch does not wake Sonnet. Background remains visible and promotable.
-4. **Mechanical eligibility.** Exact URL duplicates, unsafe inputs, and clearly unusable
+4. **Same-event companions.** When one member of a Haiku run-local exact-event group advances,
+   code advances the group's Background companions too and records which candidate anchored the
+   promotion. This is desk organization only: Sonnet still determines canonical event identity,
+   evidence sufficiency, news value, and publication. An all-Background group stays Background.
+5. **Mechanical eligibility.** Exact URL duplicates, unsafe inputs, and clearly unusable
    language are handled in code. Semantic freshness and news value belong to the models.
-5. **Batching.** Up to 25 pending items enter one preparation/newsroom run. Excess items stay
+6. **Batching.** Up to 25 pending items enter one preparation/newsroom run. Excess items stay
    pending for the next minute's cycle.
 
 ## 4. Editorial funnel
@@ -313,6 +317,20 @@ official/research/reporting results. NBN reclassifies every requested and final 
 against its own registry. The search snippets are never evidence. Search is therefore a
 research step, not a raw inbound feed. A second-tier publication can alert NBN to an event
 without becoming the link in the final post.
+
+Search is resilient across fresh Sonnet sessions. Exact normalized SerpAPI queries use a bounded
+one-hour local cache. Their uninspected result pointers may follow only the exact candidate IDs or
+already-persisted story key Sonnet names and remain reusable for six hours. This avoids paying for
+the same lookup and prevents useful research leads from disappearing at the next 15-minute run;
+the page still must be fetched before it becomes evidence.
+
+NBN checks SerpAPI's free account-status endpoint at most once every five minutes across workers.
+Confirmed quota exhaustion waits for the provider renewal time, rate limits honor a bounded
+`Retry-After`, and transient provider failures use a short shared cooldown. Cached results remain
+available while the provider circuit is open. At an expired quota boundary, one worker owns an
+expiring half-open probe so a failed status endpoint cannot leave search permanently disabled.
+The Desk distinguishes provider HTTP attempts, cache hits/misses, provider skips, pointer reuse,
+and typed search/fetch failures.
 
 URL classification decides only whether a fetched page may be considered. Sonnet proposes
 support/originality from inspected text, but code reconstructs the source record from

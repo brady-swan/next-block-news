@@ -700,6 +700,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
 
     run_started = time.time()
     pipeline_run_id = f"cycle:{int(run_started)}:{lease_owner[:8]}"
+    if config.SEARCH_RESILIENCE_ENABLED:
+        store.prune_search_state(con, now=run_started)
     newsroom_recovery = store.recover_incomplete_newsroom_runs(con)
     if newsroom_recovery["runs"]:
         log.warning("recovered interrupted newsroom runs: %s", newsroom_recovery)
