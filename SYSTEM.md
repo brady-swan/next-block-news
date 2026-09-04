@@ -318,6 +318,13 @@ is disabled by default; its implementation remains behind `NBN_BRIEFING_ENABLED=
 rollback/experiment path. The daily audit re-checks recent output and stages corrections for
 human review.
 
+The separate rolling production audit follows `AUDIT-AUTONOMY.md`. It may diagnose and repair
+clear technical regressions, then test, deploy, smoke, or roll back the smallest safe fix. It may
+collect editorial evidence but must propose editorial improvements rather than changing live
+judgment on its own. Its only autonomous editorial-safety mutation is one-way: it may turn
+autopost off when a systemic publishing problem is evidenced, must notify the owner immediately,
+and may never turn autopost on.
+
 ## Operations
 
 - Database: `/data/nbn.db`; tape: `/data/tapes/`.

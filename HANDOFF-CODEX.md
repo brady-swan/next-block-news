@@ -94,6 +94,13 @@ draft run replaced a The Block X tip with Farside primary data and withheld the 
 covered ETF-flow event; the first non-empty live run completed normally. `/health` is clean,
 the Desk renders newsroom diagnostics, and the external 15-minute audit remains active.
 
+The external rolling audit now operates under `AUDIT-AUTONOMY.md`. It may investigate freely and
+repair clear technical regressions with tests, deployment, and smoke verification. It accumulates
+editorial evidence but proposes editorial improvements for owner approval. It may turn autopost
+off—but never on—when concrete evidence shows a systemic publishing problem. Before reporting a
+miss, it must check recent NBN output, Typefully drafts, and continuity state; an existing draft or
+post can correctly explain a later hold.
+
 **Prior integration deployment:** Plan 0047 conversion recovery remains in the history.
 Node commit `891d27a` produced production wire run `177450`, whose versioned pulse is still
 consumed normally by NBN.
