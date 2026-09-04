@@ -1,6 +1,6 @@
 # Plan 0055 — Editorial calibration and owner-feedback loop
 
-**Status:** Owner-approved and independently reviewed. Approved for implementation.
+**Status:** Implemented and deployed to production on 2026-09-04.
 
 ## Objective
 
@@ -266,6 +266,44 @@ Typefully submission.
    and that comment-marked drafts remain protected.
 7. Keep the existing read-only rolling audit active and watch the next natural batch for selection,
    lede hierarchy, sentence rhythm, unnecessary detail, speed, and cost.
+
+## Implementation and production proof
+
+- Brady approved the plan after removing the potentially wasteful “Research deeply” instruction
+  and adding the immediate first-reply source format.
+- The independent lead-coder review returned changes required once, covering executable comment
+  bounds, persisted-mutation compatibility, exact create read-back, and rollback separation. The
+  revised plan then received approval.
+- Implementation shipped as three independently reversible commits:
+  - `b8ad8ec` — editorial selection, lede hierarchy, compression, and sentence-rhythm calibration;
+  - `b6235c1` — exact two-post Typefully source-reply delivery and mutation compatibility;
+  - `ef338cf` — bounded, GET-only Typefully owner-feedback reader.
+- The final suite passed all 360 tests. Python compilation and `git diff --check` passed. The
+  focused Ruff `F` check reports one older unused local in `nbn/lint.py` (introduced by
+  `39568831`), outside the files and behavior changed by this sprint.
+- A non-publishing Sonnet shadow set dropped the small indirect miner-equity story, split and
+  simplified the Trump and Coldcard copy, moved the CLARITY consequence into the lede, preserved
+  the concise Trezor copy, and—after one prompt clarification—put the Cornell finding before its
+  methodology.
+- The production database passed `PRAGMA integrity_check` and was backed up to
+  `/data/backups/nbn-pre-plan0055-20260904T183636Z.db` before deployment.
+- Railway deployment `d8cdce0f-c79d-40de-80a7-a35336ac7600` completed successfully. Production
+  reports `editorial-core-v2.10`, `NBN_AUTOPOST_ENABLED=false`, and editor model
+  `claude-sonnet-5`.
+- `/health` and `/status` passed. Worker startup, RSS, EDGAR, Node, X, Typefully publication sync,
+  and Typefully analytics sync completed. One Perception request received an external 429; the
+  remaining intake lanes and newsroom run continued normally.
+- Natural newsroom run `cycle:1788547747:e63b88f7` completed in 40.01 seconds. Haiku advanced
+  three of six leads; Sonnet reasonably dropped all three advanced items as non-events or
+  opinion-only material. This was a healthy zero-story decision, not a publishing failure.
+- The production Typefully feedback reader retrieved the two known owner comments without a write
+  request. The rolling 15-minute audit remains active and now checks bounded unresolved comments,
+  receipt/reply integrity, speed, cost, and the seven standing editorial watch items while
+  retaining its read-only restriction.
+- No qualified natural story arrived during the deployment smoke window, so production did not
+  create a synthetic draft merely to exercise the new two-post shape. Exact ordered creation,
+  confirmation, ambiguity handling, and legacy/new persisted-mutation reconciliation are covered
+  by the passing tests; the audit will verify the first natural post-deployment Typefully draft.
 
 ## Rollback
 
