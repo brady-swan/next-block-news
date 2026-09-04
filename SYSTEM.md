@@ -190,6 +190,12 @@ is not a hidden code veto. Discovery tweets and search snippets never count as e
 captured X post proves what that account said, not the underlying claim; aggregators, wrappers,
 and syndicated copies are not independent corroboration.
 
+Bitcoin Policy Institute is a scoped exception to the generic social-post rule. BPI's site and
+`@bitcoinpolicy` account are first-party receipts for research BPI says it published and for its
+stated findings; that research may be posted without separate confirmation. This trust does not
+extend to third-party facts or allegations BPI cites, and it does not classify BPI as a government
+or company-action official source.
+
 The desk and editor may use all inspected receipts together. The linked receipt is the best
 useful source for the reader; it is not required to reproduce every harmless detail alone.
 The source registry is strong guidance rather than a closed universe: Sonnet may inspect and

@@ -694,7 +694,8 @@ aliases = ["delving bitcoin"]
 handles = []
 
 # Tier 2 research and data. These are primary for their own disclosed analysis,
-# but never official-primary or autopostable merely because of tier.
+# but never official-primary or autopostable merely because of tier. Bitcoin Policy
+# Institute's own research may stand as the sole receipt for its stated findings.
 [[sources]]
 id = "bitcoin-policy-institute"
 display_name = "Bitcoin Policy Institute"
@@ -704,7 +705,7 @@ independence_key = "bitcoin-policy-institute"
 receipt_role = "research"
 domains = ["btcpolicy.org"]
 aliases = ["bitcoin policy institute", "bpi"]
-handles = ["btcpolicyorg"]
+handles = ["bitcoinpolicy", "btcpolicyorg"]
 
 [[sources]]
 id = "galaxy-research"

@@ -66,6 +66,10 @@ known first-party statement, unknown-domain material, social statement, guide/di
 aggregator/wrapper, or syndication. The editor sees those labels and every inspected body.
 Search snippets remain pointers, never evidence.
 
+Bitcoin Policy Institute's site and `@bitcoinpolicy` account are treated as first-party receipts
+for BPI's own published research and stated findings, without separate confirmation. This scoped
+trust does not cover third-party facts or allegations BPI merely cites.
+
 Optional search resilience adds a complete-query SQLite cache, exact-candidate/story pointer
 reuse, and a shared quota/rate-limit circuit. It never turns a search result into evidence;
 Sonnet must still fetch the page. Enable it with `NBN_SEARCH_RESILIENCE_ENABLED=true`; same-event

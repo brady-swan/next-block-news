@@ -311,6 +311,10 @@ source is needed. NBN independently classifies every fetched page's receipt qual
 - **Tier 3:** discovery/corroboration lead only.
 - **Unknown/lower:** not autonomously receipt-eligible.
 
+Bitcoin Policy Institute's site and `@bitcoinpolicy` account are a scoped first-party research
+source: BPI's own published research and stated findings may stand alone without corroboration.
+Claims about third parties that BPI merely cites retain the normal evidence standard.
+
 A Tier 3 or weak source is a lead, not a receipt. Sonnet can inspect eligible pages already
 supplied by the Node or linked by a guide account, query SerpAPI directly, and fetch stronger
 official/research/reporting results. NBN reclassifies every requested and final redirect URL

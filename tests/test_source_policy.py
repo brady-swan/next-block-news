@@ -15,6 +15,7 @@ class SourcePolicyTests(unittest.TestCase):
             "https://x.com/BitcoinMagazine/status/1": ("bitcoin-magazine", "t2"),
             "https://x.com/coindesk/status/1": ("coindesk", "t2"),
             "https://www.btcpolicy.org/research/report": ("bitcoin-policy-institute", "t2"),
+            "https://x.com/bitcoinpolicy/status/1": ("bitcoin-policy-institute", "t2"),
             "https://x.com/KobeissiLetter/status/1": ("kobeissi-letter", "t2"),
             "https://www.thekobeissiletter.com/p/markets": ("kobeissi-letter", "t2"),
             "https://x.com/Barchart/status/1": ("barchart", "t2"),
@@ -28,6 +29,15 @@ class SourcePolicyTests(unittest.TestCase):
             with self.subTest(url=url):
                 ref = source_policy.classify(url)
                 self.assertEqual((ref.source_id, ref.tier), expected)
+
+    def test_bpi_is_primary_only_for_its_own_research(self):
+        website = source_policy.classify("https://www.btcpolicy.org/research/report")
+        account = source_policy.classify("https://x.com/bitcoinpolicy/status/1")
+        other_research = source_policy.classify("https://www.galaxy.com/insights/research/report")
+        self.assertTrue(website.trusted_own_research)
+        self.assertTrue(account.trusted_own_research)
+        self.assertFalse(account.official)
+        self.assertFalse(other_research.trusted_own_research)
 
     def test_handle_classifies_x_url(self):
         ref = source_policy.classify(

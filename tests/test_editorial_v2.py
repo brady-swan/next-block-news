@@ -556,6 +556,18 @@ class EditorialV2Tests(unittest.TestCase):
         self.assertIn("facility-specific action", editor.BATCH_EDITOR_PROMPT)
         self.assertIn("older statement of general company", editor.BATCH_EDITOR_PROMPT)
 
+    def test_bpi_x_research_is_labeled_first_party_without_becoming_official(self):
+        ref = source_policy.classify("https://x.com/bitcoinpolicy/status/1")
+        record = newsroom.FetchRecord(
+            fetch_id="fetch-bpi", requested_url=ref.url, final_url=ref.url,
+            canonical_url=ref.url, redirect_chain=(), source=ref, byline="BPI",
+            text="Bitcoin Policy Institute published new research.",
+            content_fingerprint="fingerprint", outcome="ok",
+        )
+        self.assertEqual(record.evidence_capability, "known_first_party_research")
+        self.assertFalse(ref.official)
+        self.assertIn("without separate confirmation", editor.BATCH_EDITOR_PROMPT)
+
     def test_persisted_cadence_survives_calls_and_can_be_forced(self):
         with temporary_store() as con, patch.object(config, "DESK_INTERVAL_SECONDS", 900):
             self.assertTrue(store.editorial_run_due(con, now=1000))

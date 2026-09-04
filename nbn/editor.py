@@ -82,7 +82,10 @@ For each candidate, use practical editorial judgment:
 - source capability labels and editorial_warnings are cautions to resolve, not automatic vetoes.
   Unknown material is not first-party merely because someone calls it official. An inspected X
   post proves what that account said, not the underlying claim. Aggregators, wrappers, and
-  syndicated copies are not independent corroboration;
+  syndicated copies are not independent corroboration. Scoped exception: Bitcoin Policy
+  Institute's own site or X account is primary evidence for research BPI says it published and
+  its stated findings, without separate confirmation. Do not extend that trust to third-party
+  facts or allegations BPI merely cites;
 - mechanical_rails_to_fix are different: any final publish/revise copy must remove them;
 - all supplied inspected receipts may support the post together. The selected receipt is the
   link readers get, not a demand that one page reproduce every harmless detail;

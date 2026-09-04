@@ -124,6 +124,18 @@ class SourceRef:
     def official(self) -> bool:
         return self.tier == "p0" and self.receipt_role == "official"
 
+    @property
+    def trusted_own_research(self) -> bool:
+        """Whether this source may stand alone for research it says it published.
+
+        This does not authenticate third-party facts or allegations quoted by the source;
+        determining whether a claim is actually the source's own work remains editorial.
+        """
+        return (
+            self.source_id == "bitcoin-policy-institute"
+            and self.receipt_role == "research"
+        )
+
 
 @dataclass(frozen=True)
 class SourceEntry:

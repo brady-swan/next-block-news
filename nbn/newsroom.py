@@ -23,7 +23,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.7"
+PROMPT_VERSION = "editorial-core-v2.8"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -60,6 +60,8 @@ class FetchRecord:
 
     @property
     def evidence_capability(self) -> str:
+        if self.source.trusted_own_research:
+            return "known_first_party_research"
         if self.source.domain in {"x.com", "twitter.com"}:
             return "inspected_social_statement"
         if self.source.receipt_role in {"aggregator", "blocked"}:
@@ -249,7 +251,10 @@ HOW TO WORK
   unknown to the registry.
 - An inspected X post proves only that the named account made that statement, not that its
   underlying claim is true or independently corroborated. Aggregators, wrappers, and syndicated
-  copies are not independent. Search snippets remain pointers only.
+  copies are not independent. The scoped exception is Bitcoin Policy Institute: its own site or
+  X account is primary evidence for research BPI says it published and for BPI's stated findings,
+  so that work does not need separate confirmation. Do not extend that trust to third-party facts
+  or allegations BPI merely cites. Search snippets remain pointers only.
 - Judge semantic novelty and numerical materiality like a practical editor. Recent coverage is
   context, not a brittle string-matching rule. If this is a useful later development, say what
   changed; if it is genuinely redundant, drop it.
@@ -2215,7 +2220,10 @@ class NewsroomSession:
             qualified = [record for record in evidence if record and record.eligible]
             for record in qualified:
                 capability = record.evidence_capability
-                if capability not in {"known_reporting_or_research", "known_first_party_statement"}:
+                if capability not in {
+                    "known_reporting_or_research", "known_first_party_statement",
+                    "known_first_party_research",
+                }:
                     warnings.append(
                         f"evidence_capability:{capability}:{record.source.domain or 'unknown'}"
                     )
@@ -2224,7 +2232,11 @@ class NewsroomSession:
                     record.source.independence_key for record in qualified
                     if record.independent_report
                 }
-                if not any(record.source.official for record in qualified) and len(independent) < 2:
+                has_primary = any(
+                    record.source.official or record.source.trusted_own_research
+                    for record in qualified
+                )
+                if not has_primary and len(independent) < 2:
                     warnings.append(
                         "elevated_claim_single_source: narrow and attribute, route to human draft, "
                         "or drop unless the evidence is sufficient in context"
@@ -2286,9 +2298,13 @@ class NewsroomSession:
                 originality=_record_originality(selected),
                 receipt_eligible=True,
                 corroboration_eligible=selected.independent_report,
-                primary_artifact_url=selected.final_url if selected.source.official else "",
+                primary_artifact_url=(selected.final_url if (
+                    selected.source.official or selected.source.trusted_own_research
+                ) else ""),
                 primary_artifact_fingerprint=(selected.content_fingerprint
-                                              if selected.source.official else ""),
+                                              if (selected.source.official
+                                                  or selected.source.trusted_own_research)
+                                              else ""),
                 content_fingerprint=selected.content_fingerprint,
                 earliest_coverage_date=None,
                 note=f"editorial v2 {self.run_id}: practical inspected evidence",
