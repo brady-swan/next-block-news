@@ -477,6 +477,21 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
 
     candidates = []
     candidate_rows: dict[str, dict] = {}
+
+    def suppress_existing(story_id: str, members: list[dict], key: str, reason: str) -> None:
+        for member in members:
+            store.set_status(con, member["url_hash"], "skipped", key, reason[:300],
+                             stage="delivery", category="existing_output")
+            store.record_pipeline_event(
+                con, pipeline_run_id, member["url_hash"], "existing_output_suppressed",
+                story_key=key, category="delivery", metadata={"reason": reason[:200]},
+            )
+        result["skipped"] = int(result.get("skipped", 0)) + len(members)
+        store.set_newsroom_story_state(
+            con, pipeline_run_id, story_id, "held",
+            details={"validation": "held", "reason": reason[:300]},
+        )
+
     for story_id, members in by_story.items():
         anchor = members[0]
         resolution = outcome.resolutions[anchor["url_hash"]]
@@ -506,7 +521,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             )
             continue
         selected = outcome.fetches.get(str(draft.get("selected_fetch_id") or ""), fetches[0])
-        if store.exact_output_exists(con, post, selected.final_url):
+        if store.exact_thread_output_exists(con, post, selected.final_url):
             for member in members:
                 store.set_status(con, member["url_hash"], "skipped",
                                  _v2_member_story_key(member, draft, resolution.story_key),
@@ -515,6 +530,72 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 con, pipeline_run_id, story_id, "held",
                 details={"validation": "held", "reason": "exact_output_or_receipt_exists"},
             )
+            continue
+        relation = str(draft.get("coverage_relation") or "distinct")
+        output_state = store.canonical_output_state(con, resolution.story_key)
+        operation = "create"
+        target_draft = None
+        base_post_id = None
+        if output_state["protected_mutations"]:
+            suppress_existing(
+                story_id, members, resolution.story_key,
+                "canonical output mutation is pending or needs owner review",
+            )
+            continue
+        if len(output_state["drafts"]) > 1:
+            suppress_existing(
+                story_id, members, resolution.story_key,
+                "multiple open drafts require owner cleanup",
+            )
+            continue
+        if output_state["state"] == "reader_visible":
+            visible = output_state["visible"]
+            base_post_id = int(visible["id"])
+            if relation == "same_event":
+                suppress_existing(story_id, members, resolution.story_key,
+                                  "same event is already reader-visible")
+                continue
+            if relation != "material_update":
+                suppress_existing(story_id, members, resolution.story_key,
+                                  "incoherent distinct relation to reader-visible event")
+                continue
+            if not post.lstrip().startswith("UPDATE:"):
+                for member in members:
+                    store.defer_item(
+                        con, member["url_hash"], "defer:material_update_requires_update_label",
+                        story_key=resolution.story_key, stage="hard_rail",
+                        category="technical_defer",
+                    )
+                result["held"] += len(members)
+                continue
+            if output_state["drafts"]:
+                pending = output_state["drafts"][0]
+                if pending.get("coverage_relation") != "material_update" \
+                        or int(pending.get("base_post_id") or 0) != base_post_id:
+                    suppress_existing(
+                        story_id, members, resolution.story_key,
+                        "legacy or stale pending draft requires owner cleanup",
+                    )
+                    continue
+                operation, target_draft = "replace_draft", pending
+        elif output_state["state"] == "open_draft":
+            if relation not in {"same_event", "material_update"}:
+                suppress_existing(story_id, members, resolution.story_key,
+                                  "new distinct output conflicts with an open canonical draft")
+                continue
+            if not config.DRAFT_REPLACEMENT_ENABLED:
+                suppress_existing(story_id, members, resolution.story_key,
+                                  "open canonical draft retained; automatic replacement disabled")
+                continue
+            operation, target_draft = "replace_draft", output_state["drafts"][0]
+        elif relation == "material_update":
+            for member in members:
+                store.defer_item(
+                    con, member["url_hash"], "defer:material_update_has_no_visible_base",
+                    story_key=resolution.story_key, stage="delivery",
+                    category="identity_defer",
+                )
+            result["held"] += len(members)
             continue
         row = {
             "story_id": story_id, "post": post,
@@ -539,11 +620,24 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             "elevated_claim": bool(draft.get("needs_second_source")),
             "mechanical_rails_to_fix": hard_errors,
             "editorial_warnings": list(dict.fromkeys(editorial_warnings))[:16],
+            "output_continuity": {
+                "coverage_relation": relation,
+                "operation": operation,
+                "canonical_key": output_state["canonical_key"],
+                "target_draft_id": str(target_draft["nuelink_id"]) if target_draft else "",
+                "current_accepted_thread": publisher.one_off_x_thread(
+                    target_draft["body"], target_draft["receipt_url"]
+                ) if target_draft else [],
+                "base_post_id": base_post_id,
+            },
         }
         candidates.append(row)
         candidate_rows[story_id] = {
             "members": members, "resolution": resolution, "draft": draft,
             "selected": selected, "fetches": fetches,
+            "coverage_relation": relation, "output_state": output_state,
+            "operation": operation, "target_draft": target_draft,
+            "base_post_id": base_post_id,
         }
         store.set_newsroom_story_state(
             con, pipeline_run_id, story_id, "pending",
@@ -554,6 +648,17 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
     editorial = editor.review_newsroom_batch(
         candidates, con, run_id=pipeline_run_id, reservation=reservation,
     ) if candidates else {"ok": True, "decisions": {}}
+    recovery = editorial.get("recovery") or {}
+    if recovery.get("attempted") and candidate_rows:
+        first = next(iter(candidate_rows.values()))["members"][0]
+        store.record_pipeline_event(
+            con, pipeline_run_id, first["url_hash"], "editor_recovery_requested",
+            category="editor", metadata=recovery,
+        )
+        store.record_pipeline_event(
+            con, pipeline_run_id, first["url_hash"], "editor_recovery_completed",
+            category="editor", metadata=recovery,
+        )
     for story_id, candidate in candidate_rows.items():
         members = candidate["members"]
         resolution = candidate["resolution"]
@@ -566,7 +671,14 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         elif not editorial["ok"] or decision is None:
             verdict, post = "draft", candidate["draft"]["post"]
             reason = ("editor unavailable; staged for review" if not editorial["ok"]
-                      else "editor omitted story; staged for review")
+                      else "editor_incomplete: omitted after bounded recovery")
+            if editorial["ok"]:
+                for member in members:
+                    store.record_pipeline_event(
+                        con, pipeline_run_id, member["url_hash"], "editor_incomplete",
+                        story_key=resolution.story_key, category="editor",
+                        metadata={"recovery": editorial.get("recovery") or {}},
+                    )
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
@@ -656,12 +768,119 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         )
         if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
             raise RuntimeError("cycle lease lost before v2 delivery")
-        mode, publisher_ref = publisher.publish(
-            str(post), selected.final_url, klass, force_draft=force_draft)
+        intended_mode = publisher.intended_mode(klass, force_draft=force_draft)
+        operation = candidate["operation"]
+        target_draft = candidate["target_draft"]
+        desired_thread = publisher.one_off_x_thread(str(post), selected.final_url)
+        prior_thread = publisher.one_off_x_thread(
+            target_draft["body"], target_draft["receipt_url"]
+        ) if target_draft else None
+        materialization = {
+            "run_id": pipeline_run_id, "story_id": story_id,
+            "item_hash": members[0]["url_hash"],
+            "members": [{
+                "url_hash": member["url_hash"],
+                "story_key": _v2_member_story_key(
+                    member, candidate["draft"], resolution.story_key
+                ),
+                "preserve_story_key": bool(
+                    candidate["draft"].get("preserve_member_story_keys")
+                    and member.get("story_key")
+                ),
+            } for member in members],
+            "klass": klass, "body": str(post), "receipt_url": selected.final_url,
+            "editor_note": f"{verdict}: {reason}"[:300],
+            "resolution_id": members[0]["url_hash"],
+            "publisher_backend": publisher.backend_name(),
+            "coverage_relation": candidate["coverage_relation"],
+            "base_post_id": candidate["base_post_id"],
+        }
+        mutation = None
+        if publisher.backend_name() == "typefully":
+            # Replacement was selected against the earlier state; any intervening change
+            # must be re-evaluated by a later clean run, never papered over here.
+            expected = candidate["output_state"]["signature"]
+            mutation = store.prepare_publisher_mutation(
+                con, story_key=resolution.story_key, operation=operation,
+                intended_mode=intended_mode, desired_thread=desired_thread,
+                prior_thread=prior_thread, materialization=materialization,
+                expected_output_signature=expected,
+                target_draft_id=str(target_draft["nuelink_id"]) if target_draft else "",
+                target_post_id=int(target_draft["id"]) if target_draft else None,
+                base_post_id=candidate["base_post_id"],
+            )
+            if not mutation["ok"]:
+                suppress_existing(
+                    story_id, members, resolution.story_key,
+                    "delivery state changed or another mutation is protected",
+                )
+                continue
+            if not store.transition_publisher_mutation(
+                    con, mutation["mutation_id"], mutation["owner_token"],
+                    mutation["version"], "in_flight"):
+                suppress_existing(story_id, members, resolution.story_key,
+                                  "publisher mutation ownership changed")
+                continue
+            mutation["version"] += 1
+        if operation == "replace_draft":
+            mode, publisher_ref = publisher.replace_draft(
+                str(target_draft["nuelink_id"]), prior_thread or [], desired_thread
+            )
+        else:
+            mode, publisher_ref = publisher.publish(
+                str(post), selected.final_url, klass, force_draft=force_draft,
+                exact_payload=bool(mutation))
         lifecycle = {"IMMEDIATE": ("posted", "posted"), "DRAFT": ("drafted", "drafted"),
                      "UNCERTAIN": ("uncertain", "uncertain"), "FAILED": ("failed", "failed"),
                      "TAPE": ("taped", "taped")}
         status, counter = lifecycle.get(mode, ("failed", "failed"))
+        if mutation and mode == "UNCERTAIN":
+            store.transition_publisher_mutation(
+                con, mutation["mutation_id"], mutation["owner_token"], mutation["version"],
+                "ambiguous", provider_ref=str(publisher_ref or ""),
+                error_kind=("draft_update_uncertain" if operation == "replace_draft"
+                            else "create_uncertain"),
+                error_message=str(publisher_ref or ""),
+            )
+            for member in members:
+                store.set_status(
+                    con, member["url_hash"], "uncertain", resolution.story_key,
+                    "publisher outcome ambiguous; automatic retry suppressed",
+                    stage="delivery", category="publisher_ambiguous",
+                )
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, story_id, "held", str(publisher_ref or ""),
+                details={"delivery": {"mode": mode, "mutation_id": mutation["mutation_id"]}},
+            )
+            result[counter] += 1
+            continue
+        if mutation and mode == "FAILED":
+            store.transition_publisher_mutation(
+                con, mutation["mutation_id"], mutation["owner_token"], mutation["version"],
+                "definite_failure", provider_ref=str(publisher_ref or ""),
+                error_kind="remote_rejected", error_message=str(publisher_ref or ""),
+            )
+            if operation == "replace_draft":
+                suppress_existing(
+                    story_id, members, resolution.story_key,
+                    f"existing draft retained: {publisher_ref}",
+                )
+            else:
+                for member in members:
+                    store.set_status(con, member["url_hash"], "failed", resolution.story_key,
+                                     str(publisher_ref or "publisher failed")[:300],
+                                     stage="delivery", category="publisher_failed")
+                result[counter] += 1
+            continue
+        if mutation:
+            store.finalize_publisher_mutation(
+                con, mutation["mutation_id"], mutation["owner_token"], mutation["version"],
+                mode=mode, provider_ref=str(
+                    target_draft["nuelink_id"] if target_draft else publisher_ref or ""
+                ), publisher_status="draft" if mode == "DRAFT" else "scheduled",
+            )
+            result[counter] += 1
+            continue
         for index, member in enumerate(members):
             member_key = _v2_member_story_key(
                 member, candidate["draft"], resolution.story_key
@@ -675,6 +894,8 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             con, resolution.story_key, members[0]["url_hash"], klass, str(post),
             selected.final_url, mode, publisher_ref, editor_note=f"{verdict}: {reason}"[:300],
             resolution_id=members[0]["url_hash"], publisher_backend=publisher.backend_name(),
+            coverage_relation=candidate["coverage_relation"],
+            base_post_id=candidate["base_post_id"],
         )
         store.save_newsroom_delivery(
             con, resolution.story_key, mode=mode, backend_ref=publisher_ref or "",
@@ -702,6 +923,9 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     pipeline_run_id = f"cycle:{int(run_started)}:{lease_owner[:8]}"
     if config.SEARCH_RESILIENCE_ENABLED:
         store.prune_search_state(con, now=run_started)
+    mutation_recovery = publisher.reconcile_mutations(con)
+    if mutation_recovery.get("checked"):
+        log.info("publisher mutation recovery: %s", mutation_recovery)
     newsroom_recovery = store.recover_incomplete_newsroom_runs(con)
     if newsroom_recovery["runs"]:
         log.warning("recovered interrupted newsroom runs: %s", newsroom_recovery)
@@ -1550,7 +1774,7 @@ class Health(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
-        if parsed.path != "/item-action":
+        if parsed.path not in {"/item-action", "/mutation-action"}:
             self.send_response(404)
             self.end_headers()
             return
@@ -1564,12 +1788,23 @@ class Health(BaseHTTPRequestHandler):
             self.send_response(403)
             self.end_headers()
             return
-        item_hash = (q.get("id") or [""])[0]
         action = (q.get("action") or [""])[0]
         day = (q.get("d") or [""])[0]
         con = store.connect()
         try:
-            outcome = store.request_operator_action(con, item_hash, action)
+            if parsed.path == "/mutation-action":
+                try:
+                    version = int((q.get("version") or ["0"])[0])
+                except ValueError:
+                    version = 0
+                outcome = publisher.resolve_mutation(
+                    con, (q.get("id") or [""])[0],
+                    (q.get("owner_token") or [""])[0], version, action,
+                    (q.get("remote_draft_id") or [""])[0],
+                )
+            else:
+                item_hash = (q.get("id") or [""])[0]
+                outcome = store.request_operator_action(con, item_hash, action)
         finally:
             con.close()
         if not outcome["ok"]:

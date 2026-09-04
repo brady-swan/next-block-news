@@ -142,7 +142,8 @@ MODEL_DAILY_TARGET_USD = float(os.environ.get("NBN_MODEL_DAILY_TARGET_USD", "6")
 def editorial_reservation_calls(*, include_mailroom: bool = False,
                                 direct_fallback: bool = False) -> int:
     """Worst-case API attempts for one v2 cycle under the enabled configuration."""
-    total = max(0, RUN_NEWSROOM_MAX_ROUNDS) + max(0, RUN_NEWSROOM_RETRY_ALLOWANCE) + 1
+    # One normal editor call plus at most one omitted-only recovery call.
+    total = max(0, RUN_NEWSROOM_MAX_ROUNDS) + max(0, RUN_NEWSROOM_RETRY_ALLOWANCE) + 2
     if not direct_fallback:
         total += int(DESK_PREP_MODE != "off")
         if HAIKU_RESEARCH_MODE == "on":
@@ -236,6 +237,9 @@ NUELINK_BASE = "https://nuelink.com/api/public/v1"
 # Typefully (preferred posting rail; long posts, threads, scheduled publishing)
 TYPEFULLY_API_KEY = os.environ.get("TYPEFULLY_API_KEY", "")
 TYPEFULLY_SOCIAL_SET_ID = os.environ.get("TYPEFULLY_SOCIAL_SET_ID", "")
+DRAFT_REPLACEMENT_ENABLED = (
+    os.environ.get("NBN_DRAFT_REPLACEMENT_ENABLED", "false").lower() == "true"
+)
 
 # Marketing Node read API (the Brady-tuned daily brief; read-only bearer)
 NODE_BASE_URL = os.environ.get("NBN_NODE_BASE_URL",

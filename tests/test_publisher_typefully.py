@@ -8,12 +8,55 @@ from nbn import publisher_typefully as tf
 
 def response(payload):
     result = Mock()
+    result.status_code = 200
     result.raise_for_status.return_value = None
     result.json.return_value = payload
     return result
 
 
 class TypefullyTests(unittest.TestCase):
+    @patch.object(tf.httpx, "patch")
+    @patch.object(tf, "get_draft")
+    def test_replace_draft_changes_only_text_and_preserves_other_x_fields(self, get_draft,
+                                                                         patch_http):
+        prior = {
+            "id": "42", "social_set_id": "set", "status": "draft",
+            "platforms": {"x": {"enabled": True, "settings": {"reply": "all"},
+                                "posts": [{"text": "old", "media_ids": ["m1"],
+                                           "quote_post_url": "https://x.com/a/status/1",
+                                           "subscribers": False}]}},
+        }
+        desired = {**prior, "platforms": {"x": {**prior["platforms"]["x"],
+                                                   "posts": [{**prior["platforms"]["x"]["posts"][0],
+                                                              "text": "new"}]}}}
+        get_draft.side_effect = [prior, desired]
+        patch_http.return_value = response({"id": "42"})
+        with patch.object(tf.config, "TYPEFULLY_SOCIAL_SET_ID", "set"):
+            outcome, ref = tf.replace_draft("42", ["old"], ["new"])
+        self.assertIs(outcome, tf.PublishOutcome.STAGED)
+        self.assertEqual(ref, "42")
+        body = patch_http.call_args.kwargs["json"]
+        self.assertEqual(body["platforms"]["x"]["posts"][0]["media_ids"], ["m1"])
+        self.assertNotIn("draft_title", body)
+        self.assertNotIn("force_overwrite_comments", body)
+
+    @patch.object(tf, "get_draft")
+    def test_replace_draft_freezes_comment_marked_or_scheduled_output(self, get_draft):
+        get_draft.return_value = {
+            "id": "42", "status": "draft", "comments": [{"id": "c"}],
+            "platforms": {"x": {"enabled": True, "posts": [{"text": "old"}]}},
+        }
+        outcome, reason = tf.replace_draft("42", ["old"], ["new"])
+        self.assertIs(outcome, tf.PublishOutcome.FAILED)
+        self.assertEqual(reason, "comment_marked")
+        get_draft.return_value = {
+            "id": "42", "status": "scheduled",
+            "platforms": {"x": {"enabled": True, "posts": [{"text": "old"}]}},
+        }
+        outcome, reason = tf.replace_draft("42", ["old"], ["new"])
+        self.assertIs(outcome, tf.PublishOutcome.FAILED)
+        self.assertEqual(reason, "non_editable:scheduled")
+
     @patch.object(tf.httpx, "get")
     def test_published_list_is_normalized_and_malformed_records_are_skipped(self, get):
         get.return_value = response({"results": [
@@ -106,6 +149,18 @@ class TypefullyTests(unittest.TestCase):
         self.assertEqual(ref, "draft-6")
         self.assertEqual(create.call_count, 2)
         self.assertNotIn("https://", create.call_args_list[1].args[0][0])
+
+    @patch.object(tf, "_create",
+                  return_value=(tf.PublishOutcome.FAILED,
+                                "403: Adding URLs is blocked"))
+    def test_exact_payload_disables_content_changing_fallback(self, create):
+        outcome, ref = tf.publish_thread(
+            ["copy https://example.com"], immediate=True,
+            allow_url_fallback=False,
+        )
+        self.assertIs(outcome, tf.PublishOutcome.FAILED)
+        self.assertIn("URLs is blocked", ref)
+        self.assertEqual(create.call_count, 1)
 
     @patch.object(tf.httpx, "post", side_effect=TimeoutError("response lost"))
     def test_transport_failure_during_create_is_uncertain(self, post):

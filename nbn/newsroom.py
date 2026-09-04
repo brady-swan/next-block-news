@@ -23,7 +23,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.8"
+PROMPT_VERSION = "editorial-core-v2.9"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -269,6 +269,11 @@ HOW TO WORK
   reopened by a genuinely new candidate or new evidence.
 - existing_cluster_key may name only an exact key supplied by coverage_board or
   continuity_board. Use it when this is the same exact event; do not use a broad theme ID.
+- coverage_relation is required: distinct means a new exact event; same_event means another lead
+  for a supplied/current canonical event; material_update means a genuinely new development after
+  readers could have seen an earlier output. An unpublished draft is not reader-visible: fold new
+  evidence into that draft without an UPDATE label. When autopublishing is active, a submitted,
+  scheduled, publishing, or published output already counts for duplicate-suppression purposes.
 - In the run note, say a story was recommended for delivery, never that it was published; only
   downstream code knows the actual Typefully/X result.
 
@@ -299,6 +304,9 @@ V2_DOSSIER_TOOL = {
                     "story_id": {"type": "string"},
                     "story_key": {"type": "string"},
                     "existing_cluster_key": {"type": ["string", "null"]},
+                    "coverage_relation": {"type": "string", "enum": [
+                        "distinct", "same_event", "material_update"
+                    ]},
                     "member_candidate_ids": {"type": "array", "minItems": 1,
                                              "items": {"type": "string"}},
                     "post": {"type": "string", "maxLength": 8000},
@@ -310,6 +318,7 @@ V2_DOSSIER_TOOL = {
                     "reason": {"type": "string", "maxLength": 500},
                 },
                 "required": ["story_id", "story_key", "existing_cluster_key",
+                             "coverage_relation",
                              "member_candidate_ids", "post",
                              "selected_fetch_id", "evidence_fetch_ids", "elevated_claim",
                              "reader_value", "reason"],
@@ -2177,11 +2186,26 @@ class NewsroomSession:
                 and self.by_hash[member].get("story_key")
             }
             existing_families.discard("")
+            coverage_relation = _clean_text(raw.get("coverage_relation"), 30) or (
+                "same_event" if supplied_key or existing_families else "distinct"
+            )
             identity_valid = not failure
             key = ""
             warnings: list[str] = []
             force_draft_reason = ""
             allow_alias = True
+            if not failure and coverage_relation not in {
+                    "distinct", "same_event", "material_update"}:
+                failure = "defer:invalid_coverage_relation"
+                identity_valid = False
+            elif not failure and coverage_relation == "distinct" and (
+                    supplied_key or existing_families):
+                failure = "defer:incoherent_coverage_relation"
+                identity_valid = False
+            elif not failure and coverage_relation in {"same_event", "material_update"} and not (
+                    supplied_key or existing_families):
+                failure = "defer:incoherent_coverage_relation"
+                identity_valid = False
             if not failure and len(existing_families) > 1:
                 key = self._conflict_review_key(
                     submitted_key, story_id, digest, existing_families
@@ -2251,6 +2275,7 @@ class NewsroomSession:
                                   for value in members[:3] if value in self.by_hash],
                     "submitted_story_key": submitted_key,
                     "existing_cluster_key": supplied_key,
+                    "coverage_relation": coverage_relation,
                     "allow_alias": allow_alias,
                     "proposed_post": post[:8192], "failure": failure,
                     "objective": _failure_objective(failure) if failure else "",
@@ -2312,6 +2337,7 @@ class NewsroomSession:
             )
             draft = {
                 "post": post, "newsroom_story_id": story_id,
+                "coverage_relation": coverage_relation,
                 "reader_value": str(raw.get("reader_value") or "")[:800],
                 "claims": [], "needs_second_source": bool(raw.get("elevated_claim")),
                 "selected_fetch_id": selected_id, "evidence_fetch_ids": evidence_ids,

@@ -60,6 +60,163 @@ def reconcile_publications(con) -> dict:
         return {"error": message}
 
 
+def reconcile_mutations(con) -> dict:
+    """Bounded restart recovery for Typefully operations; never repeats a mutation."""
+    if _backend() != "typefully":
+        return {"disabled": 1}
+    from . import publisher_typefully, store
+    now = time.time()
+    try:
+        last = float(store.kv_get(con, "publisher:mutation_reconcile_last") or 0)
+    except ValueError:
+        last = 0
+    if now - last < 300:
+        return {"rate_limited": 1}
+    store.kv_set(con, "publisher:mutation_reconcile_last", str(now))
+    pending = [row for row in store.pending_publisher_mutations(con, limit=20)
+               if row["state"] in {"prepared", "in_flight", "ambiguous"}]
+    stats = {"checked": 0, "confirmed": 0, "review": 0, "failed": 0, "deferred": 0}
+    if not pending:
+        return stats
+    create_rows = [row for row in pending if row["operation"] == "create"
+                   and row["state"] != "prepared"]
+    recent = []
+    if create_rows:
+        try:
+            recent = publisher_typefully.list_recent_drafts(limit=100)
+        except Exception as exc:  # noqa: BLE001 - keep intents protected for next run
+            log.warning("Typefully mutation list reconciliation deferred: %s", exc)
+            stats["deferred"] += len(create_rows)
+    gets_left = 5
+    for row in pending:
+        stats["checked"] += 1
+        token, version = row["owner_token"], int(row["version"])
+        if row["state"] == "prepared":
+            if store.transition_publisher_mutation(
+                    con, row["mutation_id"], token, version, "definite_failure",
+                    error_kind="crash_before_network", error_message="intent never entered flight"):
+                stats["failed"] += 1
+            continue
+        if row["operation"] == "create":
+            if not recent:
+                stats["deferred"] += 1
+                continue
+            matches = []
+            for raw in recent[:100]:
+                created = publisher_typefully._timestamp(raw.get("created_at"))
+                if created is None or abs(created - float(row["created_at"])) > 1800:
+                    continue
+                texts = publisher_typefully.draft_x_texts(raw)
+                if texts and store.x_thread_fingerprint(texts) == row["desired_fingerprint"]:
+                    matches.append(raw)
+            if len(matches) == 1:
+                remote = matches[0]
+                ref = str(remote.get("id") or "")
+                remote_status = str(remote.get("status") or "draft").casefold()
+                mode = "DRAFT" if remote_status == "draft" \
+                    and row["intended_mode"] == "DRAFT" else "IMMEDIATE"
+                store.finalize_publisher_mutation(
+                    con, row["mutation_id"], token, version, mode=mode,
+                    provider_ref=ref, publisher_status=remote_status,
+                )
+                stats["confirmed"] += 1
+            else:
+                store.transition_publisher_mutation(
+                    con, row["mutation_id"], token, version, "needs_owner_review",
+                    error_kind="create_reconciliation_ambiguous",
+                    error_message=f"exact matches: {len(matches)}",
+                )
+                stats["review"] += 1
+            continue
+        if gets_left <= 0:
+            stats["deferred"] += 1
+            continue
+        gets_left -= 1
+        try:
+            remote = publisher_typefully.get_draft(str(row["target_draft_id"] or ""))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Typefully mutation GET reconciliation deferred: %s", exc)
+            stats["deferred"] += 1
+            continue
+        status = str(remote.get("status") or "").casefold()
+        if status == "deleted":
+            store.transition_publisher_mutation(
+                con, row["mutation_id"], token, version, "definite_failure",
+                error_kind="remote_deleted", error_message="Typefully returned 404",
+            )
+            if row["target_post_id"]:
+                con.execute(
+                    "UPDATE posts SET publisher_status='deleted',publisher_synced_at=? WHERE id=?",
+                    (time.time(), int(row["target_post_id"])),
+                )
+                con.commit()
+            stats["failed"] += 1
+            continue
+        texts = publisher_typefully.draft_x_texts(remote)
+        fingerprint = store.x_thread_fingerprint(texts) if texts else ""
+        if fingerprint == row["desired_fingerprint"]:
+            mode = "DRAFT" if status == "draft" else "IMMEDIATE"
+            store.finalize_publisher_mutation(
+                con, row["mutation_id"], token, version, mode=mode,
+                provider_ref=str(row["target_draft_id"] or ""), publisher_status=status,
+            )
+            stats["confirmed"] += 1
+        elif fingerprint == (row["prior_fingerprint"] or "") \
+                and time.time() - float(row["updated_at"] or 0) >= 60:
+            store.transition_publisher_mutation(
+                con, row["mutation_id"], token, version, "definite_failure",
+                error_kind="patch_not_applied", error_message="remote content remains prior",
+            )
+            stats["failed"] += 1
+        elif fingerprint == (row["prior_fingerprint"] or ""):
+            stats["deferred"] += 1
+        else:
+            store.transition_publisher_mutation(
+                con, row["mutation_id"], token, version, "needs_owner_review",
+                error_kind="remote_content_unrelated",
+                error_message="remote content matches neither prior nor desired fingerprint",
+            )
+            stats["review"] += 1
+    return stats
+
+
+def resolve_mutation(con, mutation_id: str, owner_token: str, version: int,
+                     resolution: str, remote_draft_id: str = "") -> dict:
+    """Desk-facing owner resolution; no branch retries a remote mutation."""
+    from . import publisher_typefully, store
+    row = store.publisher_mutation(con, mutation_id)
+    if not row or row["owner_token"] != str(owner_token) or int(row["version"]) != int(version):
+        return {"ok": False, "reason": "stale or unknown mutation"}
+    if resolution != "bind_remote_draft":
+        return store.owner_resolve_publisher_mutation(
+            con, mutation_id, owner_token, version, resolution
+        )
+    if row["state"] not in {"ambiguous", "needs_owner_review"}:
+        return {"ok": False, "reason": "mutation is not awaiting owner review"}
+    if not remote_draft_id or _backend() != "typefully":
+        return {"ok": False, "reason": "a Typefully draft ID is required"}
+    try:
+        remote = publisher_typefully.get_draft(str(remote_draft_id)[:200])
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "reason": f"Typefully lookup failed: {exc}"[:300]}
+    if str(remote.get("social_set_id") or config.TYPEFULLY_SOCIAL_SET_ID) \
+            != str(config.TYPEFULLY_SOCIAL_SET_ID):
+        return {"ok": False, "reason": "draft belongs to another social set"}
+    texts = publisher_typefully.draft_x_texts(remote)
+    if not texts or store.x_thread_fingerprint(texts) != row["desired_fingerprint"]:
+        return {"ok": False, "reason": "draft content does not match desired output"}
+    status = str(remote.get("status") or "").casefold()
+    if status not in {"draft", "planned", "scheduled", "publishing", "published"}:
+        return {"ok": False, "reason": "remote draft has no bindable active status"}
+    mode = "DRAFT" if status == "draft" and row["intended_mode"] == "DRAFT" else "IMMEDIATE"
+    result = store.finalize_publisher_mutation(
+        con, mutation_id, owner_token, version, mode=mode,
+        provider_ref=str(remote_draft_id), publisher_status=status,
+    )
+    return {"ok": bool(result.get("ok")), "state": "confirmed",
+            "post_id": result.get("post_id")}
+
+
 def _refresh_analytics(con, publisher_typefully, store, now: float) -> dict:
     """Refresh all recent post metrics in one Typefully request, independently cached."""
     try:
@@ -91,14 +248,22 @@ def _mode_for(klass: str) -> str:
     return "DRAFT"
 
 
+def intended_mode(klass: str, *, force_draft: bool = False) -> str:
+    mode = _mode_for(klass)
+    return "DRAFT" if force_draft and mode != "TAPE" else mode
+
+
+def one_off_x_thread(post: str, receipt_url: str) -> list[str]:
+    """Exact Typefully payload shape for a one-off, used by mutation fingerprints."""
+    return [f"{post}\n\n{receipt_url}"]
+
+
 def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
-            force_draft: bool = False) -> tuple:
+            force_draft: bool = False, exact_payload: bool = False) -> tuple:
     """Returns (mode, post_id_or_None). image: optional (bytes, file_name) chart from
     the source page, attached to the lead post (FRED links preview poorly on X).
     Operator overrides use force_draft so they can never become autonomous posts."""
-    mode = _mode_for(klass)
-    if force_draft and mode != "TAPE":
-        mode = "DRAFT"
+    mode = intended_mode(klass, force_draft=force_draft)
     if mode == "TAPE":
         tape(post, receipt_url, klass, mode)
         return mode, None
@@ -108,8 +273,9 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
         media_id = publisher_typefully.upload_media(*image) if image else ""
         # Link ON the post so the card renders and readers click through (Brady 2026-08-29).
         outcome, ref = publisher_typefully.publish_thread(
-            [f"{post}\n\n{receipt_url}"], immediate=(mode == "IMMEDIATE"),
-            lead_media_ids=[media_id] if media_id else None)
+            one_off_x_thread(post, receipt_url), immediate=(mode == "IMMEDIATE"),
+            lead_media_ids=[media_id] if media_id else None,
+            allow_url_fallback=not exact_payload)
         actual = {
             publisher_typefully.PublishOutcome.CONFIRMED: "IMMEDIATE",
             publisher_typefully.PublishOutcome.STAGED: "DRAFT",
@@ -139,6 +305,23 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
         log.error("nuelink publish failed (%s): %s", mode, exc)
         tape(post, receipt_url, klass, "FAILED")
         return "FAILED", str(exc)[:200]
+
+
+def replace_draft(draft_id: str, prior_thread: list[str], desired_thread: list[str]) -> tuple:
+    """Replace one verified Typefully draft without creating a fallback object."""
+    if _backend() != "typefully":
+        return "FAILED", "draft replacement requires Typefully"
+    from . import publisher_typefully
+    outcome, detail = publisher_typefully.replace_draft(
+        str(draft_id), prior_thread, desired_thread
+    )
+    actual = {
+        publisher_typefully.PublishOutcome.CONFIRMED: "DRAFT",
+        publisher_typefully.PublishOutcome.STAGED: "DRAFT",
+        publisher_typefully.PublishOutcome.FAILED: "FAILED",
+        publisher_typefully.PublishOutcome.UNCERTAIN: "UNCERTAIN",
+    }[outcome]
+    return actual, detail
 
 
 def promote_draft(draft_id: str, klass: str) -> tuple:

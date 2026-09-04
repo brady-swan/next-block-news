@@ -35,7 +35,10 @@ CREATE TABLE IF NOT EXISTS posts (
   editor_note TEXT, resolution_id TEXT,
   confirmed_at REAL, public_url TEXT, publisher_status TEXT,
   publisher_synced_at REAL, publisher_backend TEXT,
-  performance_json TEXT, performance_synced_at REAL
+  performance_json TEXT, performance_synced_at REAL,
+  coverage_relation TEXT NOT NULL DEFAULT 'legacy',
+  base_post_id INTEGER,
+  mutation_id TEXT
 );
 CREATE TABLE IF NOT EXISTS source_resolutions (
   item_hash TEXT PRIMARY KEY,
@@ -161,6 +164,29 @@ CREATE TABLE IF NOT EXISTS pipeline_events (
   UNIQUE(item_hash, event)
 );
 CREATE INDEX IF NOT EXISTS idx_pipeline_events_at ON pipeline_events(at);
+CREATE TABLE IF NOT EXISTS publisher_mutations (
+  mutation_id TEXT PRIMARY KEY,
+  canonical_key TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  target_draft_id TEXT,
+  target_post_id INTEGER,
+  base_post_id INTEGER,
+  desired_fingerprint TEXT NOT NULL,
+  prior_fingerprint TEXT,
+  owner_token TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  state TEXT NOT NULL,
+  intended_mode TEXT NOT NULL,
+  materialization_json TEXT NOT NULL,
+  provider_ref TEXT,
+  error_kind TEXT,
+  error_message TEXT,
+  created_at REAL NOT NULL,
+  updated_at REAL NOT NULL,
+  resolved_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_publisher_mutations_family
+  ON publisher_mutations(canonical_key, state, updated_at DESC);
 CREATE TABLE IF NOT EXISTS newsroom_runs (
   run_id TEXT PRIMARY KEY,
   status TEXT NOT NULL,
@@ -355,6 +381,9 @@ POST_COLUMNS = {
     "publisher_backend": "TEXT",
     "performance_json": "TEXT",
     "performance_synced_at": "REAL",
+    "coverage_relation": "TEXT NOT NULL DEFAULT 'legacy'",
+    "base_post_id": "INTEGER",
+    "mutation_id": "TEXT",
 }
 
 ITEM_COLUMNS = {
@@ -407,6 +436,10 @@ def _ensure_post_columns(con):
     con.execute(
         "CREATE INDEX IF NOT EXISTS idx_posts_publisher_ref"
         " ON posts(publisher_backend, nuelink_id)"
+    )
+    con.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_mutation"
+        " ON posts(mutation_id) WHERE mutation_id IS NOT NULL"
     )
     con.commit()
 
@@ -2123,6 +2156,7 @@ def _bounded_memory_attempt(raw: dict) -> dict:
         "headlines": [str(value)[:300] for value in list(raw.get("headlines") or [])[:3]],
         "submitted_story_key": str(raw.get("submitted_story_key") or "")[:180],
         "existing_cluster_key": str(raw.get("existing_cluster_key") or "")[:180],
+        "coverage_relation": str(raw.get("coverage_relation") or "")[:30],
         "proposed_post": _utf8_prefix(raw.get("proposed_post"), 8192),
         "failure": str(raw.get("failure") or "")[:500],
         "objective": str(raw.get("objective") or "")[:500],
@@ -2258,6 +2292,7 @@ def _fit_story_memory_row(key: str, state: str, attempts_json: str,
             "members": list(latest.get("members") or [])[:25],
             "submitted_story_key": latest.get("submitted_story_key", ""),
             "existing_cluster_key": latest.get("existing_cluster_key", ""),
+            "coverage_relation": latest.get("coverage_relation", ""),
             "proposed_post": _utf8_prefix(latest.get("proposed_post"), 2048),
             "failure": str(latest.get("failure") or "")[:500],
             "objective": str(latest.get("objective") or "")[:500],
@@ -3507,6 +3542,319 @@ def exact_output_exists(con, body: str, receipt_url: str) -> bool:
     ).fetchone() is not None
 
 
+def exact_thread_output_exists(con, body: str, receipt_url: str) -> bool:
+    """V2 byte-equivalent one-off guard; semantic continuity is relation/state-owned."""
+    return con.execute(
+        "SELECT 1 FROM posts WHERE body=? AND receipt_url=?"
+        " AND mode IN ('IMMEDIATE','DRAFT','UNCERTAIN') LIMIT 1",
+        (str(body), str(receipt_url)),
+    ).fetchone() is not None
+
+
+_MUTATION_PROTECTED_STATES = {
+    "prepared", "in_flight", "ambiguous", "needs_owner_review", "owner_suppressed",
+}
+_MUTATION_STATES = _MUTATION_PROTECTED_STATES | {"confirmed", "definite_failure"}
+_MUTATION_OPERATIONS = {"create", "replace_draft", "schedule"}
+
+
+def x_thread_fingerprint(texts: list[str]) -> str:
+    """Exact, order-sensitive fingerprint for the complete NBN-authored X thread."""
+    encoded = json.dumps([str(value) for value in texts], ensure_ascii=False,
+                         separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def canonical_output_state(con, story_key: str) -> dict:
+    """Resolve active outputs with visible > draft > none precedence.
+
+    Operator/Desk display state is deliberately ignored. Only authoritative publisher
+    lifecycle values `deleted` and `inactive` stop a Typefully draft from blocking.
+    """
+    root = canonical_story_key(con, story_key)
+    family = story_key_family(con, root)
+    if not family:
+        family = [root] if root else []
+    if not family:
+        return {"state": "none", "canonical_key": "", "visible": None,
+                "drafts": [], "protected_mutations": [], "signature": "none"}
+    placeholders = ",".join("?" for _ in family)
+    rows = [dict(row) for row in con.execute(
+        f"SELECT * FROM posts WHERE story_key IN ({placeholders})"
+        " AND mode IN ('IMMEDIATE','DRAFT','UNCERTAIN')"
+        " AND NOT (mode='DRAFT' AND COALESCE(publisher_status,'') IN ('deleted','inactive'))"
+        " ORDER BY created DESC,id DESC", family,
+    ).fetchall()]
+    visible = [row for row in rows if row["mode"] in {"IMMEDIATE", "UNCERTAIN"}]
+    drafts = [row for row in rows if row["mode"] == "DRAFT"]
+    mutations = [dict(row) for row in con.execute(
+        f"SELECT * FROM publisher_mutations WHERE canonical_key IN ({placeholders})"
+        f" AND state IN ({','.join('?' for _ in _MUTATION_PROTECTED_STATES)})"
+        " ORDER BY updated_at DESC",
+        (*family, *sorted(_MUTATION_PROTECTED_STATES)),
+    ).fetchall()]
+    state = "reader_visible" if visible else "open_draft" if drafts else "none"
+    signature_rows = [{
+        "id": row["id"], "mode": row["mode"],
+        "publisher_status": row.get("publisher_status") or "",
+        "relation": row.get("coverage_relation") or "legacy",
+        "base_post_id": row.get("base_post_id"),
+    } for row in rows]
+    signature = hashlib.sha256(json.dumps(
+        {"root": root, "outputs": signature_rows,
+         "mutations": [(row["mutation_id"], row["state"], row["version"])
+                       for row in mutations]},
+        sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
+    return {
+        "state": state, "canonical_key": root,
+        "visible": visible[0] if visible else None,
+        "drafts": drafts, "protected_mutations": mutations,
+        "signature": signature,
+    }
+
+
+def prepare_publisher_mutation(
+        con, *, story_key: str, operation: str, intended_mode: str,
+        desired_thread: list[str], materialization: dict,
+        expected_output_signature: str, target_draft_id: str = "",
+        target_post_id: int | None = None, base_post_id: int | None = None,
+        prior_thread: list[str] | None = None, now: float | None = None) -> dict:
+    """Persist a Typefully intent before network I/O and fence competing workers."""
+    if operation not in _MUTATION_OPERATIONS:
+        raise ValueError("invalid publisher mutation operation")
+    encoded = json.dumps(materialization, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > 64 * 1024:
+        raise ValueError("publisher mutation materialization exceeds 64 KiB")
+    stamp = float(now if now is not None else time.time())
+    mutation_id, token = uuid.uuid4().hex, uuid.uuid4().hex
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        current = canonical_output_state(con, story_key)
+        if current["signature"] != str(expected_output_signature):
+            con.rollback()
+            return {"ok": False, "reason": "output_state_changed", "state": current}
+        if current["protected_mutations"]:
+            con.rollback()
+            return {"ok": False, "reason": "mutation_already_protected", "state": current}
+        root = current["canonical_key"] or canonical_story_key(con, story_key)
+        con.execute(
+            "INSERT INTO publisher_mutations(mutation_id,canonical_key,operation,"
+            "target_draft_id,target_post_id,base_post_id,desired_fingerprint,prior_fingerprint,"
+            "owner_token,version,state,intended_mode,materialization_json,created_at,updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,1,'prepared',?,?,?,?)",
+            (mutation_id, root, operation, str(target_draft_id or "")[:200] or None,
+             target_post_id, base_post_id, x_thread_fingerprint(desired_thread),
+             x_thread_fingerprint(prior_thread) if prior_thread is not None else None,
+             token, str(intended_mode or "")[:20], encoded, stamp, stamp),
+        )
+        con.commit()
+        return {"ok": True, "mutation_id": mutation_id, "owner_token": token,
+                "version": 1, "canonical_key": root}
+    except Exception:
+        con.rollback()
+        raise
+
+
+def transition_publisher_mutation(con, mutation_id: str, owner_token: str, version: int,
+                                  state: str, *, provider_ref: str = "",
+                                  error_kind: str = "", error_message: str = "",
+                                  now: float | None = None) -> bool:
+    if state not in _MUTATION_STATES:
+        raise ValueError("invalid publisher mutation state")
+    stamp = float(now if now is not None else time.time())
+    cur = con.execute(
+        "UPDATE publisher_mutations SET state=?,provider_ref=COALESCE(NULLIF(?,''),provider_ref),"
+        "error_kind=?,error_message=?,updated_at=?,resolved_at=CASE WHEN ? IN "
+        "('confirmed','definite_failure','owner_suppressed') THEN ? ELSE NULL END,version=version+1"
+        " WHERE mutation_id=? AND owner_token=? AND version=?",
+        (state, str(provider_ref or "")[:300], str(error_kind or "")[:80] or None,
+         str(error_message or "")[:500] or None, stamp, state, stamp,
+         str(mutation_id), str(owner_token), int(version)),
+    )
+    con.commit()
+    return cur.rowcount == 1
+
+
+def publisher_mutation(con, mutation_id: str):
+    return con.execute(
+        "SELECT * FROM publisher_mutations WHERE mutation_id=?", (str(mutation_id),)
+    ).fetchone()
+
+
+def pending_publisher_mutations(con, limit: int = 20) -> list[dict]:
+    rows = con.execute(
+        "SELECT * FROM publisher_mutations WHERE state IN "
+        "('prepared','in_flight','ambiguous','needs_owner_review')"
+        " ORDER BY updated_at LIMIT ?", (max(1, min(int(limit), 100)),),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def owner_resolve_publisher_mutation(con, mutation_id: str, owner_token: str,
+                                     version: int, resolution: str) -> dict:
+    """Apply one authenticated, version-fenced non-network owner resolution."""
+    target = {"confirmed_absent": "definite_failure",
+              "keep_suppressed": "owner_suppressed"}.get(str(resolution))
+    if not target:
+        return {"ok": False, "reason": "invalid resolution"}
+    stamp = time.time()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT * FROM publisher_mutations WHERE mutation_id=? AND owner_token=?"
+            " AND version=? AND state IN ('ambiguous','needs_owner_review')",
+            (str(mutation_id), str(owner_token), int(version)),
+        ).fetchone()
+        if not row:
+            con.rollback()
+            return {"ok": False, "reason": "stale or ineligible mutation"}
+        con.execute(
+            "UPDATE publisher_mutations SET state=?,version=version+1,updated_at=?,resolved_at=?,"
+            "error_kind='owner_resolution',error_message=? WHERE mutation_id=? AND owner_token=?"
+            " AND version=?",
+            (target, stamp, stamp, str(resolution)[:80], mutation_id, owner_token, int(version)),
+        )
+        con.execute(
+            "INSERT OR IGNORE INTO pipeline_events(run_id,item_hash,story_key,event,category,at,metadata)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (f"owner:{mutation_id[:32]}", f"mutation:{mutation_id[:40]}",
+             row["canonical_key"], f"publisher_owner_{resolution}", "delivery", stamp,
+             json.dumps({"mutation_id": mutation_id, "version": version},
+                        separators=(",", ":"))[:2000]),
+        )
+        con.commit()
+        return {"ok": True, "state": target}
+    except Exception:
+        con.rollback()
+        raise
+
+
+def finalize_publisher_mutation(
+        con, mutation_id: str, owner_token: str, version: int, *, mode: str,
+        provider_ref: str, publisher_status: str = "") -> dict:
+    """Atomically materialize a remotely confirmed output from durable intent data."""
+    stamp = time.time()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT * FROM publisher_mutations WHERE mutation_id=? AND owner_token=?"
+            " AND version=? AND state IN ('prepared','in_flight','ambiguous','needs_owner_review')",
+            (str(mutation_id), str(owner_token), int(version)),
+        ).fetchone()
+        if not row:
+            existing = con.execute(
+                "SELECT id FROM posts WHERE mutation_id=?", (str(mutation_id),)
+            ).fetchone()
+            con.commit()
+            return {"ok": bool(existing), "post_id": existing["id"] if existing else None,
+                    "already_finalized": bool(existing)}
+        data = json.loads(row["materialization_json"])
+        relation = str(data.get("coverage_relation") or "distinct")[:30]
+        base_post_id = data.get("base_post_id")
+        if row["operation"] == "replace_draft":
+            target_id = int(row["target_post_id"] or 0)
+            cur = con.execute(
+                "UPDATE posts SET class=?,body=?,receipt_url=?,editor_note=?,resolution_id=?,"
+                "publisher_status=?,publisher_synced_at=?,coverage_relation=?,base_post_id=?,"
+                "mutation_id=? WHERE id=? AND mode='DRAFT'",
+                (str(data.get("klass") or "")[:40], str(data.get("body") or ""),
+                 str(data.get("receipt_url") or "")[:2000],
+                 str(data.get("editor_note") or "")[:300],
+                 str(data.get("resolution_id") or "")[:200],
+                 str(publisher_status or "draft")[:40], stamp, relation, base_post_id,
+                 str(mutation_id), target_id),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError("replacement target changed before local finalization")
+            post_id = target_id
+        else:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO posts(created,story_key,item_hash,class,body,receipt_url,"
+                "mode,nuelink_id,editor_note,resolution_id,publisher_backend,publisher_status,"
+                "publisher_synced_at,coverage_relation,base_post_id,mutation_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (stamp, row["canonical_key"], str(data.get("item_hash") or "")[:64],
+                 str(data.get("klass") or "")[:40], str(data.get("body") or ""),
+                 str(data.get("receipt_url") or "")[:2000], str(mode)[:20],
+                 str(provider_ref or "")[:300] or None,
+                 str(data.get("editor_note") or "")[:300],
+                 str(data.get("resolution_id") or "")[:200],
+                 str(data.get("publisher_backend") or "typefully")[:40],
+                 str(publisher_status or "")[:40] or None, stamp, relation,
+                 base_post_id, str(mutation_id)),
+            )
+            found = con.execute(
+                "SELECT id FROM posts WHERE mutation_id=?", (str(mutation_id),)
+            ).fetchone()
+            if not found:
+                raise RuntimeError("publisher mutation post was not materialized")
+            post_id = found["id"]
+        for index, member in enumerate(list(data.get("members") or [])[:25]):
+            item_hash = str(member.get("url_hash") or "")[:64]
+            if not item_hash:
+                continue
+            status = str(member.get("status") or ("drafted" if mode == "DRAFT" else "posted"))
+            if index:
+                status = "skipped"
+            con.execute(
+                "UPDATE items SET status=?,story_key=CASE WHEN ? THEN story_key ELSE ? END,"
+                "note=?,decision_stage='delivery',"
+                "decision_category='output',defer_until=NULL WHERE url_hash=?",
+                (status, int(bool(member.get("preserve_story_key"))),
+                 str(member.get("story_key") or row["canonical_key"])[:180],
+                 "" if not index else
+                 "same story materialized from pooled evidence", item_hash),
+            )
+            con.execute(
+                "UPDATE operator_actions SET state='completed',completed_at=?,result=?"
+                " WHERE item_hash=? AND state='pending'",
+                (stamp, f"delivery result: {mode}"[:300], item_hash),
+            )
+        delivery = json.dumps({
+            "at": round(stamp, 3), "mode": str(mode)[:40],
+            "backend_ref": str(provider_ref or "")[:300],
+            "reader_covered": mode in {"IMMEDIATE", "UNCERTAIN"},
+        }, separators=(",", ":"))
+        con.execute(
+            "UPDATE newsroom_story_memory SET state='delivered',delivery_json=?,updated_at=?,"
+            "expires_at=? WHERE canonical_key=?",
+            (delivery, stamp, stamp + _STORY_MEMORY_TTL_SECONDS, row["canonical_key"]),
+        )
+        run_id, story_id = str(data.get("run_id") or ""), str(data.get("story_id") or "")
+        if run_id and story_id:
+            details = json.dumps({"delivery": {"mode": mode,
+                                "backend_ref": str(provider_ref or "")[:200]}},
+                               separators=(",", ":"))
+            con.execute(
+                "UPDATE newsroom_story_commits SET state=?,delivery_ref=?,details_json=?,"
+                "updated_at=? WHERE run_id=? AND story_id=?",
+                ("delivered" if mode != "FAILED" else "held",
+                 str(provider_ref or "")[:200], details[:4000], stamp, run_id, story_id),
+            )
+        item_hash = str(data.get("item_hash") or "")[:64] or f"mutation:{mutation_id[:40]}"
+        con.execute(
+            "INSERT OR IGNORE INTO pipeline_events(run_id,item_hash,story_key,event,category,at,metadata)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (run_id or f"mutation:{mutation_id[:32]}", item_hash, row["canonical_key"],
+             "publisher_mutation_confirmed", "delivery", stamp,
+             json.dumps({"mutation_id": mutation_id, "operation": row["operation"],
+                         "post_id": post_id}, separators=(",", ":"))[:2000]),
+        )
+        con.execute(
+            "UPDATE publisher_mutations SET state='confirmed',provider_ref=?,error_kind=NULL,"
+            "error_message=NULL,updated_at=?,resolved_at=?,version=version+1"
+            " WHERE mutation_id=? AND owner_token=? AND version=?",
+            (str(provider_ref or "")[:300], stamp, stamp, mutation_id, owner_token,
+             int(version)),
+        )
+        con.commit()
+        return {"ok": True, "post_id": post_id, "already_finalized": False}
+    except Exception:
+        con.rollback()
+        raise
+
+
 def recent_story_bodies(con, story_key: str, limit: int = 2) -> list[str]:
     family = story_key_family(con, story_key)
     if not family:
@@ -3519,6 +3867,72 @@ def recent_story_bodies(con, story_key: str, limit: int = 2) -> list[str]:
         f" ORDER BY {effective} DESC LIMIT ?", (*family, limit),
     ).fetchall()
     return [row["body"] for row in rows]
+
+
+def recent_delivery_latencies(con, limit: int = 20) -> list[dict]:
+    """Derived timing telemetry; missing/naive source times remain unknown."""
+    rows = con.execute(
+        "SELECT p.*,i.first_seen,i.published_at,m.materialization_json "
+        "FROM posts p LEFT JOIN items i ON i.url_hash=p.item_hash "
+        "LEFT JOIN publisher_mutations m ON m.mutation_id=p.mutation_id "
+        "WHERE p.mode IN ('DRAFT','IMMEDIATE','UNCERTAIN') "
+        "ORDER BY p.created DESC LIMIT ?", (max(1, min(int(limit), 20)),),
+    ).fetchall()
+    out = []
+    for raw in rows:
+        row = dict(raw)
+        published = None
+        try:
+            parsed = datetime.datetime.fromisoformat(
+                str(row.get("published_at") or "").replace("Z", "+00:00")
+            )
+            if parsed.tzinfo is not None:
+                published = parsed.timestamp()
+        except (TypeError, ValueError, OverflowError):
+            pass
+        first_seen = float(row.get("first_seen") or 0) or None
+        created = float(row.get("created") or 0) or None
+        family = story_key_family(con, row.get("story_key") or "")
+        resurfaced = None
+        if family and first_seen:
+            placeholders = ",".join("?" for _ in family)
+            earliest = con.execute(
+                f"SELECT MIN(first_seen) t FROM items WHERE story_key IN ({placeholders})",
+                family,
+            ).fetchone()["t"]
+            if earliest is not None:
+                resurfaced = max(0.0, first_seen - float(earliest))
+        run_id = ""
+        try:
+            materialization = json.loads(row.get("materialization_json") or "{}")
+            run_id = str(materialization.get("run_id") or "")
+        except (TypeError, ValueError):
+            pass
+        newsroom_seconds = editor_ms = recovery_count = None
+        if run_id:
+            run = con.execute(
+                "SELECT created_at,completed_at FROM newsroom_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+            if run and run["completed_at"] is not None:
+                newsroom_seconds = max(0.0, float(run["completed_at"]) - float(run["created_at"]))
+            usage = con.execute(
+                "SELECT SUM(CASE WHEN seat IN ('editor','editor_recovery') THEN latency_ms ELSE 0 END) ms,"
+                "SUM(CASE WHEN seat='editor_recovery' THEN 1 ELSE 0 END) recovery "
+                "FROM model_usage WHERE run_id=?", (run_id,),
+            ).fetchone()
+            editor_ms = int(usage["ms"] or 0)
+            recovery_count = int(usage["recovery"] or 0)
+        out.append({
+            "post_id": row["id"], "story_key": row.get("story_key") or "",
+            "mode": row.get("mode") or "", "created": created,
+            "detection_seconds": (max(0.0, first_seen - published)
+                                  if first_seen and published else None),
+            "conversion_seconds": (max(0.0, created - first_seen)
+                                   if created and first_seen else None),
+            "resurfaced_seconds": resurfaced, "newsroom_seconds": newsroom_seconds,
+            "editor_ms": editor_ms, "editor_recovery_count": recovery_count,
+        })
+    return out
 
 
 def open_typefully_draft(con, story_key: str):
@@ -3575,15 +3989,17 @@ def defer_item(con, url_hash_: str, note: str, *, delay_seconds: int = 900,
 
 
 def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, publisher_ref=None,
-             editor_note=None, resolution_id=None, publisher_backend=None):
+             editor_note=None, resolution_id=None, publisher_backend=None,
+             coverage_relation="legacy", base_post_id=None, mutation_id=None):
     """Record a produced post. nuelink_id is the legacy schema name for any backend ref."""
     story_key = canonical_story_key(con, story_key)
     con.execute(
         "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
-        " nuelink_id, editor_note, resolution_id, publisher_backend)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        " nuelink_id, editor_note, resolution_id, publisher_backend,coverage_relation,"
+        "base_post_id,mutation_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (time.time(), story_key, item_hash, klass, body, receipt_url, mode, publisher_ref,
-         editor_note, resolution_id, publisher_backend),
+         editor_note, resolution_id, publisher_backend, coverage_relation, base_post_id,
+         mutation_id),
     )
     con.commit()
 

@@ -14,6 +14,7 @@ Schema verified live 2026-08-29 (the public docs are wrong/stale): threads are a
 explicit array — platforms.x = {"enabled": true, "posts": [{"text": ...}, ...]}.
 """
 import datetime
+import copy
 import logging
 import time
 from enum import Enum
@@ -35,6 +36,109 @@ class PublishOutcome(str, Enum):
     STAGED = "staged"
     FAILED = "failed"
     UNCERTAIN = "uncertain"
+
+
+def get_draft(draft_id: str) -> dict:
+    """Return one exact Typefully object; 404 is represented, not retried."""
+    resp = httpx.get(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/{draft_id}",
+        headers=_headers(), timeout=30,
+    )
+    if resp.status_code == 404:
+        return {"id": str(draft_id), "status": "deleted", "_http_status": 404}
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise ValueError("Typefully draft response is not an object")
+    return data
+
+
+def list_recent_drafts(limit: int = 50) -> list[dict]:
+    """Bounded recent-object list used only for ambiguous-create reconciliation."""
+    resp = httpx.get(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts",
+        params={"sort": "-created_at", "limit": max(1, min(int(limit), 100))},
+        headers=_headers(), timeout=30,
+    )
+    resp.raise_for_status()
+    rows = resp.json().get("results", [])
+    return rows if isinstance(rows, list) else []
+
+
+def _has_comment_marker(value) -> bool:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if "comment" in str(key).casefold() and bool(child):
+                return True
+            if _has_comment_marker(child):
+                return True
+    elif isinstance(value, list):
+        return any(_has_comment_marker(child) for child in value)
+    return False
+
+
+def draft_x_texts(raw: dict) -> list[str] | None:
+    try:
+        x = raw["platforms"]["x"]
+        posts = x["posts"]
+    except (KeyError, TypeError):
+        return None
+    if not isinstance(x, dict) or x.get("enabled") is not True or not isinstance(posts, list):
+        return None
+    texts = []
+    for post in posts:
+        if not isinstance(post, dict) or not isinstance(post.get("text"), str):
+            return None
+        texts.append(post["text"])
+    return texts
+
+
+def replace_draft(draft_id: str, prior_texts: list[str], desired_texts: list[str]) -> tuple:
+    """Edit only an untouched Typefully X draft; never retry an ambiguous PATCH."""
+    try:
+        raw = get_draft(str(draft_id))
+        status = str(raw.get("status") or "").casefold()
+        if status == "deleted":
+            return PublishOutcome.FAILED, "deleted"
+        if status != "draft":
+            return PublishOutcome.FAILED, f"non_editable:{status or 'unknown'}"
+        if str(raw.get("social_set_id") or config.TYPEFULLY_SOCIAL_SET_ID) \
+                != str(config.TYPEFULLY_SOCIAL_SET_ID):
+            return PublishOutcome.FAILED, "wrong_social_set"
+        if _has_comment_marker(raw):
+            return PublishOutcome.FAILED, "comment_marked"
+        texts = draft_x_texts(raw)
+        if texts is None or texts != [str(value) for value in prior_texts]:
+            return PublishOutcome.FAILED, "remote_modified"
+        x = raw.get("platforms", {}).get("x", {})
+        if set(x) - {"enabled", "posts", "settings"}:
+            return PublishOutcome.FAILED, "unexpected_x_structure"
+        allowed_post = {"text", "media_ids", "quote_post_url", "subscribers"}
+        posts = x.get("posts") or []
+        if len(posts) != len(desired_texts) or any(set(post) - allowed_post for post in posts):
+            return PublishOutcome.FAILED, "unexpected_post_structure"
+        updated_x = copy.deepcopy(x)
+        for post, text in zip(updated_x["posts"], desired_texts):
+            post["text"] = str(text)
+        resp = httpx.patch(
+            f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/{draft_id}",
+            json={"platforms": {"x": updated_x}}, headers=_headers(), timeout=30,
+        )
+        resp.raise_for_status()
+        confirmed = get_draft(str(draft_id))
+        if draft_x_texts(confirmed) == [str(value) for value in desired_texts] \
+                and str(confirmed.get("status") or "").casefold() == "draft":
+            return PublishOutcome.STAGED, str(draft_id)
+        return PublishOutcome.UNCERTAIN, "patch_confirmation_mismatch"
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return PublishOutcome.FAILED, "deleted"
+        if exc.response.status_code >= 500:
+            return PublishOutcome.UNCERTAIN, f"{exc.response.status_code}: {exc.response.text[:200]}"
+        return PublishOutcome.FAILED, f"{exc.response.status_code}: {exc.response.text[:200]}"
+    except Exception as exc:  # noqa: BLE001 - PATCH may have reached Typefully
+        log.error("typefully draft replacement outcome uncertain: %s", exc)
+        return PublishOutcome.UNCERTAIN, str(exc)[:200]
 
 
 def _headers():
@@ -183,7 +287,8 @@ def publish(post: str, receipt_url: str, immediate: bool, image: tuple = None) -
 URL_RE = None  # set below
 
 
-def publish_thread(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
+def publish_thread(texts: list, immediate: bool, lead_media_ids: list = None,
+                   allow_url_fallback: bool = True) -> tuple:
     """Create an N-post X thread. Returns (PublishOutcome, draft_id_or_error).
 
     Typefully blocks publish-now for drafts containing URLs (X policy, learned live
@@ -195,7 +300,7 @@ def publish_thread(texts: list, immediate: bool, lead_media_ids: list = None) ->
     # scheduled shortly ahead — links intact, autonomy intact, latency negligible.
     import re
     outcome, ref = _create(texts, immediate, lead_media_ids)
-    if outcome is not PublishOutcome.FAILED or not immediate \
+    if outcome is not PublishOutcome.FAILED or not immediate or not allow_url_fallback \
             or "URLs is blocked" not in str(ref):
         return outcome, ref
     # A definitive URL-policy rejection means no draft was created. Only then is a

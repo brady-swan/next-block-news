@@ -96,7 +96,7 @@ class ConfigTests(unittest.TestCase):
             "compact_desk": False,
             "desk_prep_mode": "off",
             "haiku_research_mode": "off",
-            "reservation": 8,
+            "reservation": 9,
             "intake_triage_mode": "off",
             "intake_triage_model": "claude-haiku-4-5",
             "intake_triage_hourly": 8,
@@ -133,7 +133,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(values["compact_desk"])
         self.assertEqual(values["desk_prep_mode"], "enforce")
         self.assertEqual(values["haiku_research_mode"], "on")
-        self.assertEqual(values["reservation"], 8)  # 3 Sonnet + retry + editor + prep + 2 Haiku
+        self.assertEqual(values["reservation"], 9)  # 3 Sonnet + retry + editor/recovery + prep + 2 Haiku
 
     def test_test_process_blocks_real_network(self):
         with self.assertRaisesRegex(AssertionError, "real network access"):
