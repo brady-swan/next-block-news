@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-03. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-04. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It ingests news every minute, opens a fresh Sonnet
@@ -176,6 +176,12 @@ also become the next workbench objective rather than being reduced to a transien
 - Effective structure and length are legitimate things to learn from successful accounts.
   Distinctive phrasing and emotional framing are not copied.
 - No hype, fabricated certainty, forecasts, trading advice, or investment instructions.
+- A famous investor or small allocation to Bitcoin-linked equities is not inherently a Bitcoin
+  story. Selection turns on material effect, meaningful adoption, or new understanding—not the
+  prominence of the portfolio owner.
+- Research can be broad while public copy stays selective. The writer and editor lead with the
+  Bitcoin-relevant consequence, split overloaded sentences, avoid consecutive clause-heavy
+  sentences, and cut verified detail that does not change the reader's picture.
 
 ## Practical evidence standard
 
@@ -246,6 +252,12 @@ Typefully writes use durable mutation intents. Intent and exact desired-thread f
 SQLite before the network call; confirmed remote output and all local post/item/workbench state
 then finalize atomically. Restart recovery reconciles but never repeats an ambiguous POST/PATCH.
 Unresolved cases appear on the authenticated Desk with version-fenced owner actions.
+
+New creates finalize only after Typefully reads back the exact ordered thread. Persisted mutations
+reconcile from their stored fingerprints, so a deployment or formatter rollback cannot reinterpret
+an old one-post or new two-post attempt. Legacy inline-link drafts are retained rather than
+mechanically migrated. `scripts/typefully_feedback.py` provides a tightly bounded, GET-only view
+of recent owner comments; its marker-free display reads are never used for draft replacement.
 
 The editor compares apparent conflicts by actor, place or facility, time, and scope. A newer
 specific action is not contradicted by an older general intention; when current evidence

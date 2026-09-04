@@ -16,6 +16,7 @@ explicit array — platforms.x = {"enabled": true, "posts": [{"text": ...}, ...]
 import copy
 import datetime
 import logging
+import re
 import time
 from enum import Enum
 from urllib.parse import urlsplit
@@ -27,6 +28,15 @@ from . import config
 log = logging.getLogger("nbn.typefully")
 
 BASE = "https://api.typefully.com/v2"
+FEEDBACK_DRAFT_LIMIT = 30
+FEEDBACK_PAGES_PER_DRAFT = 2
+FEEDBACK_THREADS_PER_PAGE = 50
+FEEDBACK_TOTAL_THREADS = 100
+FEEDBACK_COMMENTS_PER_THREAD = 20
+FEEDBACK_SELECTED_TEXT_CHARS = 1000
+FEEDBACK_COMMENT_TEXT_CHARS = 2000
+FEEDBACK_AUTHOR_CHARS = 120
+FEEDBACK_DRAFT_TEXT_CHARS = 4000
 
 
 class PublishOutcome(str, Enum):
@@ -49,7 +59,29 @@ def get_draft(draft_id: str) -> dict:
     resp.raise_for_status()
     data = resp.json()
     if not isinstance(data, dict):
-        raise ValueError("Typefully draft response is not an object")
+        raise TypeError("Typefully draft response is not an object")
+    return data
+
+
+def _feedback_draft_id(value) -> str:
+    """Validate the numeric path component documented by Typefully's comments API."""
+    draft_id = str(value or "").strip()
+    if not re.fullmatch(r"[1-9][0-9]{0,19}", draft_id):
+        raise ValueError("Typefully draft ID must be a positive integer")
+    return draft_id
+
+
+def get_draft_for_feedback(draft_id: str) -> dict:
+    """Read one marker-free draft for display only; never use this object for PATCH."""
+    draft_id = _feedback_draft_id(draft_id)
+    resp = httpx.get(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/{draft_id}",
+        params={"exclude_comment_markers": "true"}, headers=_headers(), timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise TypeError("Typefully draft response is not an object")
     return data
 
 
@@ -63,6 +95,108 @@ def list_recent_drafts(limit: int = 50) -> list[dict]:
     resp.raise_for_status()
     rows = resp.json().get("results", [])
     return rows if isinstance(rows, list) else []
+
+
+def list_comment_threads(draft_id: str, *, status: str = "unresolved",
+                         limit: int = FEEDBACK_THREADS_PER_PAGE,
+                         offset: int = 0) -> list[dict]:
+    """Return one bounded, normalized comments page using GET requests only."""
+    draft_id = _feedback_draft_id(draft_id)
+    if status not in {"unresolved", "resolved", "all"}:
+        raise ValueError("invalid Typefully comment status")
+    try:
+        safe_limit = max(1, min(int(limit), FEEDBACK_THREADS_PER_PAGE))
+        safe_offset = max(0, int(offset))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("comment pagination must use integers") from exc
+    resp = httpx.get(
+        f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/"
+        f"{draft_id}/comment-threads",
+        params={"status": status, "limit": safe_limit, "offset": safe_offset},
+        headers=_headers(), timeout=30,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    if not isinstance(payload, dict):
+        raise TypeError("Typefully comment response is not an object")
+    rows = payload.get("results", [])
+    if not isinstance(rows, list):
+        raise TypeError("Typefully comment results are not a list")
+    out = []
+    for raw in rows[:safe_limit]:
+        if not isinstance(raw, dict):
+            continue
+        comments = []
+        raw_comments = raw.get("comments") or []
+        if not isinstance(raw_comments, list):
+            raw_comments = []
+        for comment in raw_comments[:FEEDBACK_COMMENTS_PER_THREAD]:
+            if not isinstance(comment, dict):
+                continue
+            user = comment.get("user") or {}
+            if not isinstance(user, dict):
+                user = {}
+            comments.append({
+                "id": str(comment.get("id") or "")[:128],
+                "text": str(comment.get("text") or "")[:FEEDBACK_COMMENT_TEXT_CHARS],
+                "created_at": str(comment.get("created_at") or "")[:64],
+                "author": str(user.get("name") or "")[:FEEDBACK_AUTHOR_CHARS],
+            })
+        out.append({
+            "id": str(raw.get("id") or "")[:128],
+            "draft_id": draft_id,
+            "platform": str(raw.get("platform") or "")[:32],
+            "status": str(raw.get("status") or "")[:32],
+            "selected_text": str(raw.get("selected_text") or "")[
+                :FEEDBACK_SELECTED_TEXT_CHARS
+            ],
+            "comments": comments,
+        })
+    return out
+
+
+def collect_recent_feedback(*, status: str = "unresolved",
+                            draft_limit: int = FEEDBACK_DRAFT_LIMIT) -> list[dict]:
+    """Collect a tightly bounded read-only view of comments on recent drafts."""
+    if status not in {"unresolved", "resolved", "all"}:
+        raise ValueError("invalid Typefully comment status")
+    try:
+        safe_draft_limit = max(1, min(int(draft_limit), FEEDBACK_DRAFT_LIMIT))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("draft limit must be an integer") from exc
+    drafts = list_recent_drafts(limit=safe_draft_limit)
+    out = []
+    threads_left = FEEDBACK_TOTAL_THREADS
+    for raw_draft in drafts[:safe_draft_limit]:
+        if threads_left <= 0:
+            break
+        try:
+            draft_id = _feedback_draft_id(raw_draft.get("id"))
+        except (AttributeError, ValueError):
+            continue
+        threads = []
+        for page in range(FEEDBACK_PAGES_PER_DRAFT):
+            page_limit = min(FEEDBACK_THREADS_PER_PAGE, threads_left)
+            page_rows = list_comment_threads(
+                draft_id, status=status, limit=page_limit,
+                offset=page * FEEDBACK_THREADS_PER_PAGE,
+            )
+            threads.extend(page_rows[:threads_left])
+            threads_left -= min(len(page_rows), threads_left)
+            if len(page_rows) < page_limit or threads_left <= 0:
+                break
+        if not threads:
+            continue
+        display = get_draft_for_feedback(draft_id)
+        texts = draft_x_texts(display) or []
+        out.append({
+            "draft_id": draft_id,
+            "created_at": str(raw_draft.get("created_at") or "")[:64],
+            "title": str(raw_draft.get("draft_title") or "")[:200],
+            "draft_text": "\n\n---\n\n".join(texts)[:FEEDBACK_DRAFT_TEXT_CHARS],
+            "threads": threads,
+        })
+    return out
 
 
 def _has_comment_marker(value) -> bool:

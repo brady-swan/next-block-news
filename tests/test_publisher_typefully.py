@@ -273,6 +273,75 @@ class TypefullyTests(unittest.TestCase):
         self.assertTrue(tf.delete_draft("draft-8"))
         self.assertTrue(tf.delete_draft("draft-8"))
 
+    @patch.object(tf.httpx, "get")
+    def test_comment_page_is_get_only_normalized_and_hard_capped(self, get):
+        comments = [{
+            "id": f"c-{index}", "text": "x" * 2500,
+            "created_at": "2026-09-04T12:00:00Z",
+            "user": {"name": "a" * 200},
+        } for index in range(25)]
+        get.return_value = response({
+            "results": [{
+                "id": f"t-{index}", "platform": "x", "status": "unresolved",
+                "selected_text": "s" * 1200, "comments": comments,
+            } for index in range(60)],
+            "next": "https://evil.example/steal",
+        })
+        with patch.object(tf.config, "TYPEFULLY_SOCIAL_SET_ID", "329191"):
+            rows = tf.list_comment_threads("10626036", status="all", limit=999, offset=0)
+        self.assertEqual(len(rows), tf.FEEDBACK_THREADS_PER_PAGE)
+        self.assertEqual(len(rows[0]["comments"]), tf.FEEDBACK_COMMENTS_PER_THREAD)
+        self.assertEqual(len(rows[0]["selected_text"]), tf.FEEDBACK_SELECTED_TEXT_CHARS)
+        self.assertEqual(len(rows[0]["comments"][0]["text"]),
+                         tf.FEEDBACK_COMMENT_TEXT_CHARS)
+        self.assertEqual(len(rows[0]["comments"][0]["author"]), tf.FEEDBACK_AUTHOR_CHARS)
+        self.assertEqual(get.call_count, 1)
+        self.assertNotIn("evil.example", get.call_args.args[0])
+        self.assertEqual(get.call_args.kwargs["params"], {
+            "status": "all", "limit": 50, "offset": 0,
+        })
+
+    def test_comment_reader_rejects_untrusted_paths_and_pagination(self):
+        for draft_id in ("../drafts/1", "1?next=https://evil.example", "0", ""):
+            with self.subTest(draft_id=draft_id), self.assertRaises(ValueError):
+                tf.list_comment_threads(draft_id)
+        for kwargs in ({"status": "open"}, {"offset": "bad"}, {"limit": "bad"}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                tf.list_comment_threads("10626036", **kwargs)
+
+    @patch.object(tf.httpx, "get")
+    def test_feedback_draft_read_excludes_markers_without_changing_get_draft(self, get):
+        get.return_value = response({"id": 10626036})
+        tf.get_draft_for_feedback("10626036")
+        self.assertEqual(get.call_args.kwargs["params"], {
+            "exclude_comment_markers": "true",
+        })
+        tf.get_draft("10626036")
+        self.assertNotIn("params", get.call_args.kwargs)
+
+    @patch.object(tf, "get_draft_for_feedback")
+    @patch.object(tf, "list_comment_threads")
+    @patch.object(tf, "list_recent_drafts")
+    def test_feedback_collection_caps_drafts_pages_threads_and_display(
+            self, recent, comments, display):
+        recent.return_value = [{"id": str(index), "draft_title": "title"}
+                               for index in range(1, 40)]
+        comments.return_value = [{
+            "id": "thread", "selected_text": "selected", "comments": [],
+        }] * 50
+        display.return_value = {
+            "platforms": {"x": {"enabled": True, "posts": [{"text": "d" * 5000}]}},
+        }
+        rows = tf.collect_recent_feedback(status="unresolved", draft_limit=999)
+        self.assertEqual(recent.call_args.kwargs["limit"], tf.FEEDBACK_DRAFT_LIMIT)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(sum(len(row["threads"]) for row in rows),
+                         tf.FEEDBACK_TOTAL_THREADS)
+        self.assertEqual(comments.call_count, tf.FEEDBACK_PAGES_PER_DRAFT)
+        self.assertEqual(len(rows[0]["draft_text"]), tf.FEEDBACK_DRAFT_TEXT_CHARS)
+        for call in comments.call_args_list:
+            self.assertIn(call.kwargs["offset"], (0, tf.FEEDBACK_THREADS_PER_PAGE))
+
 
 if __name__ == "__main__":
     unittest.main()

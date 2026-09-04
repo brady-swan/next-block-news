@@ -97,6 +97,12 @@ repeats; only a genuine development may create a separately labeled `UPDATE:`. A
 intent is committed before every Typefully write so crashes and lease expiry cannot blindly retry.
 Ambiguous intents appear on the authenticated Desk for explicit resolution.
 
+Typefully creates are accepted locally only after an exact ordered-content read-back. Existing
+single-post inline-link drafts are retained rather than migrated automatically, and persisted
+mutation fingerprints remain authoritative across deployments. Owner comments can be inspected
+without mutation through `python scripts/typefully_feedback.py`; the command is GET-only and
+strictly bounded.
+
 Nuelink remains as a legacy fallback for single posts, but it is not the preferred rail
 and cannot publish threads.
 
