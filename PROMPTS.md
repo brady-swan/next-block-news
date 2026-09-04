@@ -13,7 +13,7 @@ snapshot and repeatedly drifted from runtime. Read and edit the sources of truth
 | Legacy source resolution | `nbn/verify.py` (`RESOLVE_PROMPT`) | Legacy actionable non-primary receipts | `NBN_MODEL` |
 | Provider claim support | `nbn/verify.py` (`CLAIM_SUPPORT_PROMPT`) | One provider-specific redraft | `NBN_MODEL` |
 | Legacy publishing editor | `nbn/editor.py` (`EDITOR_PROMPT`) | Gate-passed legacy candidates | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
-| V2 batch editor | `nbn/editor.py` (`BATCH_EDITOR_PROMPT`) | Independent source-sufficiency, support, novelty, framing, and craft judgment over all inspected receipts; one omitted-only recovery is permitted | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
+| V2 batch editor | `nbn/editor.py` (`BATCH_EDITOR_PROMPT`) | Independent source-sufficiency, support, novelty, selection, compression, and craft judgment over all inspected receipts; one omitted-only recovery is permitted | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
 | Legacy Block thread | `nbn/briefing.py` (`BRIEFING_PROMPT`) | Disabled rollback/experiment path | `NBN_MODEL` |
 | Daily audit | `nbn/audit.py` (`AUDIT_PROMPT`) | Receipt and class verification | `NBN_MODEL` |
 
@@ -42,6 +42,9 @@ can be cited. Code validates structural IDs and reconstructs provenance, while t
 may use all inspected receipts together. Source sufficiency, corroboration, semantic novelty,
 freshness, numerical materiality, scope, and importance are model judgments, not post-model
 code vetoes. Unsupported verbatim quotation remains a hard rail both before and after editing.
+The production orientation explicitly separates research depth from output depth: write
+selectively, lead with the Bitcoin-relevant consequence, split overloaded sentences, and do not
+manufacture Bitcoin importance from a famous investor's small indirect equity exposure.
 
 Cross-run continuity is a bounded evidence pool and attempt/editor workbench, not an immortal
 model conversation. SerpAPI also has a per-run failure circuit so search outages do not consume

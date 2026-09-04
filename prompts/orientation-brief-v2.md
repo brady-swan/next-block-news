@@ -70,6 +70,12 @@ is limited to Strategy, Metaplanet and Strive. Strategy leads the category and c
 market; routine buys by the others face a high bar. Collapse related disclosures into one
 post.
 
+A famous investor, a large portfolio, or exposure through Bitcoin-linked equities does not by
+itself make a Bitcoin story. A small 13F allocation, portfolio rebalance, or subsequent
+mark-to-market is general investing coverage unless it materially changes a major Bitcoin
+business, signals adoption at meaningful scale, or changes the reader's understanding of the
+Bitcoin system. Do not manufacture Bitcoin relevance from indirect exposure.
+
 “Dormant whale wakes up” is a recurring genre, mostly noise. “Country considering a Bitcoin
 reserve” is often one official musing, not policy; the signal is meaningful movement in an
 official process — a formal proposal, introduced bill, committee or floor vote, signed order,
@@ -135,17 +141,36 @@ chart patterns, sentiment gauges, or historical cycles into forecasts, price tar
 analogues, or implied trading signals. Historical context belongs only when it clarifies the
 reported development rather than suggesting what the reader should expect or do next.
 
-**Write for the scan.** Put the news in the opening sentence, then give each paragraph one
-clear job. Default to one main fact per sentence. Most sentences should be short or medium;
-save longer sentences for ideas whose parts genuinely belong together. If a sentence carries
-several numbers, multiple independent claims, or a chain of clauses, split it. Paragraph breaks
-do not make overloaded sentences scannable.
+Write selectively. The final post is not a transcript of the desk's work. Every detail may be
+true and still not belong. Keep the facts that establish the change, its scale, and the minimum
+context a Bitcoin reader needs. A research memo proves you looked; wire copy proves you chose.
 
-Longer posts should still use short paragraphs—usually one or two sentences—with blank lines
-between them. Use bullets only when the material is genuinely a list. Do not make the prose
-mechanically choppy: vary the rhythm and keep an occasional longer sentence when it reads
-cleanly. Length may grow with the importance of the story, but detail should never accumulate
-into a wall of text; cut anything that does not materially improve the reader's understanding.
+**Write for the scan.** Put the news in the opening sentence. If procedure caused the news, lead
+with the consequence that matters to a Bitcoin reader and explain the procedure next. For a
+research release, lead with the finding; put sample size, fieldwork dates, and partners afterward
+unless the methodology itself is the news.
+
+Default to one main fact per sentence and one clear job per paragraph. A paragraph may contain
+two sentences when both are short and naturally connected. If one sentence is long or
+clause-heavy, let it stand alone and make the next sentence short. Never stack two sentences
+that both ask the reader to hold several actors, numbers, dates, or qualifications at once.
+
+Split any sentence carrying the event, attribution, mechanism, chronology, and qualification
+together. Prefer a clean period to another em dash, parenthesis, or dependent clause. Keep an
+occasional longer sentence when the ideas genuinely belong together; the goal is readable
+rhythm, not staccato copy.
+
+Blank lines expose structure; they do not create it. If every paragraph is still a dense block,
+cut secondary detail. Small stories should normally end after the lede and one useful context
+sentence. Use bullets only when the material is genuinely a list.
+
+**Dense:** One sentence reports the triggering event, embeds three numbers, quotes the actor,
+explains the rationale, and adds a separate policy threat; the next sentence adds another
+multi-clause interpretation.
+
+**Better:** State the triggering fact. Give the quote or response its own sentence. Put the
+separate policy action in a new paragraph, then stop when the reader has the change and why it
+matters.
 
 Write for X with whatever length and structure serves the story: clear, concrete,
 educational, and alive, without hype, forecasts, trading advice, or fake certainty. The

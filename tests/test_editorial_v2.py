@@ -89,6 +89,20 @@ class EditorialV2Tests(unittest.TestCase):
         return {"held": 0, "skipped": 0, "posted": 0, "drafted": 0,
                 "uncertain": 0, "failed": 0, "taped": 0}
 
+    def test_v210_prompts_teach_selection_compression_without_style_gates(self):
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.10")
+        self.assertIn("Write selectively", newsroom.ORIENTATION_BRIEF)
+        self.assertIn("small 13F allocation", newsroom.ORIENTATION_BRIEF)
+        self.assertIn("Never stack two sentences", newsroom.ORIENTATION_BRIEF)
+        self.assertIn("split, simplify", editor.EDITOR_PROMPT)
+        self.assertIn("perform a real compression pass", editor.BATCH_EDITOR_PROMPT)
+        self.assertIn("sentence by sentence", editor.BATCH_EDITOR_PROMPT)
+        self.assertIn("sentence two is still a buried lede", editor.BATCH_EDITOR_PROMPT)
+        self.assertIn("For research, lead", editor.BATCH_EDITOR_PROMPT)
+        self.assertIn("MUST repeat the complete final post", editor.BATCH_EDITOR_PROMPT)
+        self.assertNotIn("Research deeply", newsroom.ORIENTATION_BRIEF)
+        self.assertNotIn("24 words", newsroom.ORIENTATION_BRIEF)
+
     def test_assignment_desk_can_suppress_empty_sonnet_wake(self):
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
             saved = store.upsert_new_items(con, [{

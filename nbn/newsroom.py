@@ -23,7 +23,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.9"
+PROMPT_VERSION = "editorial-core-v2.10"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
