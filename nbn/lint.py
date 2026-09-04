@@ -42,6 +42,16 @@ def _outside_quotes(text: str) -> str:
     return re.sub(r'"[^"]*"', " ", text)
 
 
+def _quote_words(text: str) -> str:
+    """Normalize quote wording while treating punctuation as editorial presentation.
+
+    A source may continue a quoted sentence with a comma while the post ends the excerpt
+    with a period. That is still verbatim wording; the hard rail exists to catch invented or
+    changed words, not typography at an excerpt boundary.
+    """
+    return " ".join(re.findall(r"\w+", str(text).casefold(), flags=re.UNICODE))
+
+
 def check(post: str, meta: dict, item: dict) -> list:
     """Return a list of violations; empty list = pass."""
     errors = []
@@ -158,9 +168,11 @@ def hard_rails_v2(post: str, meta: dict, item: dict) -> list:
     # Verbatim quotations must occur in at least one inspected receipt. Paraphrases,
     # rounded figures, and immaterial numerical presentation differences are editorial.
     source_text = str(meta.get("_source_text") or "")
+    source_words = f" {_quote_words(source_text)} "
     quotes = re.findall(r'“([^”]{2,})”', post) + re.findall(r'"([^"\n]{2,})"', post)
     for quote in quotes:
-        if " ".join(quote.split()).casefold() not in " ".join(source_text.split()).casefold():
+        quote_words = _quote_words(quote)
+        if not quote_words or f" {quote_words} " not in source_words:
             errors.append(f"verbatim quote not in inspected evidence: {quote[:80]!r}")
     if len(post) > 2800:
         errors.append(f"post too long ({len(post)} chars)")

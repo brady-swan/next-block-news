@@ -651,6 +651,28 @@ class EditorialV2Tests(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
+    def test_quote_rail_ignores_punctuation_at_excerpt_boundary(self):
+        errors = lint.check_v2(
+            'The firm warned bitcoin was "much riskier than stocks or bonds."',
+            {"_source_text": (
+                'Bitcoin is a highly volatile investment — much riskier than stocks or bonds, '
+                'the firm said.'
+            )},
+            {},
+        )
+        self.assertEqual(errors, [])
+
+    def test_quote_rail_still_rejects_changed_wording(self):
+        errors = lint.check_v2(
+            'The firm warned bitcoin was "far safer than stocks or bonds."',
+            {"_source_text": (
+                'Bitcoin is a highly volatile investment — much riskier than stocks or bonds, '
+                'the firm said.'
+            )},
+            {},
+        )
+        self.assertTrue(any("verbatim quote" in value for value in errors))
+
     def test_one_bad_story_does_not_sink_valid_story_and_omissions_defer(self):
         with temporary_store() as con:
             rows = [candidate("candidate-1"), candidate("candidate-2"), candidate("candidate-3")]
