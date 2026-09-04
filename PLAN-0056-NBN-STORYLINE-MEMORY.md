@@ -1,8 +1,26 @@
 # Plan 0056 — NBN-native storyline memory
 
-**Status:** Approved and implemented. Production smoke found Anthropic rejecting the unsupported
-`maxItems` tool-schema keyword; the compatibility hotfix is verified and committed, with redeploy
-and final smoke pending after the requested pause.
+**Status:** Complete and live in production.
+
+## Production proof — 2026-09-04
+
+- Independent lead-coder review approved the bounded, failure-isolated design.
+- The full local suite passed 364 tests; focused post-smoke verification passed 32 editorial-v2
+  tests plus Ruff and diff checks.
+- Railway deployment `140473eb-5f92-4774-8dd9-9c2b7d96a5d6` installed the additive schema. Its
+  first live request safely exposed that Anthropic does not support `maxItems` in strict custom
+  tool schemas; every candidate remained queued and no output was delivered.
+- Compatibility commit `437c28f` removed that unsupported keyword while preserving the code-owned
+  three-item bound. Railway deployment `b44a71e9-cdbd-4959-8dd5-23da7084e39b` then completed a
+  natural v2.11 run successfully on its first Sonnet call.
+- The successful run used a 40,690-byte initial packet, one prepared receipt, no research tools,
+  no retry, and no storyline writes. Sonnet correctly dropped an unrelated TFTC Cybercab lead;
+  no Typefully or X output was created.
+- Production remained at one replica with `/data` mounted, `NBN_AUTOPOST_ENABLED=false`, and the
+  Sonnet editor. Database integrity was `ok`; the two new tables and both additive columns were
+  present; no existing posts or storylines were backfilled.
+- The read-only rolling audit remains active with storyline mapping, drift, continuity, context
+  cost, and Node de-privileging checks.
 
 ## Objective
 
