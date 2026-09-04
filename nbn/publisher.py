@@ -83,7 +83,7 @@ def reconcile_mutations(con) -> dict:
     recent = []
     if create_rows:
         try:
-            recent = publisher_typefully.list_recent_drafts(limit=100)
+            recent = publisher_typefully.list_recent_drafts(limit=50)
         except Exception as exc:  # noqa: BLE001 - keep intents protected for next run
             log.warning("Typefully mutation list reconciliation deferred: %s", exc)
             stats["deferred"] += len(create_rows)
@@ -255,7 +255,7 @@ def intended_mode(klass: str, *, force_draft: bool = False) -> str:
 
 def one_off_x_thread(post: str, receipt_url: str) -> list[str]:
     """Exact Typefully payload shape for a one-off, used by mutation fingerprints."""
-    return [f"{post}\n\n{receipt_url}"]
+    return [str(post).strip(), f"Source: {str(receipt_url).strip()}"]
 
 
 def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
@@ -271,7 +271,7 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
     if _backend() == "typefully":
         from . import publisher_typefully
         media_id = publisher_typefully.upload_media(*image) if image else ""
-        # Link ON the post so the card renders and readers click through (Brady 2026-08-29).
+        # Keep the lead clean and place the verified receipt in the immediate first reply.
         outcome, ref = publisher_typefully.publish_thread(
             one_off_x_thread(post, receipt_url), immediate=(mode == "IMMEDIATE"),
             lead_media_ids=[media_id] if media_id else None,

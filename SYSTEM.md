@@ -265,8 +265,10 @@ two independent inspected sources; `primary` means an official source. Operator 
 editor `draft` verdicts, newsroom draft mode, and source-policy observe mode always force a
 Typefully draft.
 
-Typefully immediate delivery is scheduled shortly ahead so receipt links survive platform
-rules. Confirmed delivery records as `IMMEDIATE`; ambiguous confirmation records as
+Each new Typefully one-off is an exact two-post X thread: clean news copy first, followed
+immediately by `Source: <verified receipt URL>`. Any image stays on the lead. Immediate delivery
+is scheduled shortly ahead so receipt links survive platform rules. Confirmed delivery records as
+`IMMEDIATE`; ambiguous confirmation records as
 `UNCERTAIN` and is never automatically recreated. The kill switch is
 `NBN_AUTOPOST_ENABLED=false`. Corrections remain human-reviewed.
 

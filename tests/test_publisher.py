@@ -6,6 +6,12 @@ from tests.support import temporary_store
 
 
 class PublisherRouterTests(unittest.TestCase):
+    def test_one_off_uses_clean_lead_and_source_reply(self):
+        self.assertEqual(
+            publisher.one_off_x_thread("  NEW: Test.  ", " https://example.com/story "),
+            ["NEW: Test.", "Source: https://example.com/story"],
+        )
+
     def test_no_backend_is_tape_not_failure(self):
         with temporary_store(), \
                 patch.object(config, "TYPEFULLY_API_KEY", ""), \
@@ -32,6 +38,10 @@ class PublisherRouterTests(unittest.TestCase):
                 mode, ref = publisher.publish(
                     "NEW: Test.", "https://example.com", "primary")
                 self.assertEqual((mode, ref), (expected, "ref"))
+                self.assertEqual(
+                    tf.publish_thread.call_args.args[0],
+                    ["NEW: Test.", "Source: https://example.com"],
+                )
 
     def test_secondary_is_staged_even_when_autopost_is_enabled(self):
         with temporary_store(), \
@@ -40,7 +50,7 @@ class PublisherRouterTests(unittest.TestCase):
                 patch.object(config, "AUTOPOST_ENABLED", True), \
                 patch.object(config, "AUTOPOST_CLASSES", {"primary", "corroborated"}), \
                 patch.object(tf, "publish_thread",
-                             return_value=(tf.PublishOutcome.STAGED, "draft")) as publish:
+                             return_value=(tf.PublishOutcome.STAGED, "draft")):
             mode, _ = publisher.publish(
                 "NEW: Test.", "https://example.com", "secondary")
             self.assertEqual(mode, "DRAFT")

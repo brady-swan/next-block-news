@@ -13,8 +13,8 @@ Why Typefully over Nuelink/direct X API (researched 2026-08-29):
 Schema verified live 2026-08-29 (the public docs are wrong/stale): threads are an
 explicit array — platforms.x = {"enabled": true, "posts": [{"text": ...}, ...]}.
 """
-import datetime
 import copy
+import datetime
 import logging
 import time
 from enum import Enum
@@ -57,7 +57,7 @@ def list_recent_drafts(limit: int = 50) -> list[dict]:
     """Bounded recent-object list used only for ambiguous-create reconciliation."""
     resp = httpx.get(
         f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts",
-        params={"sort": "-created_at", "limit": max(1, min(int(limit), 100))},
+        params={"sort": "-created_at", "limit": max(1, min(int(limit), 50))},
         headers=_headers(), timeout=30,
     )
     resp.raise_for_status()
@@ -316,7 +316,6 @@ def publish_thread(texts: list, immediate: bool, lead_media_ids: list = None,
 
 
 def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
-    import datetime
     posts = [{"text": t} for t in texts]
     if lead_media_ids:
         posts[0]["media_ids"] = lead_media_ids
@@ -342,8 +341,8 @@ def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
             log.error("typefully create succeeded without a draft id")
             return PublishOutcome.UNCERTAIN, "missing draft id"
         if not immediate:
-            return PublishOutcome.STAGED, draft_id
-        return _confirm(draft_id), draft_id
+            return _confirm_staged_create(draft_id, texts), draft_id
+        return _confirm(draft_id, expected_texts=texts), draft_id
     except httpx.HTTPStatusError as exc:
         body = exc.response.text[:300]
         log.error("typefully publish failed: %s | body: %s", exc, body)
@@ -356,6 +355,19 @@ def _create(texts: list, immediate: bool, lead_media_ids: list = None) -> tuple:
         # Retrying could duplicate a live scheduled post, so the outcome is uncertain.
         log.error("typefully create outcome uncertain: %s", exc)
         return PublishOutcome.UNCERTAIN, str(exc)[:200]
+
+
+def _confirm_staged_create(draft_id: str, expected_texts: list[str]) -> PublishOutcome:
+    """Read back a successful staged create; any doubt must suppress another create."""
+    try:
+        confirmed = get_draft(draft_id)
+        if str(confirmed.get("status") or "").casefold() == "draft" \
+                and draft_x_texts(confirmed) == [str(value) for value in expected_texts]:
+            return PublishOutcome.STAGED
+        log.error("typefully draft %s create content confirmation mismatch", draft_id)
+    except Exception as exc:  # noqa: BLE001 - POST already returned a remote ID
+        log.error("typefully draft %s create confirmation failed: %s", draft_id, exc)
+    return PublishOutcome.UNCERTAIN
 
 
 def schedule_draft(draft_id: str) -> PublishOutcome:
@@ -393,7 +405,8 @@ def delete_draft(draft_id: str) -> bool:
     return resp.status_code == 204
 
 
-def _confirm(draft_id: str, attempts: int = 50):
+def _confirm(draft_id: str, attempts: int = 50,
+             expected_texts: list[str] | None = None):
     """Return a definitive or uncertain outcome without creating another draft."""
     for _ in range(attempts):
         try:
@@ -403,6 +416,10 @@ def _confirm(draft_id: str, attempts: int = 50):
             )
             resp.raise_for_status()
             data = resp.json()
+            if expected_texts is not None \
+                    and draft_x_texts(data) != [str(value) for value in expected_texts]:
+                log.error("typefully draft %s content confirmation mismatch", draft_id)
+                return PublishOutcome.UNCERTAIN
             state = data.get("publish_state")
             if state == "finished" or data.get("published_at"):
                 log.info("typefully draft %s published", draft_id)

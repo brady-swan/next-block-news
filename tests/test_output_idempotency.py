@@ -1,6 +1,8 @@
+import datetime
 import unittest
+from unittest.mock import patch
 
-from nbn import store
+from nbn import publisher, publisher_typefully, store
 from tests.support import item, temporary_store
 
 
@@ -103,6 +105,53 @@ class OutputIdempotencyTests(unittest.TestCase):
             self.assertEqual(con.execute(
                 "SELECT COUNT(*) n FROM pipeline_events WHERE event='publisher_owner_keep_suppressed'"
             ).fetchone()["n"], 1)
+
+    def test_persisted_create_mutations_reconcile_from_stored_thread_fingerprint(self):
+        shapes = [
+            ["legacy copy\n\nhttps://example.com/story"],
+            ["new copy", "Source: https://example.com/story"],
+        ]
+        for index, thread in enumerate(shapes):
+            with self.subTest(thread=thread), temporary_store() as con:
+                saved = store.upsert_new_items(con, [item(url=f"https://example.com/{index}")])[0]
+                state = store.canonical_output_state(con, f"event-{index}")
+                materialization = {
+                    "run_id": "run", "story_id": "story",
+                    "item_hash": saved["url_hash"],
+                    "members": [{"url_hash": saved["url_hash"],
+                                 "story_key": f"event-{index}"}],
+                    "klass": "secondary", "body": "new copy",
+                    "receipt_url": "https://example.com/story",
+                    "editor_note": "publish: good", "resolution_id": saved["url_hash"],
+                    "publisher_backend": "typefully", "coverage_relation": "distinct",
+                    "base_post_id": None,
+                }
+                intent = store.prepare_publisher_mutation(
+                    con, story_key=f"event-{index}", operation="create",
+                    intended_mode="DRAFT", desired_thread=thread,
+                    materialization=materialization,
+                    expected_output_signature=state["signature"],
+                )
+                store.transition_publisher_mutation(
+                    con, intent["mutation_id"], intent["owner_token"], 1, "in_flight"
+                )
+                persisted = store.publisher_mutation(con, intent["mutation_id"])
+                remote = {
+                    "id": f"draft-{index}", "status": "draft",
+                    "created_at": datetime.datetime.fromtimestamp(
+                        persisted["created_at"], datetime.timezone.utc
+                    ).isoformat(),
+                    "platforms": {"x": {"enabled": True,
+                                         "posts": [{"text": text} for text in thread]}},
+                }
+                with patch.object(publisher, "_backend", return_value="typefully"), \
+                        patch.object(publisher_typefully, "list_recent_drafts",
+                                     return_value=[remote]), \
+                        patch.object(publisher, "one_off_x_thread",
+                                     side_effect=AssertionError("formatter must not run")):
+                    result = publisher.reconcile_mutations(con)
+                self.assertEqual(result["confirmed"], 1)
+                self.assertEqual(con.execute("SELECT COUNT(*) n FROM posts").fetchone()["n"], 1)
 
 
 if __name__ == "__main__":

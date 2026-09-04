@@ -102,10 +102,72 @@ class TypefullyTests(unittest.TestCase):
         self.assertEqual(get.call_args.kwargs["params"]["include_replies"], "false")
 
     @patch.object(tf.httpx, "post")
-    def test_human_draft_is_staged(self, post):
+    @patch.object(tf, "get_draft")
+    def test_human_draft_is_staged_only_after_exact_content_readback(self, get_draft, post):
         post.return_value = response({"id": "draft-1"})
-        outcome, ref = tf._create(["copy"], immediate=False)
+        get_draft.return_value = {
+            "id": "draft-1", "status": "draft",
+            "platforms": {"x": {"enabled": True, "posts": [
+                {"text": "copy"}, {"text": "Source: https://example.com"},
+            ]}},
+        }
+        outcome, ref = tf._create(
+            ["copy", "Source: https://example.com"], immediate=False
+        )
         self.assertIs(outcome, tf.PublishOutcome.STAGED)
+        self.assertEqual(ref, "draft-1")
+        get_draft.assert_called_once_with("draft-1")
+        created_posts = post.call_args.kwargs["json"]["platforms"]["x"]["posts"]
+        self.assertEqual(created_posts[0], {"text": "copy"})
+        self.assertEqual(created_posts[1], {"text": "Source: https://example.com"})
+
+    @patch.object(tf.httpx, "post")
+    @patch.object(tf, "get_draft")
+    def test_media_stays_on_lead_post_only(self, get_draft, post):
+        post.return_value = response({"id": "draft-1"})
+        get_draft.return_value = {
+            "id": "draft-1", "status": "draft",
+            "platforms": {"x": {"enabled": True, "posts": [
+                {"text": "copy", "media_ids": ["media-1"]},
+                {"text": "Source: https://example.com"},
+            ]}},
+        }
+        outcome, _ = tf._create(
+            ["copy", "Source: https://example.com"], immediate=False,
+            lead_media_ids=["media-1"],
+        )
+        self.assertIs(outcome, tf.PublishOutcome.STAGED)
+        created_posts = post.call_args.kwargs["json"]["platforms"]["x"]["posts"]
+        self.assertEqual(created_posts[0]["media_ids"], ["media-1"])
+        self.assertNotIn("media_ids", created_posts[1])
+
+    @patch.object(tf.httpx, "post")
+    @patch.object(tf, "get_draft")
+    def test_human_draft_content_mismatch_is_uncertain(self, get_draft, post):
+        post.return_value = response({"id": "draft-1"})
+        get_draft.return_value = {
+            "id": "draft-1", "status": "draft",
+            "platforms": {"x": {"enabled": True, "posts": [{"text": "copy"}]}},
+        }
+        outcome, ref = tf._create(
+            ["copy", "Source: https://example.com"], immediate=False
+        )
+        self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
+        self.assertEqual(ref, "draft-1")
+
+    @patch.object(tf.httpx, "post")
+    @patch.object(tf, "get_draft")
+    def test_human_draft_readback_failure_after_create_is_uncertain(self, get_draft, post):
+        post.return_value = response({"id": "draft-1"})
+        request = httpx.Request("GET", "https://api.typefully.com/v2/drafts/draft-1")
+        get_draft.side_effect = httpx.HTTPStatusError(
+            "not yet visible", request=request,
+            response=httpx.Response(404, request=request),
+        )
+        outcome, ref = tf._create(
+            ["copy", "Source: https://example.com"], immediate=False
+        )
+        self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
         self.assertEqual(ref, "draft-1")
 
     @patch.object(tf, "_confirm", return_value=tf.PublishOutcome.CONFIRMED)
@@ -115,7 +177,21 @@ class TypefullyTests(unittest.TestCase):
         outcome, ref = tf._create(["copy"], immediate=True)
         self.assertIs(outcome, tf.PublishOutcome.CONFIRMED)
         self.assertEqual(ref, "draft-2")
-        confirm.assert_called_once_with("draft-2")
+        confirm.assert_called_once_with("draft-2", expected_texts=["copy"])
+
+    @patch.object(tf.time, "sleep", return_value=None)
+    @patch.object(tf.httpx, "get")
+    def test_scheduled_confirmation_requires_exact_source_reply(self, get, _sleep):
+        get.return_value = response({
+            "publish_state": "scheduled",
+            "platforms": {"x": {"enabled": True, "posts": [{"text": "copy"}]}},
+        })
+        outcome = tf._confirm(
+            "draft-2", attempts=1,
+            expected_texts=["copy", "Source: https://example.com"],
+        )
+        self.assertIs(outcome, tf.PublishOutcome.UNCERTAIN)
+        self.assertEqual(get.call_count, 1)
 
     @patch.object(tf.time, "sleep", return_value=None)
     @patch.object(tf.httpx, "get")

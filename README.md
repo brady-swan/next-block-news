@@ -30,7 +30,7 @@ poll -> RSS/EDGAR Haiku mailroom -> Haiku assignment desk -> Sonnet newsroom -> 
 | `nbn/verify.py` | Typed source metadata and legacy claim-support machinery |
 | `nbn/lint.py` | V2 mechanical delivery rails plus advisory warnings; legacy lint remains separate |
 | `nbn/editor.py` | Independent support, source-sufficiency, novelty, framing, and craft judgment |
-| `nbn/publisher.py` | Typefully-first output routing plus the daily tape |
+| `nbn/publisher.py` | Typefully-first lead-plus-source-reply routing plus the daily tape |
 | `nbn/briefing.py` | Fresh AM/PM EIC one-off discovery; legacy Block builder (disabled) |
 | `nbn/audit.py` | Daily receipt and class audit; stages material correction drafts |
 | `nbn/report.py` | Token-protected Desk report |
@@ -79,8 +79,9 @@ Haiku companion routing is a separate `NBN_DESK_CLUSTER_COMPANIONS_ENABLED=true`
 
 Typefully is the deployed publishing rail. Autonomous posts are scheduled shortly ahead
 instead of using `publish_at: "now"`, because Typefully rejects immediate drafts that
-contain URLs. Posts that are not eligible for autonomy become Typefully drafts. With no
-publishing credentials, output is tape-only.
+contain URLs. New one-offs use clean news copy as the lead and `Source: <verified receipt URL>`
+as the immediate first reply. Posts that are not eligible for autonomy become Typefully drafts.
+With no publishing credentials, output is tape-only.
 
 Publishing outcomes are explicit: `IMMEDIATE` means Typefully confirmed publication;
 `DRAFT` means a human draft exists; `UNCERTAIN` means creation may have succeeded but
