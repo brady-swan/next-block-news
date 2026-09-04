@@ -422,3 +422,25 @@ the repositories' existing format/lint/pre-commit checks without sweeping unrela
 | 1 | Independent lead coder | changes requested | Complete relation/state precedence; durable mutation intent; exact draft-edit semantics; fail-safe rollback; bounded editor-recovery budget; preserve strict Node diagnostic object and consumer-first deploy. |
 | 2 | Independent lead coder | changes requested | Persist restart-safe local materialization; bounded authenticated owner resolution; durable pending-update provenance; separately deployable retained safety layer for rollback. |
 | 3 | Independent lead coder | approved | All prior blockers resolved; implementation authorized. |
+
+## Implementation and production proof — 2026-09-04
+
+- NBN safety foundation: `3ed0787` (`Make canonical output delivery idempotent`).
+- NBN desk/recovery/telemetry layer: `fd2e246` (`Clean up the editorial desk payload`).
+- Marketing Node additive diagnostics: `23ac2f1` (`Expose wire pulse theme match diagnostics`).
+- Verification: 349 NBN unittests passed; 2,239 Node tests passed; focused fatal Ruff and
+  changed-file Node Ruff checks passed; both worktrees passed `git diff --check` for owned files.
+- Rollout: NBN deployed first, consumed the old optional-null diagnostic shape, then Node deployed.
+  A manually fired production wire pulse (`run_id=181301`) emitted the v1 diagnostic sibling and
+  NBN consumed that exact v2 run without contract rejection (`14` candidates, all deduplicated).
+- Runtime: both health endpoints were green, NBN reported `editorial-core-v2.9`, no last error, and
+  Typefully publication reconciliation completed successfully. `NBN_AUTOPOST_ENABLED=false` was
+  preserved. `NBN_DRAFT_REPLACEMENT_ENABLED=true` was enabled only after the safety layer was live.
+- The fresh production pulse reported 14 candidates checked and 14 unmatched, with zero assignment-
+  identity, above-threshold classifier, or taxonomy matches. This is now visible evidence for the
+  next audit; the sprint deliberately did not loosen or invent matcher behavior without proof.
+- No synthetic news output was created. The replacement mutation path is fully mock/integration-
+  tested but awaits a natural same-event open-draft case for live Typefully proof.
+- An integrity-checked online NBN backup was created after rollout; same-day pre-rollout backups were
+  already present on the production volume. Node required no database migration for this additive
+  response field.
