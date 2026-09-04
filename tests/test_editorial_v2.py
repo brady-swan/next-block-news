@@ -1,13 +1,24 @@
+import json
 import time
 import unittest
-import json
-from unittest.mock import Mock, patch
-from types import SimpleNamespace
-
 from contextlib import ExitStack
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from nbn import (
-    brain, config, desk_prep, editor, lint, main, newsroom, publisher, report, search, source_policy, sources, store,
+    brain,
+    config,
+    desk_prep,
+    editor,
+    lint,
+    main,
+    newsroom,
+    publisher,
+    report,
+    search,
+    source_policy,
+    sources,
+    store,
     verify,
 )
 from tests.support import temporary_store
@@ -89,8 +100,8 @@ class EditorialV2Tests(unittest.TestCase):
         return {"held": 0, "skipped": 0, "posted": 0, "drafted": 0,
                 "uncertain": 0, "failed": 0, "taped": 0}
 
-    def test_v210_prompts_teach_selection_compression_without_style_gates(self):
-        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.10")
+    def test_v211_prompts_teach_selection_compression_without_style_gates(self):
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.11-storylines")
         self.assertIn("Write selectively", newsroom.ORIENTATION_BRIEF)
         self.assertIn("small 13F allocation", newsroom.ORIENTATION_BRIEF)
         self.assertIn("Never stack two sentences", newsroom.ORIENTATION_BRIEF)
@@ -181,6 +192,21 @@ class EditorialV2Tests(unittest.TestCase):
                 con=con, reservation="r", prep_mode="off", research_mode="off",
                 compact_enabled=True,
             )
+            session.storyline_cards = [{
+                "storyline_key": f"storyline-{index}", "revision": index + 1,
+                "title": "Durable Bitcoin storyline " + "N" * 120,
+                "state_summary": "M" * 800, "lifecycle": "open",
+                "watch_for": ["W" * 240 for _ in range(3)],
+                "recent_events": [{
+                    "candidate_id": f"older-{event}",
+                    "exact_event_key": f"event-{index}-{event}",
+                    "headline": "H" * 300,
+                } for event in range(8)],
+                "output_state": {"open_draft": False, "reader_covered": False},
+            } for index in range(8)]
+            session.storyline_read_keys = {
+                row["storyline_key"] for row in session.storyline_cards
+            }
             recent = [{
                 "effective_at": time.time() - index * 60,
                 "story_key": f"event-{index}", "class": "secondary",
@@ -191,6 +217,10 @@ class EditorialV2Tests(unittest.TestCase):
                 packet = session._initial_packet()
             self.assertLessEqual(len(json.dumps(packet).encode()),
                                  config.COMPACT_DESK_INITIAL_BYTES)
+            self.assertEqual(
+                {row["url_hash"] for row in rows},
+                {row["candidate_id"] for row in packet["intake_board"]},
+            )
             self.assertTrue(packet["recent_reader_feed_48h"]["index"])
             self.assertTrue(session.context_rows)
 
@@ -310,6 +340,7 @@ class EditorialV2Tests(unittest.TestCase):
                 "reader_value": "Policy changed.", "needs_second_source": False,
                 "selected_fetch_id": record.fetch_id,
                 "evidence_fetch_ids": [record.fetch_id], "_source_text": record.text,
+                "storyline_key_requested": "bitcoin-regulation",
             }
             verdict = {
                 **row, "action": "draft", "story_key": "sec-bitcoin-policy",
@@ -333,6 +364,16 @@ class EditorialV2Tests(unittest.TestCase):
                 [verdict], {row["url_hash"]: resolution}, {row["url_hash"]: draft},
                 {record.fetch_id: record}, {"rounds": 1}, session,
                 {row["url_hash"]: "sec"}, [attempt],
+                [], [{
+                    "storyline_key": "bitcoin-regulation", "base_revision": None,
+                    "title": "Bitcoin regulation", "lifecycle": "open",
+                    "state_summary": "Regulators are changing Bitcoin policy.",
+                    "watch_for": ["Final agency action"],
+                    "relationship": "new_storyline", "candidate_ids": [row["url_hash"]],
+                    "candidate_dispositions": {row["url_hash"]: "publish"},
+                    "candidate_event_keys": {row["url_hash"]: "sec-bitcoin-policy"},
+                    "update_reason": "A material policy development.",
+                }], set(), {},
             )
             stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="token"))
             stack.enter_context(patch.object(newsroom, "start_session", return_value=session))
@@ -363,6 +404,10 @@ class EditorialV2Tests(unittest.TestCase):
             self.assertFalse(memory["delivery"]["reader_covered"])
             self.assertEqual(store.canonical_story_key(con, "sec-policy-update"),
                              "sec-bitcoin-policy")
+            linked = con.execute(
+                "SELECT storyline_key FROM posts WHERE story_key='sec-bitcoin-policy'"
+            ).fetchone()
+            self.assertEqual(linked["storyline_key"], "bitcoin-regulation")
 
             # A later hard-rail defer becomes the workbench's explicit next objective.
             con.execute("DELETE FROM posts WHERE story_key='sec-bitcoin-policy'")

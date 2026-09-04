@@ -24,6 +24,7 @@ def decision(candidate_id, route="advance"):
         "freshness_note": "Reported today.",
         "research_objective": "Find the most useful source.",
         "source_leads": ["official page"], "related_keys": [],
+        "related_storyline_keys": [],
         "event_group": f"candidate-{candidate_id}",
     }
 
@@ -40,12 +41,17 @@ class DeskPreparationTests(unittest.TestCase):
                 "discovery_context": "{}",
             }))
         keys = [f"coverage-key-{index}-" + "k" * 120 for index in range(40)]
-        packet, compacted = desk_prep._packet(cards, keys, 48 * 1024)
+        storylines = [{
+            "storyline_key": f"storyline-{index}", "title": "T" * 160,
+            "summary_excerpt": "S" * 300, "lifecycle": "open", "revision": 1,
+        } for index in range(80)]
+        packet, compacted = desk_prep._packet(cards, keys, 48 * 1024, storylines)
         self.assertLessEqual(len(packet.encode("utf-8")), 48 * 1024)
         parsed = json.loads(packet)
         self.assertEqual(parsed["supplied_coverage_keys"], keys)
         self.assertNotIn("supplied_coverage_keys", parsed["candidates"][0])
         self.assertEqual(len({row["candidate_id"] for row in parsed["candidates"]}), 25)
+        self.assertLessEqual(len(parsed["supplied_storyline_index"]), 80)
         self.assertTrue(compacted)
 
     @staticmethod
@@ -90,6 +96,52 @@ class DeskPreparationTests(unittest.TestCase):
             self.assertEqual(rows[official["url_hash"]]["effective_route"], "advance")
             self.assertEqual(rows[official["url_hash"]]["protection_reason"],
                              "official_primary")
+
+    def test_node_provenance_is_not_protected_and_themes_never_reach_haiku(self):
+        context = json.dumps({
+            "schema_version": "wire-pulse-v2", "theme_ids": ["node-theme"],
+            "theme_signals": [{"name": "hot"}], "why_surfaced": "Node lead",
+        })
+        with temporary_store() as con:
+            row = self.saved_item(
+                con, url="https://example.com/node-lead", context=context
+            )
+            card = desk_prep._card(row)
+            self.assertTrue(card["attention"]["marketing_node_discovery"])
+            self.assertNotIn("theme_ids", card)
+            self.assertNotIn("node-theme", json.dumps(card))
+            api = Mock()
+            api.messages.create.return_value = response_for([
+                decision(row["url_hash"], "background")
+            ])
+            with patch.object(desk_prep.anthropic, "Anthropic", return_value=api), \
+                    patch.object(desk_prep.brain, "consume_model_call"):
+                result = desk_prep.prepare(
+                    con, run_id="node-background", inventory=[row], coverage_keys=[],
+                    continuity_ids=set(), reservation="r", mode="enforce",
+                )
+            self.assertEqual(result.advanced_ids, ())
+            saved = store.latest_desk_preparations(con, [row["url_hash"]])
+            self.assertIsNone(saved[row["url_hash"]]["protection_reason"])
+
+    def test_existing_call_maps_only_supplied_storyline_keys(self):
+        with temporary_store() as con:
+            row = self.saved_item(con, url="https://example.com/storyline")
+            value = decision(row["url_hash"])
+            value["related_storyline_keys"] = ["clarity-act", "invented"]
+            api = Mock()
+            api.messages.create.return_value = response_for([value])
+            with patch.object(desk_prep.anthropic, "Anthropic", return_value=api), \
+                    patch.object(desk_prep.brain, "consume_model_call"):
+                result = desk_prep.prepare(
+                    con, run_id="storyline-map", inventory=[row], coverage_keys=[],
+                    continuity_ids=set(), reservation="r", mode="enforce",
+                    storyline_index=[{
+                        "storyline_key": "clarity-act", "title": "CLARITY Act",
+                        "summary_excerpt": "Legislation is progressing.", "lifecycle": "open",
+                    }],
+                )
+            self.assertEqual(result.rows[0]["related_storyline_keys"], ["clarity-act"])
 
     def test_observe_never_suppresses_or_reconciles_later(self):
         with temporary_store() as con:

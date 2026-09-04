@@ -583,6 +583,9 @@ def render(con, day: str = None) -> str:
     except (TypeError, ValueError):
         latest_counters = {}
     latest_story_commits = []
+    recent_storylines = store.newsroom_storyline_cards(
+        con, [row["storyline_key"] for row in store.newsroom_storyline_index(con, limit=12)],
+    )
     if latest_newsroom:
         latest_story_commits = con.execute(
             "SELECT story_id,state,details_json FROM newsroom_story_commits"
@@ -668,10 +671,53 @@ def render(con, day: str = None) -> str:
                "prefetch receipts"
                f" · {_bounded_count(latest_counters.get('haiku_assignments', 0), 10)} "
                "Haiku assignments")
+            + ("<br><b>Storyline desk</b> · "
+               f"{_bounded_count((latest_counters.get('storylines') or {}).get('indexed', 0))} "
+               "indexed"
+               f" · {_bounded_count((latest_counters.get('storylines') or {}).get('haiku_selected', 0))} "
+               "Haiku-selected"
+               f" · {_bounded_count((latest_counters.get('storylines') or {}).get('initially_supplied', 0))} "
+               "full cards supplied"
+               f" · {_bounded_count((latest_counters.get('storylines') or {}).get('retrieved', 0))} "
+               "retrieved")
+            + ("<br><b>Storyline writes</b> · "
+               f"{_bounded_count((latest_counters.get('storyline_persistence') or {}).get('created', 0))} created"
+               f" · {_bounded_count((latest_counters.get('storyline_persistence') or {}).get('updated', 0))} updated"
+               f" · {_bounded_count((latest_counters.get('storyline_persistence') or {}).get('closed', 0))} closed"
+               f" · {_bounded_count((latest_counters.get('storyline_persistence') or {}).get('events', 0))} events"
+               f" · {_bounded_count((latest_counters.get('storyline_persistence') or {}).get('ignored', 0))} ignored")
             + (f"<br><b>Run issue</b> · {_esc(latest_newsroom['error_kind'])}: "
                f"{_esc(latest_newsroom['error_message'])}"
                if latest_newsroom["error_kind"] else "")
             + "</div>"
+        )
+    if recent_storylines:
+        rows = []
+        for line in recent_storylines:
+            state = line.get("output_state") or {}
+            coverage = "open draft" if state.get("open_draft") else (
+                "reader covered" if state.get("reader_covered") else "no output"
+            )
+            events = " · ".join(
+                _esc(event.get("headline") or event.get("exact_event_key") or "signal")
+                for event in list(line.get("recent_events") or [])[:3]
+            ) or "no linked events"
+            watches = " · ".join(_esc(value) for value in line.get("watch_for") or [])
+            rows.append(
+                "<div class='hentry mailentry'>"
+                f"<div class=m>{_esc(line['lifecycle'])} · {_esc(line['storyline_key'])}"
+                f" · revision {int(line['revision'])} · {coverage}</div>"
+                f"<div class=title>{_esc(line['title'])}</div>"
+                f"<div class=why>{_esc(line['state_summary'])}</div>"
+                f"<div class=why>Recent: {events}</div>"
+                + (f"<div class=why>Watch: {watches}</div>" if watches else "")
+                + "</div>"
+            )
+        out.append(
+            "<details class=countdefs><summary>NBN storylines · latest 12</summary>"
+            f"<div class=body>{''.join(rows)}"
+            "<p>Advisory newsroom memory only; linked receipts remain the evidence.</p>"
+            "</div></details>"
         )
     try:
         from .newsroom import ORIENTATION_BRIEF
@@ -1029,6 +1075,15 @@ def render(con, day: str = None) -> str:
             if item.get("newsroom_reader_value"):
                 newsroom_detail += (
                     f"<p>Reader value: {_esc(item.get('newsroom_reader_value'))}</p>"
+                )
+            suggestions = item.get("newsroom_storyline_suggestions") or []
+            if suggestions or item.get("output_storyline_key"):
+                newsroom_detail += (
+                    "<p>Storyline: Haiku suggested "
+                    + _esc(" · ".join(str(value) for value in suggestions[:2]) or "none")
+                    + " · committed output "
+                    + _esc(item.get("output_storyline_key") or "none")
+                    + "</p>"
                 )
             unresolved = item.get("newsroom_unresolved") or []
             if unresolved:

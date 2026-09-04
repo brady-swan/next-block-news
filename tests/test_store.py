@@ -1,11 +1,11 @@
-import unittest
 import datetime
 import json
 import sqlite3
 import tempfile
 import time
-from types import SimpleNamespace
+import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from nbn import config, guide_context, source_policy, store, verify
@@ -706,6 +706,69 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(pending["note"], "defer:needs one more source")
             self.assertEqual(pending["decision_stage"], "newsdesk")
             self.assertEqual(pending["decision_category"], "editorial_defer")
+
+    def test_storyline_ledger_is_revision_safe_bounded_and_run_idempotent(self):
+        with temporary_store() as con:
+            saved = store.upsert_new_items(
+                con, [item(url="https://example.com/clarity")]
+            )[0]
+            candidate_id = saved["url_hash"]
+            create = {
+                "storyline_key": "clarity-act", "base_revision": None,
+                "title": "CLARITY Act", "lifecycle": "open",
+                "state_summary": "The bill is moving through Congress.",
+                "watch_for": ["A scheduled floor vote"],
+                "relationship": "new_storyline", "candidate_ids": [candidate_id],
+                "candidate_dispositions": {candidate_id: "publish"},
+                "candidate_event_keys": {candidate_id: "clarity-hearing-2026-09-04"},
+                "update_reason": "First material event.",
+            }
+            first = store.apply_newsroom_storyline_updates(
+                con, run_id="run-one", updates=[create], allowed_existing_keys=set()
+            )
+            self.assertEqual(first["created"], 1)
+            repeated = store.apply_newsroom_storyline_updates(
+                con, run_id="run-one", updates=[{
+                    **create, "base_revision": 1, "relationship": "continuing",
+                    "state_summary": "The hearing concluded.",
+                }], allowed_existing_keys={"clarity-act"}
+            )
+            self.assertEqual(repeated["events"], 0)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) n FROM newsroom_storyline_events"
+            ).fetchone()["n"], 1)
+            self.assertEqual(con.execute(
+                "SELECT revision FROM newsroom_storylines"
+            ).fetchone()["revision"], 1)
+            advanced = store.apply_newsroom_storyline_updates(
+                con, run_id="run-two", updates=[{
+                    **create, "base_revision": 1, "relationship": "turn",
+                    "state_summary": "A later turn.",
+                    "candidate_dispositions": {candidate_id: "drop"},
+                }], allowed_existing_keys={"clarity-act"}
+            )
+            self.assertEqual(advanced["updated"], 1)
+            self.assertEqual(advanced["events"], 1)
+            events = con.execute(
+                "SELECT run_id,disposition FROM newsroom_storyline_events"
+                " ORDER BY id"
+            ).fetchall()
+            self.assertEqual(
+                [(row["run_id"], row["disposition"]) for row in events],
+                [("run-one", "publish"), ("run-two", "drop")],
+            )
+            stale = store.apply_newsroom_storyline_updates(
+                con, run_id="run-three", updates=[{
+                    **create, "base_revision": 1, "relationship": "closing",
+                    "lifecycle": "closed", "state_summary": "Stale closure.",
+                }], allowed_existing_keys={"clarity-act"}
+            )
+            self.assertEqual(stale["ignored"], 1)
+            self.assertEqual(stale["ignored_updates"][0]["reason"], "stale_revision")
+            card = store.newsroom_storyline_cards(con, ["clarity-act"])[0]
+            self.assertEqual(card["revision"], 2)
+            self.assertEqual(card["state_summary"], "A later turn.")
+            self.assertLessEqual(len(json.dumps(card).encode()), 16 * 1024)
 
 
 if __name__ == "__main__":

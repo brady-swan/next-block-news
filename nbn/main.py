@@ -455,6 +455,37 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             attempt,
         )
 
+    committed_storyline_keys: set[str] = set()
+    storyline_result = {
+        "created": 0, "updated": 0, "closed": 0, "ignored": 0, "events": 0,
+        "accepted_keys": [], "ignored_updates": [],
+    }
+    try:
+        if config.STORYLINE_MEMORY_ENABLED and outcome.storyline_updates:
+            storyline_result = store.apply_newsroom_storyline_updates(
+                con, run_id=pipeline_run_id, updates=outcome.storyline_updates,
+                allowed_existing_keys=set(outcome.storyline_read_keys),
+            )
+            committed_storyline_keys = set(storyline_result.get("accepted_keys") or [])
+    except Exception as exc:  # storyline context must never block delivery
+        log.warning("storyline memory failed open for %s: %s", pipeline_run_id, exc)
+        storyline_result = {**storyline_result, "error": type(exc).__name__}
+    storyline_result["ignored"] = int(storyline_result.get("ignored", 0)) + int(
+        outcome.storyline_diagnostics.get("ignored_before_persistence", 0)
+    )
+    outcome.counters["storyline_persistence"] = {
+        key: storyline_result.get(key) for key in
+        ("created", "updated", "closed", "ignored", "events", "error",
+         "ignored_updates")
+        if storyline_result.get(key) is not None
+    }
+    result["newsroom"]["storyline_persistence"] = outcome.counters[
+        "storyline_persistence"
+    ]
+    for draft in outcome.drafts.values():
+        requested = str(draft.get("storyline_key_requested") or "")
+        draft["storyline_key"] = requested if requested in committed_storyline_keys else None
+
     store.set_newsroom_state(con, pipeline_run_id, "materializing")
 
     # Completed editorial drops are terminal; defers remain in the next clean desk.
@@ -794,7 +825,20 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             "publisher_backend": publisher.backend_name(),
             "coverage_relation": candidate["coverage_relation"],
             "base_post_id": candidate["base_post_id"],
+            "storyline_key": candidate["draft"].get("storyline_key"),
         }
+        if target_draft:
+            existing_storyline = str(target_draft.get("storyline_key") or "")
+            requested_storyline = str(materialization.get("storyline_key") or "")
+            if existing_storyline and requested_storyline not in {"", existing_storyline}:
+                materialization["storyline_key"] = None
+                store.record_pipeline_event(
+                    con, pipeline_run_id, members[0]["url_hash"],
+                    "storyline_relabel_ignored", story_key=resolution.story_key,
+                    category="storyline", metadata={
+                        "existing": existing_storyline, "requested": requested_storyline,
+                    },
+                )
         mutation = None
         if publisher.backend_name() == "typefully":
             # Replacement was selected against the earlier state; any intervening change
@@ -896,6 +940,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             resolution_id=members[0]["url_hash"], publisher_backend=publisher.backend_name(),
             coverage_relation=candidate["coverage_relation"],
             base_post_id=candidate["base_post_id"],
+            storyline_key=candidate["draft"].get("storyline_key"),
         )
         store.save_newsroom_delivery(
             con, resolution.story_key, mode=mode, backend_ref=publisher_ref or "",

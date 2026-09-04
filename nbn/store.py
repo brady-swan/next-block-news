@@ -1,8 +1,9 @@
 """SQLite state: seen items, story-level dedup, post log."""
-import hashlib
 import datetime
+import hashlib
 import ipaddress
 import json
+import re
 import sqlite3
 import time
 import unicodedata
@@ -232,6 +233,34 @@ CREATE TABLE IF NOT EXISTS newsroom_story_memory (
 );
 CREATE INDEX IF NOT EXISTS idx_newsroom_story_memory_expiry
   ON newsroom_story_memory(expires_at);
+CREATE TABLE IF NOT EXISTS newsroom_storylines (
+  storyline_key TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  lifecycle TEXT NOT NULL,
+  watch_for_json TEXT NOT NULL DEFAULT '[]',
+  update_reason TEXT NOT NULL DEFAULT '',
+  created_at REAL NOT NULL,
+  updated_at REAL NOT NULL,
+  last_signal_at REAL NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_newsroom_storylines_recent
+  ON newsroom_storylines(lifecycle, updated_at DESC);
+CREATE TABLE IF NOT EXISTS newsroom_storyline_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  storyline_key TEXT NOT NULL,
+  item_hash TEXT NOT NULL,
+  canonical_event_key TEXT,
+  run_id TEXT NOT NULL,
+  disposition TEXT NOT NULL,
+  relationship TEXT NOT NULL,
+  observed_at REAL NOT NULL,
+  created_at REAL NOT NULL,
+  UNIQUE(storyline_key, item_hash, run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_newsroom_storyline_events_recent
+  ON newsroom_storyline_events(storyline_key, observed_at DESC, id DESC);
 CREATE TABLE IF NOT EXISTS model_usage (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT NOT NULL,
@@ -263,6 +292,7 @@ CREATE TABLE IF NOT EXISTS desk_preparations (
   research_objective TEXT NOT NULL DEFAULT '',
   source_leads_json TEXT NOT NULL DEFAULT '[]',
   related_keys_json TEXT NOT NULL DEFAULT '[]',
+  related_storyline_keys_json TEXT NOT NULL DEFAULT '[]',
   event_group TEXT NOT NULL DEFAULT '',
   companion_anchor_hash TEXT,
   protection_reason TEXT,
@@ -384,6 +414,7 @@ POST_COLUMNS = {
     "coverage_relation": "TEXT NOT NULL DEFAULT 'legacy'",
     "base_post_id": "INTEGER",
     "mutation_id": "TEXT",
+    "storyline_key": "TEXT",
 }
 
 ITEM_COLUMNS = {
@@ -418,6 +449,7 @@ MODEL_USAGE_COLUMNS = {
 DESK_PREPARATION_COLUMNS = {
     "event_group": "TEXT NOT NULL DEFAULT ''",
     "companion_anchor_hash": "TEXT",
+    "related_storyline_keys_json": "TEXT NOT NULL DEFAULT '[]'",
 }
 
 SEARCH_PROVIDER_COLUMNS = {
@@ -1179,7 +1211,10 @@ def save_desk_preparations(con, rows: list[dict], *, mode: str) -> dict:
                                separators=(",", ":"), ensure_ascii=False)
             related = json.dumps(list(value.get("related_keys") or [])[:3],
                                  separators=(",", ":"), ensure_ascii=False)
-            if len(leads.encode("utf-8")) > 1800 or len(related.encode("utf-8")) > 800:
+            storylines = json.dumps(list(value.get("related_storyline_keys") or [])[:2],
+                                   separators=(",", ":"), ensure_ascii=False)
+            if (len(leads.encode("utf-8")) > 1800 or len(related.encode("utf-8")) > 800
+                    or len(storylines.encode("utf-8")) > 400):
                 raise ValueError("desk preparation row exceeds JSON bounds")
             effective = str(value.get("effective_route") or "advance")[:20]
             state = "observed" if mode == "observe" else "applied"
@@ -1187,16 +1222,17 @@ def save_desk_preparations(con, rows: list[dict], *, mode: str) -> dict:
                 "INSERT OR REPLACE INTO desk_preparations("
                 "run_id,item_hash,model_route,effective_route,event_summary,"
                 "bitcoin_relevance,freshness_note,research_objective,source_leads_json,"
-                "related_keys_json,event_group,companion_anchor_hash,protection_reason,model,"
-                "prompt_version,outcome,error_kind,mode,application_state,prepared_at,applied_at,"
-                "promoted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                "related_keys_json,related_storyline_keys_json,event_group,companion_anchor_hash,"
+                "protection_reason,model,prompt_version,outcome,error_kind,mode,application_state,"
+                "prepared_at,applied_at,promoted_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
                 (str(value.get("run_id") or "")[:120],
                  str(value.get("item_hash") or "")[:64],
                  str(value.get("model_route") or "advance")[:20], effective,
                  str(value.get("event_summary") or "")[:400],
                  str(value.get("bitcoin_relevance") or "")[:300],
                  str(value.get("freshness_note") or "")[:240],
-                 str(value.get("research_objective") or "")[:400], leads, related,
+                 str(value.get("research_objective") or "")[:400], leads, related, storylines,
                  str(value.get("event_group") or "")[:80],
                  str(value.get("companion_anchor_hash") or "")[:64] or None,
                  str(value.get("protection_reason") or "")[:80] or None,
@@ -1247,8 +1283,12 @@ def latest_desk_preparations(con, item_hashes: list[str]) -> dict[str, dict]:
         try:
             row["source_leads"] = json.loads(row.pop("source_leads_json") or "[]")
             row["related_keys"] = json.loads(row.pop("related_keys_json") or "[]")
+            row["related_storyline_keys"] = json.loads(
+                row.pop("related_storyline_keys_json") or "[]"
+            )
         except (TypeError, ValueError):
             row["source_leads"], row["related_keys"] = [], []
+            row["related_storyline_keys"] = []
         result[row["item_hash"]] = row
     return result
 
@@ -1504,7 +1544,8 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             " selected_url, status FROM source_resolutions WHERE item_hash=?", (item_hash,)
         ).fetchone()
         output = con.execute(
-            "SELECT mode FROM posts WHERE item_hash=? ORDER BY id DESC LIMIT 1", (item_hash,)
+            "SELECT mode,storyline_key FROM posts WHERE item_hash=? ORDER BY id DESC LIMIT 1",
+            (item_hash,),
         ).fetchone()
         packet = theme_context.parse_discovery_context(candidate.get("discovery_context"))
         decisions.append({
@@ -1526,11 +1567,17 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
             "selected_url": resolution["selected_url"] if resolution else "",
             "resolution_status": resolution["status"] if resolution else "",
             "output_mode": output["mode"] if output else "",
+            "output_storyline_key": str(output["storyline_key"] or "")[:120]
+            if output else "",
             "newsroom_story_id": str(verdict.get("_newsroom_story_id") or "")[:80],
             "newsroom_reader_value": str(
                 verdict.get("_newsroom_reader_value") or "")[:800],
             "newsroom_unresolved": [str(value)[:300] for value in
                                     list(verdict.get("_newsroom_unresolved") or [])[:8]],
+            "newsroom_storyline_suggestions": [str(value)[:120] for value in
+                                                list(verdict.get(
+                                                    "_newsroom_storyline_suggestions"
+                                                ) or [])[:2]],
             "theme_ids": packet["theme_ids"],
             "theme_signals": packet["theme_signals"],
         })
@@ -1545,6 +1592,24 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
     safe_result = dict(result)
     newsroom = result.get("newsroom") if isinstance(result, dict) else None
     if isinstance(newsroom, dict):
+        raw_storylines = newsroom.get("storylines") or {}
+        safe_storylines = {
+            key: safe_count(raw_storylines.get(key, 0))
+            for key in ("indexed", "haiku_selected", "initially_supplied", "retrieved")
+        } if isinstance(raw_storylines, dict) else {}
+        raw_persistence = newsroom.get("storyline_persistence") or {}
+        safe_persistence = {
+            key: safe_count(raw_persistence.get(key, 0))
+            for key in ("created", "updated", "closed", "ignored", "events")
+        } if isinstance(raw_persistence, dict) else {}
+        if isinstance(raw_persistence, dict) and raw_persistence.get("error"):
+            safe_persistence["error"] = str(raw_persistence["error"])[:80]
+        if isinstance(raw_persistence, dict):
+            safe_persistence["ignored_updates"] = [{
+                "storyline_key": str(row.get("storyline_key") or "")[:120],
+                "reason": str(row.get("reason") or "")[:160],
+            } for row in list(raw_persistence.get("ignored_updates") or [])[:12]
+                if isinstance(row, dict)]
         safe_result["newsroom"] = {
             "mode": str(newsroom.get("mode") or "")[:12],
             "status": str(newsroom.get("status") or "")[:24],
@@ -1555,7 +1620,13 @@ def record_decision_run(con, pending: list, verdicts: list, result: dict,
                 "rounds", "tool_calls", "searches", "search_http_attempts",
                 "search_failures", "search_cache_hits", "search_cache_misses",
                 "search_provider_skips", "search_pointer_reuse", "fetches", "fetch_chars",
-                "duration_seconds", "stories")},
+                "duration_seconds", "stories", "successful_newsdesk_calls",
+                "newsdesk_retry_used", "prefetch_attempts", "prefetch_successes",
+                "prefetch_chars", "context_retrieval_calls", "context_retrieval_bytes",
+                "haiku_assignments", "haiku_rounds", "haiku_tool_calls",
+                "initial_packet_bytes")},
+            "storylines": safe_storylines,
+            "storyline_persistence": safe_persistence,
             "search_degraded": bool(newsroom.get("search_degraded")),
             "fetch_failure_kinds": {
                 str(key)[:80]: safe_count(value) for key, value in
@@ -2404,6 +2475,261 @@ def save_newsroom_editor_feedback(con, canonical_key: str, *, verdict: str, reas
     )
     _enforce_story_memory_row_bound(con, key)
     con.commit()
+
+
+_STORYLINE_KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+){0,15}$")
+_STORYLINE_LIFECYCLES = {"open", "closed"}
+_STORYLINE_RELATIONSHIPS = {
+    "new_storyline", "continuing", "turn", "routine_signal", "closing",
+}
+_STORYLINE_DISPOSITIONS = {"publish", "drop", "defer"}
+
+
+def valid_storyline_key(value: str) -> bool:
+    key = str(value or "")
+    return bool(len(key) <= 120 and _STORYLINE_KEY_RE.fullmatch(key))
+
+
+def _storyline_watch_for(value) -> list[str]:
+    if not isinstance(value, list) or len(value) > 3:
+        return []
+    return [str(row).strip()[:240] for row in value if str(row).strip()][:3]
+
+
+def newsroom_storyline_index(con, *, limit: int = 80,
+                             now: float | None = None) -> list[dict]:
+    """Compact advisory index for Haiku; prose is never evidence."""
+    stamp = float(now if now is not None else time.time())
+    rows = con.execute(
+        "SELECT * FROM newsroom_storylines WHERE lifecycle='open' OR updated_at>=?"
+        " ORDER BY CASE lifecycle WHEN 'open' THEN 0 ELSE 1 END,updated_at DESC LIMIT ?",
+        (stamp - 30 * 86400, max(0, min(int(limit), 80))),
+    ).fetchall()
+    out = []
+    for raw in rows:
+        row = dict(raw)
+        if not valid_storyline_key(row.get("storyline_key")):
+            continue
+        events = con.execute(
+            "SELECT canonical_event_key FROM newsroom_storyline_events"
+            " WHERE storyline_key=? ORDER BY observed_at DESC,id DESC LIMIT 1",
+            (row["storyline_key"],),
+        ).fetchone()
+        output = con.execute(
+            "SELECT mode,body FROM posts WHERE storyline_key=?"
+            " AND mode IN ('DRAFT','IMMEDIATE','UNCERTAIN')"
+            " AND NOT (mode='DRAFT' AND COALESCE(publisher_status,'') IN ('deleted','inactive'))"
+            " ORDER BY created DESC,id DESC LIMIT 1",
+            (row["storyline_key"],),
+        ).fetchone()
+        out.append({
+            "storyline_key": row["storyline_key"],
+            "title": str(row.get("title") or "")[:160],
+            "summary_excerpt": str(row.get("summary") or "")[:300],
+            "lifecycle": row.get("lifecycle"),
+            "revision": int(row.get("revision") or 1),
+            "hours_since_signal": round(max(0, stamp - float(
+                row.get("last_signal_at") or stamp)) / 3600, 1),
+            "last_exact_event_key": str(events["canonical_event_key"] or "")[:180]
+            if events else "",
+            "open_draft": bool(output and output["mode"] == "DRAFT"),
+            "reader_covered": bool(output and output["mode"] in {"IMMEDIATE", "UNCERTAIN"}),
+        })
+        if len(json.dumps(out, separators=(",", ":"), ensure_ascii=False).encode()) > 24 * 1024:
+            out.pop()
+            break
+    return out
+
+
+def newsroom_storyline_cards(con, keys: list[str], *, events_limit: int = 8) -> list[dict]:
+    """Return full cards only for explicitly selected keys."""
+    out = []
+    for key in list(dict.fromkeys(str(value) for value in keys))[:24]:
+        if not valid_storyline_key(key):
+            continue
+        raw = con.execute(
+            "SELECT * FROM newsroom_storylines WHERE storyline_key=?", (key,)
+        ).fetchone()
+        if not raw:
+            continue
+        row = dict(raw)
+        events = [dict(event) for event in con.execute(
+            "SELECT e.storyline_key,e.item_hash,e.canonical_event_key,e.run_id,e.disposition,"
+            "e.relationship,e.observed_at,i.title FROM newsroom_storyline_events e"
+            " LEFT JOIN items i ON i.url_hash=e.item_hash WHERE e.storyline_key=?"
+            " ORDER BY e.observed_at DESC,e.id DESC LIMIT ?",
+            (key, max(1, min(int(events_limit), 8))),
+        ).fetchall()]
+        output = con.execute(
+            "SELECT mode,body,created FROM posts WHERE storyline_key=?"
+            " AND mode IN ('DRAFT','IMMEDIATE','UNCERTAIN')"
+            " AND NOT (mode='DRAFT' AND COALESCE(publisher_status,'') IN ('deleted','inactive'))"
+            " ORDER BY created DESC,id DESC LIMIT 1", (key,),
+        ).fetchone()
+        out.append({
+            "storyline_key": key, "revision": int(row.get("revision") or 1),
+            "title": str(row.get("title") or "")[:160],
+            "state_summary": str(row.get("summary") or "")[:800],
+            "lifecycle": row.get("lifecycle"),
+            "watch_for": _storyline_watch_for(_safe_json_array(row.get("watch_for_json"))),
+            "update_reason": str(row.get("update_reason") or "")[:400],
+            "updated_at_epoch": float(row.get("updated_at") or 0),
+            "last_signal_at_epoch": float(row.get("last_signal_at") or 0),
+            "recent_events": [{
+                "candidate_id": event.get("item_hash"),
+                "exact_event_key": str(event.get("canonical_event_key") or "")[:180],
+                "run_id": str(event.get("run_id") or "")[:120],
+                "disposition": event.get("disposition"),
+                "relationship": event.get("relationship"),
+                "observed_at_epoch": float(event.get("observed_at") or 0),
+                "headline": str(event.get("title") or "")[:300],
+            } for event in events],
+            "output_state": {
+                "open_draft": bool(output and output["mode"] == "DRAFT"),
+                "reader_covered": bool(output and output["mode"] in {"IMMEDIATE", "UNCERTAIN"}),
+                "latest_output_lede": str(output["body"] or "").split("\n", 1)[0][:400]
+                if output else "",
+            },
+            "status": "untrusted_editorial_memory_not_evidence",
+        })
+    return out
+
+
+def apply_newsroom_storyline_updates(con, *, run_id: str, updates: list[dict],
+                                     allowed_existing_keys: set[str]) -> dict:
+    """Apply bounded advisory memory independently of publication materialization."""
+    accepted: set[str] = set()
+    ignored: list[dict] = []
+    counts = {"created": 0, "updated": 0, "closed": 0, "ignored": 0,
+              "events": 0}
+    new_count = 0
+    membership_count = 0
+    used_members: set[str] = set()
+
+    def reject(key: str, reason: str) -> None:
+        counts["ignored"] += 1
+        ignored.append({"storyline_key": str(key)[:120], "reason": reason[:160]})
+
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        for raw in list(updates or [])[:12]:
+            if not isinstance(raw, dict):
+                reject("", "invalid_update")
+                continue
+            key = str(raw.get("storyline_key") or "")
+            if not valid_storyline_key(key):
+                reject(key, "invalid_key")
+                continue
+            title = str(raw.get("title") or "").strip()[:160]
+            summary = str(raw.get("state_summary") or "").strip()[:800]
+            lifecycle = str(raw.get("lifecycle") or "")
+            relationship = str(raw.get("relationship") or "")
+            members = list(dict.fromkeys(
+                str(value)[:64] for value in list(raw.get("candidate_ids") or []) if str(value)
+            ))[:25]
+            watch_for = _storyline_watch_for(raw.get("watch_for"))
+            if (not title or not summary or lifecycle not in _STORYLINE_LIFECYCLES
+                    or relationship not in _STORYLINE_RELATIONSHIPS or not members):
+                reject(key, "invalid_fields")
+                continue
+            if membership_count + len(members) > 25 or used_members.intersection(members):
+                reject(key, "candidate_membership_conflict")
+                continue
+            item_rows = con.execute(
+                f"SELECT url_hash,story_key,first_seen FROM items WHERE url_hash IN "
+                f"({','.join('?' for _ in members)})", members,
+            ).fetchall()
+            if len(item_rows) != len(members):
+                reject(key, "unknown_candidate")
+                continue
+            existing = con.execute(
+                "SELECT revision,created_at,last_signal_at FROM newsroom_storylines"
+                " WHERE storyline_key=?", (key,),
+            ).fetchone()
+            signal_at = max(float(row["first_seen"] or 0) for row in item_rows)
+            reason = str(raw.get("update_reason") or "")[:400]
+            prior_same_run = con.execute(
+                f"SELECT COUNT(DISTINCT item_hash) n FROM newsroom_storyline_events"
+                f" WHERE storyline_key=? AND run_id=? AND item_hash IN "
+                f"({','.join('?' for _ in members)})",
+                (key, str(run_id)[:120], *members),
+            ).fetchone()
+            if existing and int(prior_same_run["n"] or 0) == len(members):
+                accepted.add(key)
+                continue
+            if existing:
+                if key not in allowed_existing_keys:
+                    reject(key, "storyline_not_read")
+                    continue
+                try:
+                    base_revision = int(raw.get("base_revision"))
+                except (TypeError, ValueError):
+                    reject(key, "missing_base_revision")
+                    continue
+                cur = con.execute(
+                    "UPDATE newsroom_storylines SET title=?,summary=?,lifecycle=?,watch_for_json=?,"
+                    "update_reason=?,updated_at=?,last_signal_at=MAX(last_signal_at,?),"
+                    "revision=revision+1 WHERE storyline_key=? AND revision=?",
+                    (title, summary, lifecycle, json.dumps(watch_for, separators=(",", ":"),
+                     ensure_ascii=False), reason, time.time(), signal_at, key, base_revision),
+                )
+                if cur.rowcount != 1:
+                    reject(key, "stale_revision")
+                    continue
+                counts["updated"] += 1
+            else:
+                if relationship != "new_storyline":
+                    reject(key, "new_key_requires_new_storyline")
+                    continue
+                if new_count >= 3:
+                    reject(key, "new_storyline_cap")
+                    continue
+                stamp = time.time()
+                try:
+                    con.execute(
+                        "INSERT INTO newsroom_storylines(storyline_key,title,summary,lifecycle,"
+                        "watch_for_json,update_reason,created_at,updated_at,last_signal_at,revision)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,1)",
+                        (key, title, summary, lifecycle, json.dumps(watch_for,
+                         separators=(",", ":"), ensure_ascii=False), reason, stamp, stamp,
+                         signal_at),
+                    )
+                except sqlite3.IntegrityError:
+                    reject(key, "concurrent_create")
+                    continue
+                new_count += 1
+                counts["created"] += 1
+            if lifecycle == "closed":
+                counts["closed"] += 1
+            accepted.add(key)
+            membership_count += len(members)
+            used_members.update(members)
+            dispositions = raw.get("candidate_dispositions") or {}
+            event_keys = raw.get("candidate_event_keys") or {}
+            for item in item_rows:
+                disposition = str(dispositions.get(item["url_hash"]) or "drop")
+                if disposition not in _STORYLINE_DISPOSITIONS:
+                    disposition = "drop"
+                canonical = canonical_story_key(
+                    con, str(event_keys.get(item["url_hash"]) or item["story_key"] or "")[:180]
+                )
+                cur = con.execute(
+                    "INSERT OR IGNORE INTO newsroom_storyline_events(storyline_key,item_hash,"
+                    "canonical_event_key,run_id,disposition,relationship,observed_at,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
+                    (key, item["url_hash"], canonical or None, str(run_id)[:120], disposition,
+                     relationship, float(item["first_seen"] or signal_at), time.time()),
+                )
+                counts["events"] += int(bool(cur.rowcount))
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return {
+        "accepted_keys": sorted(accepted),
+        "ignored_updates": ignored,
+        **counts,
+    }
 
 
 def save_newsroom_delivery(con, canonical_key: str, *, mode: str, backend_ref: str = "",
@@ -3757,12 +4083,17 @@ def finalize_publisher_mutation(
             cur = con.execute(
                 "UPDATE posts SET class=?,body=?,receipt_url=?,editor_note=?,resolution_id=?,"
                 "publisher_status=?,publisher_synced_at=?,coverage_relation=?,base_post_id=?,"
+                "storyline_key=CASE WHEN ? IS NULL THEN storyline_key"
+                " WHEN storyline_key IS NULL OR storyline_key=? THEN ? ELSE storyline_key END,"
                 "mutation_id=? WHERE id=? AND mode='DRAFT'",
                 (str(data.get("klass") or "")[:40], str(data.get("body") or ""),
                  str(data.get("receipt_url") or "")[:2000],
                  str(data.get("editor_note") or "")[:300],
                  str(data.get("resolution_id") or "")[:200],
                  str(publisher_status or "draft")[:40], stamp, relation, base_post_id,
+                 str(data.get("storyline_key") or "")[:120] or None,
+                 str(data.get("storyline_key") or "")[:120] or None,
+                 str(data.get("storyline_key") or "")[:120] or None,
                  str(mutation_id), target_id),
             )
             if cur.rowcount != 1:
@@ -3772,8 +4103,8 @@ def finalize_publisher_mutation(
             cur = con.execute(
                 "INSERT OR IGNORE INTO posts(created,story_key,item_hash,class,body,receipt_url,"
                 "mode,nuelink_id,editor_note,resolution_id,publisher_backend,publisher_status,"
-                "publisher_synced_at,coverage_relation,base_post_id,mutation_id)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "publisher_synced_at,coverage_relation,base_post_id,storyline_key,mutation_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (stamp, row["canonical_key"], str(data.get("item_hash") or "")[:64],
                  str(data.get("klass") or "")[:40], str(data.get("body") or ""),
                  str(data.get("receipt_url") or "")[:2000], str(mode)[:20],
@@ -3782,7 +4113,8 @@ def finalize_publisher_mutation(
                  str(data.get("resolution_id") or "")[:200],
                  str(data.get("publisher_backend") or "typefully")[:40],
                  str(publisher_status or "")[:40] or None, stamp, relation,
-                 base_post_id, str(mutation_id)),
+                 base_post_id, str(data.get("storyline_key") or "")[:120] or None,
+                 str(mutation_id)),
             )
             found = con.execute(
                 "SELECT id FROM posts WHERE mutation_id=?", (str(mutation_id),)
@@ -3990,16 +4322,17 @@ def defer_item(con, url_hash_: str, note: str, *, delay_seconds: int = 900,
 
 def log_post(con, story_key, item_hash, klass, body, receipt_url, mode, publisher_ref=None,
              editor_note=None, resolution_id=None, publisher_backend=None,
-             coverage_relation="legacy", base_post_id=None, mutation_id=None):
+             coverage_relation="legacy", base_post_id=None, mutation_id=None,
+             storyline_key=None):
     """Record a produced post. nuelink_id is the legacy schema name for any backend ref."""
     story_key = canonical_story_key(con, story_key)
     con.execute(
         "INSERT INTO posts(created, story_key, item_hash, class, body, receipt_url, mode,"
         " nuelink_id, editor_note, resolution_id, publisher_backend,coverage_relation,"
-        "base_post_id,mutation_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "base_post_id,mutation_id,storyline_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (time.time(), story_key, item_hash, klass, body, receipt_url, mode, publisher_ref,
          editor_note, resolution_id, publisher_backend, coverage_relation, base_post_id,
-         mutation_id),
+         mutation_id, str(storyline_key or "")[:120] or None),
     )
     con.commit()
 

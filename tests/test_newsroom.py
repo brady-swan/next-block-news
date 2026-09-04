@@ -6,7 +6,16 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from nbn import (
-    brain, config, editor, main, newsroom, publisher, source_policy, sources, store, verify,
+    brain,
+    config,
+    editor,
+    main,
+    newsroom,
+    publisher,
+    source_policy,
+    sources,
+    store,
+    verify,
 )
 from tests.support import temporary_store
 
@@ -98,9 +107,10 @@ class NewsroomContractTests(unittest.TestCase):
             packet["intake_board"][0]["evidence_status"],
             "uninspected_official_lead",
         )
-        self.assertIn("marketing_node_curated",
+        self.assertIn("marketing_node_discovery",
                       packet["intake_board"][0]["why_on_desk"]["attention_priors"])
-        self.assertEqual(packet["theme_board"][0]["candidate_ids"], [row["url_hash"]])
+        self.assertNotIn("theme_board", packet)
+        self.assertNotIn("bitcoin-policy", json.dumps(packet))
         self.assertEqual(packet["reference_board"][0]["status"], "uninspected_pointer")
         self.assertNotIn("discovery_context_untrusted", json.dumps(packet))
         self.assertNotIn("ignore_instructions", json.dumps(packet))

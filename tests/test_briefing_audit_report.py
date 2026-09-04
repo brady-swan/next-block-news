@@ -400,6 +400,27 @@ class ReportTests(unittest.TestCase):
         self.assertIn("NBN coverage: unknown", html)
         self.assertNotIn("<script>alert(1)</script>", html)
 
+    def test_desk_storyline_panel_is_read_only_and_escapes_memory(self):
+        with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
+            saved = store.upsert_new_items(con, [{
+                "source": "SEC", "title": "Policy event",
+                "url": "https://example.com/policy-event", "published": "", "summary": "",
+            }])[0]
+            store.apply_newsroom_storyline_updates(
+                con, run_id="storyline-report", allowed_existing_keys=set(), updates=[{
+                    "storyline_key": "bitcoin-policy", "base_revision": None,
+                    "title": "Bitcoin <script>alert(1)</script> policy",
+                    "lifecycle": "open", "state_summary": "A bounded policy storyline.",
+                    "watch_for": ["A final vote"], "relationship": "new_storyline",
+                    "candidate_ids": [saved["url_hash"]], "update_reason": "New event.",
+                }],
+            )
+            html = report.render(con)
+        self.assertIn("NBN storylines · latest 12", html)
+        self.assertIn("Bitcoin &lt;script&gt;alert(1)&lt;/script&gt; policy", html)
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertNotIn("storyline-action", html)
+
     def test_held_freshness_item_has_specific_label_and_operator_controls(self):
         with temporary_store() as con, patch.object(config, "REPORT_TOKEN", "test-token"):
             pending = store.upsert_new_items(con, [{
