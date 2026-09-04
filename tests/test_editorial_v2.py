@@ -837,6 +837,37 @@ class EditorialV2Tests(unittest.TestCase):
             usage = store.model_usage_summary(con, time.time() - 60)
             self.assertEqual(usage["calls"], 1)
 
+    def test_partial_editor_response_gets_one_omitted_only_recovery(self):
+        usage = SimpleNamespace(input_tokens=100, output_tokens=20,
+                                cache_creation_input_tokens=0,
+                                cache_read_input_tokens=0, cache_creation=None)
+
+        def answer(payload):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text=json.dumps(payload))],
+                usage=usage, stop_reason="end_turn",
+            )
+
+        first = answer({"decisions": [{"story_id": "s1", "verdict": "publish",
+                                       "post": "First.", "reason": "good"}]})
+        second = answer({"decisions": [{"story_id": "s2", "verdict": "draft",
+                                        "post": "Second.", "reason": "review"}]})
+        candidates = [{
+            "story_id": key, "post": text, "selected_receipt": {},
+            "inspected_evidence": [], "output_continuity": {"canonical_key": key},
+        } for key, text in (("s1", "First."), ("s2", "Second."))]
+        with temporary_store() as con, patch("nbn.brain._create",
+                                             side_effect=[first, second]) as create:
+            result = editor.review_newsroom_batch(candidates, con, run_id="editor:partial")
+            self.assertEqual(set(result["decisions"]), {"s1", "s2"})
+            self.assertEqual(result["recovery"]["recovered"], 1)
+            self.assertEqual(create.call_count, 2)
+            recovery_payload = json.loads(create.call_args_list[1].args[2])
+            self.assertEqual([row["story_id"] for row in recovery_payload["candidates"]], ["s2"])
+            self.assertEqual(store.model_usage_calls(
+                con, seat="editor_recovery", since=time.time() - 60
+            ), 1)
+
     def test_editor_outage_stages_mechanically_valid_copy_only(self):
         with temporary_store() as con, ExitStack() as stack:
             row, _record, _draft, session = materialization_fixture(

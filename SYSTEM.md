@@ -230,9 +230,22 @@ One separate Sonnet call receives every surviving story, all of its inspected ev
 the recent feed. It judges factual support, usefulness, redundancy, numerical materiality,
 framing, and craft. It can publish, revise, send to Typefully as a draft, or drop.
 
-If the editor API is unavailable, otherwise safe desk work is preserved as Typefully drafts;
-it is never autonomously published, discarded, or routed through legacy models. An omitted
-editor decision is also staged as a draft.
+If the editor API is unavailable, otherwise safe distinct-event desk work is preserved as a
+Typefully draft; it is never autonomously published, discarded, or routed through legacy models.
+A valid-but-partial response gets one compact recovery containing only omitted stories; another
+omission is marked `editor_incomplete` and cannot bypass canonical output suppression.
+
+Each story declares `distinct`, `same_event`, or `material_update`. Code resolves the complete
+canonical alias family with reader-visible output ahead of open drafts. Same-event reports never
+create a second output. Before publication, new evidence can replace the sole untouched Typefully
+draft in place when replacement is enabled; after publication, only a material development may
+become a new `UPDATE:`. This applies when autopost is on: scheduled, publishing, published, and
+ambiguous attempts all block a blind second create.
+
+Typefully writes use durable mutation intents. Intent and exact desired-thread fingerprint land in
+SQLite before the network call; confirmed remote output and all local post/item/workbench state
+then finalize atomically. Restart recovery reconciles but never repeats an ambiguous POST/PATCH.
+Unresolved cases appear on the authenticated Desk with version-fenced owner actions.
 
 The editor compares apparent conflicts by actor, place or facility, time, and scope. A newer
 specific action is not contradicted by an older general intention; when current evidence
@@ -271,7 +284,8 @@ Cost is explicitly an estimate. The rate table version is
 `anthropic-public-2026-09-03-cache-ttl-v2`; five-minute cache writes use the documented 1.25×
 input multiplier, one-hour writes use 2×, and cache hits use 0.1×. The intended ceiling for a
 productive due window is one preparation call, zero to three Sonnet newsroom calls, zero to two
-delegated Haiku calls, and at most one editor call—not a quota on stories.
+delegated Haiku calls, one editor call, and at most one omitted-only editor recovery—not a quota
+on stories.
 
 ## EIC discovery, legacy Blocks, and audit
 

@@ -214,28 +214,29 @@ def fetch_edgar() -> list:
 # NOT on the wire's public list (companies = association optics, detectors = tips only).
 X_PRIMARY_QUERIES = [
     # Watched officials not on the public list
-    '(from:SenLummis OR from:RepTomEmmer) -is:retweet',
+    '(from:SenLummis OR from:RepTomEmmer) -is:retweet -is:reply',
     # Company newsrooms (primary for their own announcements)
     '(from:BitGo OR from:NYDIG OR from:coinbase OR from:Strategy OR from:galaxyhq'
     ' OR from:BlackRock OR from:DigitalAssets OR from:BitwiseInvest OR from:Grayscale'
     ' OR from:River OR from:Strike OR from:unchainedcom OR from:CasaHODL OR from:Swan)'
-    ' -is:retweet',
+    ' -is:retweet -is:reply',
 ]
 X_RESEARCH_QUERIES = [
     # Tier 2 research signal monitored directly, eligible only for its own analysis.
-    '(from:KobeissiLetter OR from:Barchart) -is:retweet',
+    '(from:KobeissiLetter OR from:Barchart) -is:retweet -is:reply',
 ]
 X_GUIDE_HANDLES = tuple(guide_context.GUIDE_HANDLES.values())
 X_GUIDE_QUERIES = [
     # Proven Bitcoin-news desks. Their posts are editorial leads: NBN still replaces
     # the receipt, but substantive claims should reach research before being judged.
-    "(" + " OR ".join(f"from:{handle}" for handle in X_GUIDE_HANDLES) + ") -is:retweet",
+    "(" + " OR ".join(f"from:{handle}" for handle in X_GUIDE_HANDLES)
+    + ") -is:retweet -is:reply",
 ]
 X_DETECTOR_QUERIES = [
     # Fast detectors — DETECTION ONLY: never our source; a hit triggers the
     # source-resolution hunt that finds an eligible receipt.
     '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:Blockworks_)'
-    ' -is:retweet',
+    ' -is:retweet -is:reply',
 ]
 X_STATIC_QUERIES = (
     X_PRIMARY_QUERIES + X_RESEARCH_QUERIES + X_GUIDE_QUERIES + X_DETECTOR_QUERIES
@@ -267,11 +268,11 @@ def _list_member_queries(client) -> list:
     queries, chunk = [], []
     for m in _list_cache["members"]:
         chunk.append(f"from:{m}")
-        if len("(" + " OR ".join(chunk) + ") -is:retweet") > 460:
-            queries.append("(" + " OR ".join(chunk[:-1]) + ") -is:retweet")
+        if len("(" + " OR ".join(chunk) + ") -is:retweet -is:reply") > 460:
+            queries.append("(" + " OR ".join(chunk[:-1]) + ") -is:retweet -is:reply")
             chunk = chunk[-1:]
     if chunk:
-        queries.append("(" + " OR ".join(chunk) + ") -is:retweet")
+        queries.append("(" + " OR ".join(chunk) + ") -is:retweet -is:reply")
     return queries
 
 

@@ -88,6 +88,14 @@ confirmation was inconclusive; `FAILED` is a definite backend failure; and `TAPE
 no publishing backend was configured. An uncertain result is never retried automatically,
 because retrying a possibly accepted create could duplicate a live post.
 
+Every v2 story declares `distinct`, `same_event`, or `material_update`. Code enforces one
+active output per canonical event across drafts, scheduled/publishing posts, published posts,
+and ambiguous API attempts. With `NBN_DRAFT_REPLACEMENT_ENABLED=true`, later same-event evidence
+may update the sole untouched, comment-free Typefully draft in place. Published events suppress
+repeats; only a genuine development may create a separately labeled `UPDATE:`. A durable mutation
+intent is committed before every Typefully write so crashes and lease expiry cannot blindly retry.
+Ambiguous intents appear on the authenticated Desk for explicit resolution.
+
 Nuelink remains as a legacy fallback for single posts, but it is not the preferred rail
 and cannot publish threads.
 

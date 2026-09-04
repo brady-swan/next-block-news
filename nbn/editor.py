@@ -243,6 +243,7 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[d
             "elevated_claim": bool(candidate.get("elevated_claim")),
             "mechanical_rails_to_fix": candidate.get("mechanical_rails_to_fix", []),
             "editorial_warnings": candidate.get("editorial_warnings", []),
+            "output_continuity": candidate.get("output_continuity", {}),
         })
     feed = [{
         "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
@@ -330,8 +331,64 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 "verdict": verdict, "post": final,
                 "reason": str(row.get("reason") or "")[:500],
             }
+        omitted = [row for row in payload["candidates"]
+                   if row["story_id"] not in decisions]
+        recovery = {"attempted": 0, "recovered": 0, "omitted": len(omitted)}
+        if omitted:
+            recovery["attempted"] = 1
+            recovery_payload = {
+                "candidates": omitted,
+                "evidence_catalog": [row for row in payload["evidence_catalog"] if any(
+                    row["evidence_ref"] in candidate["inspected_evidence_refs"]
+                    for candidate in omitted
+                )],
+                "recent_feed_newest_first": payload["recent_feed_newest_first"][:8],
+                "recovery_constraint": (
+                    "Decide only these omitted story IDs. Do not retarget canonical families or "
+                    "draft IDs supplied in candidate continuity context."
+                ),
+            }
+            recovery_started = time.monotonic()
+            try:
+                retry = brain._create(
+                    config.EDITOR_MODEL,
+                    BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n"
+                    + newsroom.ORIENTATION_BRIEF,
+                    json.dumps(recovery_payload), max_tokens=5000,
+                    effort=config.EDITOR_EFFORT, reservation=reservation,
+                )
+                store.record_model_usage(
+                    con, run_id=run_id, seat="editor_recovery", model=config.EDITOR_MODEL,
+                    round_number=1, response=retry,
+                    latency_ms=int((time.monotonic() - recovery_started) * 1000), outcome="ok",
+                )
+                retry_rows = brain._json_from(retry).get("decisions")
+                retry_rows = retry_rows if isinstance(retry_rows, list) else []
+                allowed_omitted = {row["story_id"] for row in omitted}
+                for row in retry_rows:
+                    story_id = str(row.get("story_id") or "")
+                    verdict = str(row.get("verdict") or "")
+                    final = row.get("post")
+                    if story_id not in allowed_omitted or story_id in decisions \
+                            or verdict not in {"publish", "revise", "draft", "drop"}:
+                        continue
+                    if verdict in {"publish", "revise", "draft"} and not str(final or "").strip():
+                        continue
+                    decisions[story_id] = {
+                        "verdict": verdict, "post": final,
+                        "reason": str(row.get("reason") or "")[:500],
+                    }
+                    recovery["recovered"] += 1
+            except Exception as recovery_exc:  # noqa: BLE001 - preserve first-pass decisions
+                store.record_model_usage(
+                    con, run_id=run_id, seat="editor_recovery", model=config.EDITOR_MODEL,
+                    round_number=1,
+                    latency_ms=int((time.monotonic() - recovery_started) * 1000),
+                    outcome="error",
+                )
+                recovery["error"] = str(recovery_exc)[:200]
         return {"ok": True, "decisions": decisions,
-                "payload_deferred": payload_deferred}
+                "payload_deferred": payload_deferred, "recovery": recovery}
     except Exception as exc:  # noqa: BLE001 - preserve good desk work as drafts
         store.record_model_usage(
             con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,

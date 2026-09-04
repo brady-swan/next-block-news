@@ -333,7 +333,29 @@ def _freshness_pills(con, now_ts: float) -> str:
             status = store.kv_get(con, "node:last_pulse_status")
             count = store.kv_get(con, "node:last_pulse_candidates") or "0"
             providers = store.kv_get(con, "node:last_pulse_providers")
-            node_html = (f"<span class='pill{stale_class}' title='{_esc(providers)}'>"
+            latest = con.execute(
+                "SELECT diagnostics_json,context_json FROM node_discovery_runs "
+                "ORDER BY ingested_at DESC LIMIT 1"
+            ).fetchone()
+            theme_status = "theme diagnostics unavailable"
+            if latest:
+                try:
+                    diagnostics = json.loads(latest["diagnostics_json"] or "{}")
+                    context = json.loads(latest["context_json"] or "{}")
+                    match = context.get("theme_match_diagnostics_v1") or {}
+                    if diagnostics.get("theme_match_diagnostics_rejected"):
+                        theme_status = "NBN rejected malformed theme-match diagnostics"
+                    elif match.get("valid") and match.get("unmatched_candidates") == \
+                            match.get("candidates_checked") and match.get("candidates_checked", 0):
+                        theme_status = "Node emitted no theme matches"
+                    elif match.get("valid"):
+                        theme_status = (
+                            f"Node theme matches: {match.get('candidates_checked', 0) - match.get('unmatched_candidates', 0)}"
+                        )
+                except (TypeError, ValueError):
+                    theme_status = "theme diagnostics unreadable"
+            node_html = (f"<span class='pill{stale_class}' title='{_esc(providers)} · "
+                         f"{_esc(theme_status)}'>"
                          f"Node pulse #{_esc(run_id)} {_esc(status)} · {count} leads · "
                          f"{_age(pulse_generated, now_ts)}</span>")
         else:
@@ -545,7 +567,9 @@ def render(con, day: str = None) -> str:
     research_assistant_usage = store.model_usage_seat_summary(
         con, seat="research_assistant", since=s, until=e
     )
+    delivery_latencies = store.recent_delivery_latencies(con, limit=20)
     prep_background = store.recent_desk_backgrounds(con, s, e, limit=25)
+    publisher_mutations = store.pending_publisher_mutations(con, limit=20)
     try:
         next_editorial = float(store.kv_get(con, "editorial:next_run_at") or 0)
     except ValueError:
@@ -658,6 +682,32 @@ def render(con, day: str = None) -> str:
         "<details class=countdefs><summary>Review the live orientation brief</summary>"
         f"<div class=body><p style='white-space:pre-wrap'>{_esc(orientation)}</p></div></details>"
     )
+    if delivery_latencies:
+        def timing(value, *, milliseconds=False):
+            if value is None:
+                return "unknown"
+            seconds = float(value) / 1000 if milliseconds else float(value)
+            return f"{seconds / 60:.1f}m"
+
+        timing_rows = []
+        for row in delivery_latencies:
+            timing_rows.append(
+                "<div class='hentry mailentry'>"
+                f"<div class=m>{_esc(row['mode'])} · {_esc(row['story_key'])}</div>"
+                f"<div class=why>detection {timing(row['detection_seconds'])} · "
+                f"conversion {timing(row['conversion_seconds'])} · "
+                f"resurfaced {timing(row['resurfaced_seconds'])} · "
+                f"newsroom {timing(row['newsroom_seconds'])} · "
+                f"editor {timing(row['editor_ms'], milliseconds=True)} · "
+                f"recovery {row['editor_recovery_count'] if row['editor_recovery_count'] is not None else 'unknown'}"
+                "</div></div>"
+            )
+        out.append(
+            "<details class=countdefs><summary>Delivery speed · latest 20 outputs</summary>"
+            f"<div class=body>{''.join(timing_rows)}"
+            "<p>Measurement only; unknown means the source or run timestamp was unavailable.</p>"
+            "</div></details>"
+        )
 
     # ── Haiku intake mailroom ───────────────────────────────────────────────
     out.append(
@@ -728,6 +778,34 @@ def render(con, day: str = None) -> str:
 
     # ── Needs you ────────────────────────────────────────────────────────────
     needs = []
+    for mutation in publisher_mutations:
+        if mutation["state"] not in {"ambiguous", "needs_owner_review"}:
+            continue
+        hidden = (
+            f"<input type=hidden name=k value='{_esc(config.REPORT_TOKEN)}'>"
+            f"<input type=hidden name=id value='{_esc(mutation['mutation_id'])}'>"
+            f"<input type=hidden name=owner_token value='{_esc(mutation['owner_token'])}'>"
+            f"<input type=hidden name=version value='{int(mutation['version'])}'>"
+            f"<input type=hidden name=d value='{_esc(day)}'>"
+        )
+        actions = (
+            f"<div class=itemacts><form method=post action='/mutation-action'>{hidden}"
+            "<input type=hidden name=action value=confirmed_absent>"
+            "<button type=submit>CONFIRM ABSENT</button></form>"
+            f"<form method=post action='/mutation-action'>{hidden}"
+            "<input type=hidden name=action value=keep_suppressed>"
+            "<button class=dismiss type=submit>KEEP SUPPRESSED</button></form>"
+            f"<form method=post action='/mutation-action'>{hidden}"
+            "<input type=hidden name=action value=bind_remote_draft>"
+            "<input name=remote_draft_id size=14 placeholder='Typefully draft ID' required>"
+            "<button type=submit>BIND DRAFT</button></form></div>"
+        )
+        needs.append(_need_card(
+            "orange", "PUBLISHER MUTATION NEEDS REVIEW",
+            f"{_esc(mutation['operation'])} · {_esc(mutation['canonical_key'])}",
+            f"<p>{_esc(mutation['error_kind'] or mutation['state'])}</p>"
+            f"<p class=ednote>{_esc(mutation['error_message'] or '')}</p>", [], extra=actions,
+        ))
     for p in posts:
         if p["mode"] not in ("DRAFT", "UNCERTAIN", "FAILED", "TAPE") \
                 or _dismissed(con, "post", p["id"]):

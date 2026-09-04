@@ -12,7 +12,7 @@ import anthropic
 from . import brain, config, guide_context, source_policy, store, theme_context
 
 log = logging.getLogger("nbn.desk_prep")
-PROMPT_VERSION = "haiku-assignment-desk-v2"
+PROMPT_VERSION = "haiku-assignment-desk-v2.1"
 ROUTES = {"advance", "background"}
 
 SYSTEM = """You prepare the assignment desk for Next Block News, an automated Bitcoin wire.
@@ -103,7 +103,7 @@ def protection_reason(item: dict, continuity_ids: set[str]) -> str:
     return ""
 
 
-def _card(item: dict, coverage_keys: list[str]) -> dict:
+def _card(item: dict) -> dict:
     try:
         context = json.loads(item.get("discovery_context") or "{}")
     except (TypeError, ValueError):
@@ -137,8 +137,36 @@ def _card(item: dict, coverage_keys: list[str]) -> dict:
         },
         "theme_ids": list(themes.get("theme_ids") or [])[:6],
         "prior_route": _text(item.get("intake_route"), 20),
-        "supplied_coverage_keys": coverage_keys[:40],
     }
+
+
+def _packet(cards: list[dict], coverage_keys: list[str], max_bytes: int) -> tuple[str, bool]:
+    """Build one bounded packet without ever truncating candidate identity/protection."""
+    payload = {"supplied_coverage_keys": coverage_keys[:40], "candidates": cards}
+
+    def encode() -> str:
+        return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+    packet = encode()
+    compacted = False
+    if len(packet.encode("utf-8")) <= max_bytes:
+        return packet, compacted
+    compacted = True
+    for card in cards:
+        card["summary"] = _text(card.get("summary"), 240)
+        if card.get("event_hint"):
+            card["event_hint"] = {
+                key: _text(value, 180) for key, value in card["event_hint"].items()
+            }
+        card["url"] = _text(card.get("url"), 600)
+    packet = encode()
+    if len(packet.encode("utf-8")) <= max_bytes:
+        return packet, compacted
+    for card in cards:
+        card["summary"] = ""
+        card["event_hint"] = {}
+        card["headline_or_post"] = _text(card.get("headline_or_post"), 220)
+    return encode(), compacted
 
 
 def _synthetic(item: dict, *, run_id: str, reason: str, protection: str = "",
@@ -255,8 +283,8 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
             outcome="budget_fail_open", error_kind=error_kind,
         ) for item in bounded]
     else:
-        cards = [_card(item, coverage_keys) for item in bounded]
-        packet = json.dumps({"candidates": cards}, separators=(",", ":"), ensure_ascii=False)
+        cards = [_card(item) for item in bounded]
+        packet, compacted = _packet(cards, coverage_keys, config.DESK_PREP_MAX_PACKET_BYTES)
         if len(packet.encode("utf-8")) > config.DESK_PREP_MAX_PACKET_BYTES:
             error_kind = "packet_capacity"
             rows = [_synthetic(
@@ -332,6 +360,7 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
         "background": sum(row["effective_route"] == "background" for row in rows),
         "protected": sum(bool(row.get("protection_reason")) for row in rows),
         "fail_open": sum(row.get("outcome") not in {"model", "protected"} for row in rows),
-        "error_kind": error_kind, **saved,
+        "error_kind": error_kind,
+        "packet_compacted": bool(locals().get("compacted", False)), **saved,
     }
     return PreparationResult(rows, advanced, diagnostics)

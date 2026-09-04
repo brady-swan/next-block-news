@@ -327,6 +327,9 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         raise InvalidNodeEnvelope("v2 provider diagnostics incomplete")
 
     node_theme_diagnostics = _parse_theme_diagnostics(payload.get("theme_diagnostics"))
+    node_theme_match_diagnostics = _parse_theme_match_diagnostics(
+        payload.get("theme_match_diagnostics_v1")
+    )
     node_alignment_diagnostics = _parse_alignment_diagnostics(
         payload.get("alignment_diagnostics")
     )
@@ -492,6 +495,7 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         "completed_at": completed.isoformat(),
         "provider_diagnostics": providers,
         "theme_diagnostics": node_theme_diagnostics,
+        "theme_match_diagnostics_v1": node_theme_match_diagnostics,
         "alignment_diagnostics": node_alignment_diagnostics,
     }
     diagnostics = {
@@ -505,6 +509,16 @@ def _parse_v2(payload: object, *, now: float) -> tuple[dict, dict, dict, list[di
         "related_refs_dropped": related_refs_dropped,
         "node_clusters_repaired": node_alignment_diagnostics["clusters_repaired"],
         "node_related_refs_dropped": node_alignment_diagnostics["related_refs_dropped"],
+        "theme_match_diagnostics_rejected": int(
+            node_theme_match_diagnostics.get("present", False)
+            and not node_theme_match_diagnostics.get("valid", False)
+        ),
+        "theme_match_producer_no_match": int(
+            node_theme_match_diagnostics.get("valid", False)
+            and node_theme_match_diagnostics.get("candidates_checked", 0) > 0
+            and node_theme_match_diagnostics.get("unmatched_candidates", 0)
+            == node_theme_match_diagnostics.get("candidates_checked", 0)
+        ),
         "rejected_candidate_keys": rejected_candidate_keys[:24],
         "dropped_candidate_keys": list(dict.fromkeys(dropped_candidate_keys))[:24],
     }
@@ -537,6 +551,28 @@ def _parse_theme_diagnostics(value) -> dict:
         raw = value.get(key)
         if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= limit:
             raise InvalidNodeEnvelope("theme diagnostics invalid")
+        parsed[key] = raw
+    return parsed
+
+
+def _parse_theme_match_diagnostics(value) -> dict:
+    keys = {
+        "candidates_checked": 500,
+        "classifier_identity_candidates": 500,
+        "classifier_above_threshold_candidates": 500,
+        "taxonomy_match_candidates": 500,
+        "unmatched_candidates": 500,
+    }
+    if value is None:
+        return {"present": False, "valid": False}
+    if not isinstance(value, dict) or value.get("version") != "theme-match-diagnostics-v1" \
+            or set(value) != {"version", *keys}:
+        return {"present": True, "valid": False}
+    parsed = {"present": True, "valid": True, "version": value["version"]}
+    for key, limit in keys.items():
+        raw = value.get(key)
+        if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= limit:
+            return {"present": True, "valid": False}
         parsed[key] = raw
     return parsed
 

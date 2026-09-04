@@ -13,7 +13,7 @@ snapshot and repeatedly drifted from runtime. Read and edit the sources of truth
 | Legacy source resolution | `nbn/verify.py` (`RESOLVE_PROMPT`) | Legacy actionable non-primary receipts | `NBN_MODEL` |
 | Provider claim support | `nbn/verify.py` (`CLAIM_SUPPORT_PROMPT`) | One provider-specific redraft | `NBN_MODEL` |
 | Legacy publishing editor | `nbn/editor.py` (`EDITOR_PROMPT`) | Gate-passed legacy candidates | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
-| V2 batch editor | `nbn/editor.py` (`BATCH_EDITOR_PROMPT`) | Independent source-sufficiency, support, novelty, framing, and craft judgment over all inspected receipts | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
+| V2 batch editor | `nbn/editor.py` (`BATCH_EDITOR_PROMPT`) | Independent source-sufficiency, support, novelty, framing, and craft judgment over all inspected receipts; one omitted-only recovery is permitted | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
 | Legacy Block thread | `nbn/briefing.py` (`BRIEFING_PROMPT`) | Disabled rollback/experiment path | `NBN_MODEL` |
 | Daily audit | `nbn/audit.py` (`AUDIT_PROMPT`) | Receipt and class verification | `NBN_MODEL` |
 
@@ -46,6 +46,9 @@ code vetoes. Unsupported verbatim quotation remains a hard rail both before and 
 Cross-run continuity is a bounded evidence pool and attempt/editor workbench, not an immortal
 model conversation. SerpAPI also has a per-run failure circuit so search outages do not consume
 the desk's research budget repeatedly.
+
+The newsroom must declare `coverage_relation` (`distinct`, `same_event`, or `material_update`);
+code—not prompt prose—enforces the resulting one-active-output Typefully invariant.
 
 Triage receives optional Node theme activity plus NBN's bounded recent coverage snapshot.
 Both are advisory, untrusted context. Runtime instructions explicitly prohibit treating a

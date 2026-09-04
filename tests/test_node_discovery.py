@@ -119,6 +119,28 @@ def v2_payload(now=1788192000, urls=None, candidates=True, with_themes=False):
 
 
 class NodeDiscoveryTests(unittest.TestCase):
+    def test_optional_theme_match_diagnostics_distinguish_no_match_and_rejection(self):
+        body = v2_payload()
+        body["theme_match_diagnostics_v1"] = {
+            "version": "theme-match-diagnostics-v1", "candidates_checked": 1,
+            "classifier_identity_candidates": 0,
+            "classifier_above_threshold_candidates": 0,
+            "taxonomy_match_candidates": 0, "unmatched_candidates": 1,
+        }
+        with patch.object(sources, "_assert_public_http_url", return_value=None):
+            _run, context, diagnostics, _items = node_discovery._parse_v2(
+                body, now=1788192000
+            )
+        self.assertTrue(context["theme_match_diagnostics_v1"]["valid"])
+        self.assertEqual(diagnostics["theme_match_producer_no_match"], 1)
+        body["theme_match_diagnostics_v1"]["unmatched_candidates"] = "all"
+        with patch.object(sources, "_assert_public_http_url", return_value=None):
+            _run, context, diagnostics, _items = node_discovery._parse_v2(
+                body, now=1788192000
+            )
+        self.assertFalse(context["theme_match_diagnostics_v1"]["valid"])
+        self.assertEqual(diagnostics["theme_match_diagnostics_rejected"], 1)
+
     def test_valid_v2_uses_primary_ref_for_ordinary_item_and_context_only_for_hints(self):
         body = v2_payload()
         response = Mock()

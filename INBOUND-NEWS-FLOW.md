@@ -351,7 +351,14 @@ The same Sonnet run writes after seeing the prepared batch and inspected researc
 only consequential rails: safe URLs, exact duplicate delivery, non-empty/length constraints,
 verified mentions, investment instructions, and verbatim quote support. Freshness, importance,
 scope, semantic novelty, source sufficiency, and numerical materiality remain editorial calls.
-The independent Sonnet editor can publish, revise, draft, or drop each surviving story.
+The independent Sonnet editor can publish, revise, draft, or drop each surviving story. If a
+valid response omits candidates, one smaller recovery call handles only those omissions.
+
+Before delivery, Sonnet labels each story `distinct`, `same_event`, or `material_update`. NBN then
+checks every output in the canonical event family. An open, untouched draft may be updated in
+place; a scheduled, publishing, published, human-edited, comment-marked, or ambiguous output
+suppresses a blind duplicate. Once readers may have seen the event, only a genuine material
+development may produce a separate `UPDATE:`. These rules are unchanged when autopost is enabled.
 
 The legacy path is a manual rollback only; v2 never falls into it automatically. A same-session
 transport retry is allowed, but a billed Sonnet session is never replayed from scratch after a
@@ -363,6 +370,8 @@ The same complete stack runs whether autopost is on or off.
 
 - **Autopost on:** eligible primary/corroborated copy can be scheduled through Typefully.
 - **Autopost off:** the same approved copy lands as a Typefully draft for human release.
+- **Ambiguous publisher write:** a durable mutation intent suppresses retry and appears on the
+  authenticated Desk for reconciliation or explicit owner resolution.
 - **Held:** an editorial or evidence gate stopped the candidate; the Desk can stage or
   dismiss it.
 - **Skipped:** the candidate was stale, duplicate, out of scope, weak, or otherwise not

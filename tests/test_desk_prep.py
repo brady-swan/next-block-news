@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -28,6 +29,25 @@ def decision(candidate_id, route="advance"):
 
 
 class DeskPreparationTests(unittest.TestCase):
+    def test_worst_case_packet_carries_shared_keys_once_and_fits(self):
+        cards = []
+        for index in range(25):
+            cards.append(desk_prep._card({
+                "url_hash": f"{index:064x}", "source": "Source " + "s" * 120,
+                "title": "Bitcoin " + "h" * 500, "summary": "x" * 1200,
+                "url": f"https://example.com/{index}/" + "u" * 1200,
+                "published": "2026-09-04T12:00:00Z", "discovery_origin": "rss",
+                "discovery_context": "{}",
+            }))
+        keys = [f"coverage-key-{index}-" + "k" * 120 for index in range(40)]
+        packet, compacted = desk_prep._packet(cards, keys, 48 * 1024)
+        self.assertLessEqual(len(packet.encode("utf-8")), 48 * 1024)
+        parsed = json.loads(packet)
+        self.assertEqual(parsed["supplied_coverage_keys"], keys)
+        self.assertNotIn("supplied_coverage_keys", parsed["candidates"][0])
+        self.assertEqual(len({row["candidate_id"] for row in parsed["candidates"]}), 25)
+        self.assertTrue(compacted)
+
     @staticmethod
     def saved_item(con, *, url, source="Example", context=""):
         saved = store.upsert_new_items(con, [item(url=url, source=source)])[0]
