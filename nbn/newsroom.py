@@ -349,7 +349,7 @@ V2_DOSSIER_TOOL = {
                     "title": {"type": "string", "maxLength": 160},
                     "lifecycle": {"type": "string", "enum": ["open", "closed"]},
                     "state_summary": {"type": "string", "maxLength": 800},
-                    "watch_for": {"type": "array", "maxItems": 3,
+                    "watch_for": {"type": "array",
                                   "items": {"type": "string", "maxLength": 240}},
                     "relationship": {"type": "string", "enum": [
                         "new_storyline", "continuing", "turn", "routine_signal", "closing"

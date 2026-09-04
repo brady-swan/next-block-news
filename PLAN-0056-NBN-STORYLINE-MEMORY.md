@@ -1,6 +1,8 @@
 # Plan 0056 — NBN-native storyline memory
 
-**Status:** Approved by independent lead-coder review; implementation verification complete.
+**Status:** Approved and implemented. Production smoke found Anthropic rejecting the unsupported
+`maxItems` tool-schema keyword; the compatibility hotfix is verified and committed, with redeploy
+and final smoke pending after the requested pause.
 
 ## Objective
 

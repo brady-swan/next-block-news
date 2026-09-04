@@ -102,6 +102,7 @@ class EditorialV2Tests(unittest.TestCase):
 
     def test_v211_prompts_teach_selection_compression_without_style_gates(self):
         self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.11-storylines")
+        self.assertNotIn("maxItems", json.dumps(newsroom.V2_DOSSIER_TOOL))
         self.assertIn("Write selectively", newsroom.ORIENTATION_BRIEF)
         self.assertIn("small 13F allocation", newsroom.ORIENTATION_BRIEF)
         self.assertIn("Never stack two sentences", newsroom.ORIENTATION_BRIEF)
