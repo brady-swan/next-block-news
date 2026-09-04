@@ -420,8 +420,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object", "additionalProperties": False,
             "properties": {
                 "query": {"type": "string", "minLength": 3, "maxLength": 400},
-                "candidate_ids": {"type": "array", "maxItems": 8,
-                                  "items": {"type": "string"}},
+                "candidate_ids": {"type": "array", "items": {"type": "string"}},
             },
             "required": ["query"],
         },

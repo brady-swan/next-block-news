@@ -40,6 +40,11 @@ def healthy_snapshot(remaining=4000):
 
 
 class SearchResilienceTests(unittest.TestCase):
+    def test_search_tool_schema_uses_anthropic_supported_keywords(self):
+        search_tool = next(tool for tool in newsroom.TOOLS if tool["name"] == "search_web")
+        candidate_ids = search_tool["input_schema"]["properties"]["candidate_ids"]
+        self.assertNotIn("maxItems", candidate_ids)
+
     def test_cache_identity_is_parameter_complete_and_unsafe_rows_do_not_persist(self):
         with temporary_store() as con:
             base = search.request_identity("  Bitcoin   policy ", max_results=5)
