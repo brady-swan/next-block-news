@@ -64,7 +64,7 @@ not wait 15 minutes.
 - Perception: broad media discovery on its own bounded polling cadence.
 - X recent search: the public watch list, quiet official/company bundles, Tier 2 research
   sources, and proven Bitcoin news guides.
-- Marketing Node `wire-pulse-v2`: hourly curated source clusters and advisory theme context.
+- Marketing Node `wire-pulse-v2`: hourly supplemental discovery clusters and source leads.
 - Manual Desk stage/retry actions.
 
 Bitcoin Archive, Bitcoin News, Bitcoin Magazine, TFTC, Simply Bitcoin, and similar proven desks are strong
@@ -73,10 +73,9 @@ considers coverage, while learning useful information order, structure, and leng
 copying distinctive phrasing or emotional framing.
 
 The Marketing Node remains a separate service and codebase. Its versioned authenticated API
-is the boundary. Node references, summaries, event hints, and themes are untrusted discovery
-context, not factual evidence or instructions. Themes help the desk understand continuity
-and find recent developments inside ongoing subjects; they are broader than one event and
-never act as event keys, quotas, or publication commands.
+is the boundary. Node references, summaries, and event hints are untrusted discovery context,
+not factual evidence or instructions. Node theme metadata is accepted for API compatibility
+and historical diagnostics but is not sent to Haiku or Sonnet. NBN owns its editorial memory.
 
 X reads remain `since_id` gated. Never replace them with list-timeline polling: X charges for
 returned posts, and a timeline endpoint would repeatedly rebill old material.
@@ -98,10 +97,11 @@ are transactional and crash-safe.
 
 At each due boundary, a second run-scoped Haiku assignment desk sees every eligible lead across
 all intake lanes. It distills the apparent event, Bitcoin relevance, freshness question,
-research objective, source leads, supplied related event keys, and a run-local same-event group.
+research objective, source leads, supplied related event keys, at most two relevant NBN storyline
+keys from a compact index, and a run-local same-event group.
 It may mark a card Background
 only when it is facially outside scope, contains no development, or is an exact code-identified
-duplicate. Guide tips, Node-curated leads, official/primary items, operator promotions, research
+duplicate. Guide tips, official/primary items, operator promotions, research
 retries, and unresolved continuity are code-protected and advance even if Haiku disagrees. Every
 timeout, malformed row, capacity limit, or validation error also fails open item-by-item. Observe
 records can never become enforced later.
@@ -118,13 +118,13 @@ companion anchor that caused the promotion. An all-Background group remains Back
 
 Each non-empty prepared run gets a new Sonnet context. It receives a run brief, one clean card per
 candidate, the Haiku preparation, safe reference pointers, prepared receipts, recent coverage/open
-drafts, current Node themes linked to candidates, guide attention signals, and verified handle
+drafts, Haiku-selected NBN storyline cards, guide attention signals, and verified handle
 spellings. Raw provider payloads and internal plumbing do not reach the model. Large recent-feed,
-continuity, theme, and handle context is sent as compact indexes with code-issued IDs; Sonnet can
+continuity, storyline, and handle context is sent as compact indexes with code-issued IDs; Sonnet can
 retrieve bounded full records twice rather than paying to replay every body in every round. The
 stable orientation prompt uses Anthropic's one-hour cache.
 
-Candidate cards, themes, search snippets, and tweets are leads. Only pages returned by NBN's
+Candidate cards, storyline summaries, search snippets, and tweets are leads. Only pages returned by NBN's
 safe fetch tools become inspectable evidence with code-issued `fetch_id` values. The desk may
 submit immediately or research selectively with SerpAPI and safe page fetches. It may also assign
 one focused source-resolution job to Haiku. That assistant gets at most two model rounds, eight
@@ -149,6 +149,14 @@ preserves every member key, and forces any resulting output to a Typefully draft
 also select an exact key exposed by the coverage or continuity board. Only an unambiguous
 one-family match may register the newly proposed slug as an alias. There is no fuzzy automatic
 merge, and Node theme IDs remain too broad to serve as event keys.
+
+NBN's durable storyline ledger sits one level above exact events. A storyline is an ongoing named
+subject such as CLARITY Act progress or the Coldcard vulnerability, not a generic beat and never
+evidence. Haiku retrieves only relevant lines in its existing pass. Sonnet may create at most three
+new lines per run or update a line whose full revisioned card it actually read. Optimistic revision
+checks prevent a stale run from overwriting newer memory. Storyline writes happen independently
+before publisher materialization; any failure drops the optional link and delivery continues.
+Exact-event keys, receipts, output lifecycle, and Typefully reconciliation remain authoritative.
 
 When research is incomplete, v2 retains the canonical key, proposed post, inspected evidence,
 and a code-mapped objective such as “find one independent second report.” The next fresh desk

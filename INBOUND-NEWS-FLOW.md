@@ -243,9 +243,11 @@ All sources converge before model judgment.
    The mailroom does not research, corroborate, cluster, write, or decide publication.
    Model, validation, capacity, and packet-bound failures all fail open as Candidate.
 3. **Run-scoped Haiku assignment desk.** At the due boundary, Haiku distills and routes
-   candidates from every lane as `advance` or `background`. Guide, Node, official, operator,
+   candidates from every lane as `advance` or `background`. Guide, official, operator,
    retry, and unresolved-continuity work is protected; every error fails open. In enforce mode,
    an all-Background batch does not wake Sonnet. Background remains visible and promotable.
+   Node provenance is a neutral `marketing_node_discovery` label, not a routing privilege. In the
+   same paid call, Haiku sees a compact NBN storyline index and copies at most two relevant keys.
 4. **Same-event companions.** When one member of a Haiku run-local exact-event group advances,
    code advances the group's Background companions too and records which candidate anchored the
    promotion. This is desk organization only: Sonnet still determines canonical event identity,
@@ -272,13 +274,13 @@ Sonnet receives a deliberately organized editorial desk rather than raw records:
 - a separate board of uninspected intake, Node, and guide-account URLs;
 - separate exact-event boards for recent reader coverage, open Typefully drafts, and other
   recent decisions;
-- compact indexes for recent posts, continuity, and a broad Node theme board, with bounded
+- compact indexes for recent posts, continuity, and Haiku-selected NBN storylines, with bounded
   retrieval of full records; and
 - a small verified-handle spelling directory.
 
-Raw Node envelopes and unrecognized metadata do not reach the model. Node summaries,
-event hints, themes, guide posts, and engagement counts remain untrusted attention/context,
-never evidence.
+Raw Node envelopes and unrecognized metadata do not reach the model. Node summaries, event hints,
+guide posts, and engagement counts remain untrusted attention/context, never evidence. Node theme
+IDs, names, and signals reach neither Haiku nor Sonnet.
 
 Sonnet may submit immediately, retrieve full indexed context, fetch intake pages, search SerpAPI,
 fetch public results, or give one focused two-round reporting assignment to Haiku. Haiku's memo
@@ -287,7 +289,7 @@ submits one dossier with a disposition for every candidate and one exact-event r
 A malformed story defers only its own members, while an omitted candidate returns on a later run.
 There is no forced survey or minimum research phase.
 
-Story keys identify exact events, not themes. Recurring purchases, filings, reports, and
+Story keys identify exact events, not storylines. Recurring purchases, filings, reports, and
 readings include their event/disclosure date (or at least month and year when the day is
 unknown). Deterministic actor, event-type, date, direction, numeric, and narrow yield guards
 can veto unsafe grouping. Existing canonical aliases and exact prior-coverage checks remain
@@ -295,10 +297,10 @@ authoritative.
 
 There is no target quota. Discovery volume should not force publication.
 
-For Node-tagged candidates, the newsroom sees Node activity and the exact NBN coverage
-snapshot later shown on the Desk. A theme is a broad ongoing subject, not an event cluster:
-it cannot satisfy evidence or corroboration, merge story keys, force a post because coverage
-is unknown/thin, or suppress a material distinct development because the theme was covered.
+The NBN-native storyline ledger records broader ongoing subjects separately from exact events.
+Haiku retrieves relevant lines; Sonnet may update a full revisioned card, create a narrowly bounded
+new line, or record a routine signal without posting. The ledger cannot satisfy evidence or
+corroboration, merge story keys, force a post, or block delivery when memory persistence fails.
 
 ### Selective source resolution and verification
 

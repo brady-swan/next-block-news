@@ -21,7 +21,7 @@ poll -> RSS/EDGAR Haiku mailroom -> Haiku assignment desk -> Sonnet newsroom -> 
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
 | `nbn/desk_prep.py` | Run-scoped Haiku distillation/routing; protected work and every failure advance |
-| `nbn/store.py` | SQLite deduplication, bounded cross-run workbenches, commit lifecycle, post log |
+| `nbn/store.py` | SQLite deduplication, bounded exact-event workbenches and storyline memory, commit lifecycle, post log |
 | `nbn/newsroom.py` | Run-scoped Sonnet newsroom, compact/retrievable desk context, bounded Haiku delegation, and atomic dossier |
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
 | `config/source_tiers.toml` | Canonical P0/T1/T2/T3/T4 source registry |
@@ -65,6 +65,11 @@ inspectable in v2, but every receipt is labeled by capability: known reporting/r
 known first-party statement, unknown-domain material, social statement, guide/discovery,
 aggregator/wrapper, or syndication. The editor sees those labels and every inspected body.
 Search snippets remain pointers, never evidence.
+
+NBN also keeps a bounded newsroom-native storyline ledger one level above exact events. Haiku
+selects only relevant lines inside its existing assignment call, and Sonnet receives revisioned
+cards as untrusted continuity context. Storylines never establish truth, novelty, or publication.
+Marketing Node themes are not part of the live editorial payload.
 
 Bitcoin Policy Institute's site and `@bitcoinpolicy` account are treated as first-party receipts
 for BPI's own published research and stated findings, without separate confirmation. This scoped

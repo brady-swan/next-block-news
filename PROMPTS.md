@@ -30,8 +30,8 @@ V2 prompts own editorial judgment; code supplies a deliberately small mechanical
 - `nbn/config.py`: master autopost switch and allowed delivery classes.
 
 The run newsroom receives a curated desk, not persisted records verbatim. Its
-`run_brief`, `intake_board`, `reference_board`, exact-event `coverage_board`, broad
-`theme_board`, and verified-handle directory explicitly separate tips, uninspected
+`run_brief`, `intake_board`, `reference_board`, exact-event `coverage_board`, selected
+`storyline_board`, and verified-handle directory explicitly separate tips, uninspected
 pointers, historical coverage, and advisory context. Raw Node envelopes and unknown
 discovery fields are not passed through. Every candidate retains one stable ID and must
 be accounted for in both the opening survey and terminal dossier.
@@ -46,18 +46,17 @@ The production orientation explicitly separates research depth from output depth
 selectively, lead with the Bitcoin-relevant consequence, split overloaded sentences, and do not
 manufacture Bitcoin importance from a famous investor's small indirect equity exposure.
 
-Cross-run continuity is a bounded evidence pool and attempt/editor workbench, not an immortal
-model conversation. SerpAPI also has a per-run failure circuit so search outages do not consume
-the desk's research budget repeatedly.
+Cross-run continuity combines the bounded exact-event evidence/workbench with a small NBN-native
+storyline ledger. Storyline prose is untrusted, regenerable context; Haiku selects only relevant
+keys and Sonnet can update only full revisioned cards it actually received. It is not an immortal
+model conversation or factual source. SerpAPI also has a per-run failure circuit so search outages
+do not consume the desk's research budget repeatedly.
 
 The newsroom must declare `coverage_relation` (`distinct`, `same_event`, or `material_update`);
 code—not prompt prose—enforces the resulting one-active-output Typefully invariant.
 
-Triage receives optional Node theme activity plus NBN's bounded recent coverage snapshot.
-Both are advisory, untrusted context. Runtime instructions explicitly prohibit treating a
-theme as evidence, corroboration, same-event identity, a quota, or a reason to lower a gate;
-`coverage_known=false` means historical tagging is incomplete. The identity prompt receives
-theme IDs only to state that a broad shared theme is insufficient to merge story keys.
+Node theme metadata no longer reaches either live model. The Node remains supplemental discovery;
+NBN's exact-event coverage and its own bounded storyline ledger supply editorial continuity.
 
 The identity clerk is the only component that may propose an event-key alias. Its closed
 event-type conflict guard can veto a proposal. When
