@@ -1873,3 +1873,26 @@ when “Geyser” is enough. For an illustrative Bitcoin story, lead with the co
 keep only the background needed to understand it. A jurisdiction list or policy chronology belongs
 only when it materially changes the case. A human-review `draft` still needs publication-ready
 copy; uncertainty about sourcing is not permission to pass dense prose through unchanged.
+
+## 2026-09-05 — Intake false negative: record-like ETF flow headline
+
+**Source candidate:** Cointelegraph, “Bitcoin ETF inflows hit $3.8B in strongest three-week
+stretch of 2026,” published at 3:03 AM Central and detected by NBN about eight minutes later.
+
+**What happened:** Haiku classified the item as background because “ETF flow reporting is
+routine institutional Bitcoin market activity without material news value.” That reasoning
+ignored the headline's materiality signal: this was presented as the strongest three-week run of
+the year, not an isolated daily component flow.
+
+**Continuity check:** NBN had already published August's $3.52 billion monthly inflow and had an
+open Typefully draft covering the Sept. 3 record daily inflow of $730.9 million. Sonnet also saw
+Farside's fresh $986.7 million weekly summary and declined it as substantially repetitive. The
+Cointelegraph rejection therefore did not clearly cost the feed a needed additional post, but it
+did expose the wrong division of labor: Haiku made a materiality judgment that should have reached
+the newsdesk for continuity-aware review.
+
+**Proposed reusable lesson (not promoted to the live prompt):** Routine fund-by-fund or ordinary
+daily ETF flow rows can be background. A headline claiming a record, reversal, meaningful streak,
+or strongest period should reach Sonnet even when nearby ETF-flow coverage may ultimately make it
+redundant. Haiku should clean the desk, not settle close calls about whether a fresh aggregate
+changes the reader's picture.
