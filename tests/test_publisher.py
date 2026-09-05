@@ -12,6 +12,14 @@ class PublisherRouterTests(unittest.TestCase):
             ["NEW: Test.", "Source: https://example.com/story"],
         )
 
+    def test_legacy_one_off_reproduces_inline_receipt_shape(self):
+        self.assertEqual(
+            publisher.legacy_one_off_x_thread(
+                "NEW: Test.", "https://example.com/story"
+            ),
+            ["NEW: Test.\n\nhttps://example.com/story"],
+        )
+
     def test_no_backend_is_tape_not_failure(self):
         with temporary_store(), \
                 patch.object(config, "TYPEFULLY_API_KEY", ""), \

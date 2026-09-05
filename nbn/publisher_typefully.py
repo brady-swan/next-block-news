@@ -227,8 +227,13 @@ def draft_x_texts(raw: dict) -> list[str] | None:
     return texts
 
 
-def replace_draft(draft_id: str, prior_texts: list[str], desired_texts: list[str]) -> tuple:
-    """Edit only an untouched Typefully X draft; never retry an ambiguous PATCH."""
+def replace_draft(draft_id: str, prior_texts: list[str], desired_texts: list[str],
+                  alternate_prior_threads: list[list[str]] | None = None) -> tuple:
+    """Edit only an untouched Typefully X draft; never retry an ambiguous PATCH.
+
+    Exact alternate baselines let deterministic legacy renderings migrate safely
+    without treating them as operator edits. No fuzzy or content-only match is used.
+    """
     try:
         raw = get_draft(str(draft_id))
         status = str(raw.get("status") or "").casefold()
@@ -242,18 +247,31 @@ def replace_draft(draft_id: str, prior_texts: list[str], desired_texts: list[str
         if _has_comment_marker(raw):
             return PublishOutcome.FAILED, "comment_marked"
         texts = draft_x_texts(raw)
-        if texts is None or texts != [str(value) for value in prior_texts]:
+        accepted_priors = [[str(value) for value in prior_texts]]
+        accepted_priors.extend(
+            [str(value) for value in thread]
+            for thread in (alternate_prior_threads or [])
+        )
+        if texts is None or texts not in accepted_priors:
             return PublishOutcome.FAILED, "remote_modified"
         x = raw.get("platforms", {}).get("x", {})
         if set(x) - {"enabled", "posts", "settings"}:
             return PublishOutcome.FAILED, "unexpected_x_structure"
         allowed_post = {"text", "media_ids", "quote_post_url", "subscribers"}
         posts = x.get("posts") or []
-        if len(posts) != len(desired_texts) or any(set(post) - allowed_post for post in posts):
+        if any(set(post) - allowed_post for post in posts):
             return PublishOutcome.FAILED, "unexpected_post_structure"
         updated_x = copy.deepcopy(x)
-        for post, text in zip(updated_x["posts"], desired_texts):
-            post["text"] = str(text)
+        if len(posts) == len(desired_texts):
+            for post, text in zip(updated_x["posts"], desired_texts):
+                post["text"] = str(text)
+        elif len(posts) == 1 and len(desired_texts) == 2:
+            # Legacy one-offs held the receipt below the lead. Preserve any lead
+            # media/settings while moving the receipt into a clean first reply.
+            updated_x["posts"][0]["text"] = str(desired_texts[0])
+            updated_x["posts"].append({"text": str(desired_texts[1])})
+        else:
+            return PublishOutcome.FAILED, "unexpected_post_structure"
         resp = httpx.patch(
             f"{BASE}/social-sets/{config.TYPEFULLY_SOCIAL_SET_ID}/drafts/{draft_id}",
             json={"platforms": {"x": updated_x}}, headers=_headers(), timeout=30,

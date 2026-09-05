@@ -40,6 +40,62 @@ class TypefullyTests(unittest.TestCase):
         self.assertNotIn("draft_title", body)
         self.assertNotIn("force_overwrite_comments", body)
 
+    @patch.object(tf.httpx, "patch")
+    @patch.object(tf, "get_draft")
+    def test_replace_draft_migrates_exact_legacy_one_post_to_source_reply(self, get_draft,
+                                                                         patch_http):
+        legacy = "old copy\n\nhttps://example.com/old"
+        prior = {
+            "id": "42", "social_set_id": "set", "status": "draft",
+            "platforms": {"x": {"enabled": True, "settings": {"reply": "all"},
+                                "posts": [{"text": legacy, "media_ids": ["m1"],
+                                           "subscribers": False}]}},
+        }
+        desired_texts = ["updated copy", "Source: https://example.com/new"]
+        confirmed = {
+            **prior,
+            "platforms": {"x": {
+                **prior["platforms"]["x"],
+                "posts": [
+                    {"text": desired_texts[0], "media_ids": ["m1"],
+                     "subscribers": False},
+                    {"text": desired_texts[1]},
+                ],
+            }},
+        }
+        get_draft.side_effect = [prior, confirmed]
+        patch_http.return_value = response({"id": "42"})
+        with patch.object(tf.config, "TYPEFULLY_SOCIAL_SET_ID", "set"):
+            outcome, ref = tf.replace_draft(
+                "42", ["old copy", "Source: https://example.com/old"],
+                desired_texts, alternate_prior_threads=[[legacy]],
+            )
+        self.assertIs(outcome, tf.PublishOutcome.STAGED)
+        self.assertEqual(ref, "42")
+        posts = patch_http.call_args.kwargs["json"]["platforms"]["x"]["posts"]
+        self.assertEqual(posts, confirmed["platforms"]["x"]["posts"])
+
+    @patch.object(tf.httpx, "patch")
+    @patch.object(tf, "get_draft")
+    def test_replace_draft_does_not_migrate_owner_edited_legacy_post(self, get_draft,
+                                                                    patch_http):
+        get_draft.return_value = {
+            "id": "42", "social_set_id": "set", "status": "draft",
+            "platforms": {"x": {"enabled": True,
+                                  "posts": [{"text": "owner changed this"}]}},
+        }
+        with patch.object(tf.config, "TYPEFULLY_SOCIAL_SET_ID", "set"):
+            outcome, reason = tf.replace_draft(
+                "42", ["old copy", "Source: https://example.com/old"],
+                ["new copy", "Source: https://example.com/new"],
+                alternate_prior_threads=[[
+                    "old copy\n\nhttps://example.com/old"
+                ]],
+            )
+        self.assertIs(outcome, tf.PublishOutcome.FAILED)
+        self.assertEqual(reason, "remote_modified")
+        patch_http.assert_not_called()
+
     @patch.object(tf, "get_draft")
     def test_replace_draft_freezes_comment_marked_or_scheduled_output(self, get_draft):
         get_draft.return_value = {

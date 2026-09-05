@@ -258,6 +258,11 @@ def one_off_x_thread(post: str, receipt_url: str) -> list[str]:
     return [str(post).strip(), f"Source: {str(receipt_url).strip()}"]
 
 
+def legacy_one_off_x_thread(post: str, receipt_url: str) -> list[str]:
+    """Exact one-post shape used before receipts moved into the first reply."""
+    return [f"{post}\n\n{receipt_url}"]
+
+
 def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
             force_draft: bool = False, exact_payload: bool = False) -> tuple:
     """Returns (mode, post_id_or_None). image: optional (bytes, file_name) chart from
@@ -307,13 +312,15 @@ def publish(post: str, receipt_url: str, klass: str, image: tuple = None,
         return "FAILED", str(exc)[:200]
 
 
-def replace_draft(draft_id: str, prior_thread: list[str], desired_thread: list[str]) -> tuple:
+def replace_draft(draft_id: str, prior_thread: list[str], desired_thread: list[str],
+                  alternate_prior_threads: list[list[str]] | None = None) -> tuple:
     """Replace one verified Typefully draft without creating a fallback object."""
     if _backend() != "typefully":
         return "FAILED", "draft replacement requires Typefully"
     from . import publisher_typefully
     outcome, detail = publisher_typefully.replace_draft(
-        str(draft_id), prior_thread, desired_thread
+        str(draft_id), prior_thread, desired_thread,
+        alternate_prior_threads=alternate_prior_threads,
     )
     actual = {
         publisher_typefully.PublishOutcome.CONFIRMED: "DRAFT",

@@ -868,7 +868,10 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             mutation["version"] += 1
         if operation == "replace_draft":
             mode, publisher_ref = publisher.replace_draft(
-                str(target_draft["nuelink_id"]), prior_thread or [], desired_thread
+                str(target_draft["nuelink_id"]), prior_thread or [], desired_thread,
+                alternate_prior_threads=[publisher.legacy_one_off_x_thread(
+                    target_draft["body"], target_draft["receipt_url"]
+                )],
             )
         else:
             mode, publisher_ref = publisher.publish(
