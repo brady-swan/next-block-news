@@ -395,6 +395,28 @@ class NodeDiscoveryTests(unittest.TestCase):
         self.assertIn("stale", result["v2_error"])
         self.assertEqual(client.get.call_count, 2)
 
+    def test_v1_fallback_uses_central_desk_date_before_utc_midnight(self):
+        # 2026-09-05 04:30 UTC is still 2026-09-04 in Chicago.
+        now = 1788582600
+        stale = v2_payload(now=now - config.NODE_PULSE_MAX_AGE_SECONDS - 1)
+        v2_response = Mock()
+        v2_response.raise_for_status.return_value = None
+        v2_response.json.return_value = stale
+        v1_body = payload()
+        v1_body["run"]["selected_date"] = "2026-09-04"
+        v1_body["context"]["daily_brief_date"] = "2026-09-04"
+        v1_response = Mock()
+        v1_response.raise_for_status.return_value = None
+        v1_response.json.return_value = v1_body
+        client = Mock()
+        client.get.side_effect = [v2_response, v1_response]
+        with temporary_store() as con, \
+                patch.object(config, "NODE_READ_TOKEN", "read-token"), \
+                patch.object(sources, "_assert_public_http_url", return_value=None):
+            result = node_discovery.ingest(con, now=now, client=client)
+        self.assertEqual(result["contract"], "v1")
+        self.assertTrue(client.get.call_args_list[1].args[0].endswith("/2026-09-04"))
+
     def test_v2_dedupe_attaches_context_only_to_new_row(self):
         body = v2_payload()
         with temporary_store() as con, patch.object(

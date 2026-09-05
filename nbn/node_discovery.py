@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import time
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -22,6 +23,7 @@ THROTTLE_SECONDS = 300
 ACCEPTED_STATUSES = {"accepted", "partial"}
 V2_SCHEMA = "wire-pulse-v2"
 V2_EVENT_KEY_VERSION = "wire-event-v1"
+EDITORIAL_TZ = ZoneInfo("America/Chicago")
 
 
 class InvalidNodeEnvelope(ValueError):
@@ -778,7 +780,10 @@ def ingest(con, *, now: float | None = None, client: httpx.Client | None = None)
         return {"attempted": False, "reason": "throttled", "inserted": 0}
     # Commit the throttle before any network request so restarts cannot hammer Node.
     store.kv_set(con, "node:last_attempt", str(current))
-    selected_date = datetime.datetime.fromtimestamp(current, datetime.timezone.utc).date().isoformat()
+    # The legacy daily-brief fallback is keyed to the desk's Central calendar day.
+    # UTC rolls over during the prior Central evening and otherwise asks Node for a
+    # future brief that does not exist yet.
+    selected_date = datetime.datetime.fromtimestamp(current, EDITORIAL_TZ).date().isoformat()
     owned = client is None
     http = client or httpx.Client(timeout=20)
     try:
