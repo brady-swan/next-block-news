@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from nbn.eval import budget
 from nbn.eval.budget import BudgetLedger, conservative_reservation
 from nbn.eval.core import (
     EvaluationError,
@@ -177,6 +178,52 @@ class BudgetTests(unittest.TestCase):
             self.assertAlmostEqual(reopened.charged(), 0.37)
             self.assertAlmostEqual(reopened.remaining(), 0.63)
             reopened.close()
+
+    def test_append_only_model_price_update_preserves_existing_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "eval.sqlite"
+            current = budget.price_manifest()
+            previous = json.loads(json.dumps(current))
+            previous["version"] = "earlier"
+            previous["per_million_tokens"].pop("grok-4.5")
+            con = sqlite3.connect(path)
+            con.executescript("""
+              CREATE TABLE eval_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+              CREATE TABLE eval_requests(
+                request_id TEXT PRIMARY KEY, lane TEXT, condition TEXT, case_id TEXT,
+                kind TEXT, reserved_usd REAL, actual_usd REAL, charged_usd REAL,
+                status TEXT, provider_usage_json TEXT, created_at REAL, settled_at REAL
+              );
+            """)
+            con.execute("INSERT INTO eval_meta VALUES('price_manifest', ?)",
+                        (budget.canonical_json(previous),))
+            con.execute("INSERT INTO eval_meta VALUES('cap_usd', '40.0')")
+            con.commit()
+            con.close()
+
+            ledger = BudgetLedger(path)
+            stored = ledger.con.execute(
+                "SELECT value FROM eval_meta WHERE key='price_manifest'"
+            ).fetchone()[0]
+            self.assertEqual(json.loads(stored), current)
+            ledger.close()
+
+    def test_existing_model_price_change_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "eval.sqlite"
+            first = BudgetLedger(path)
+            manifest = json.loads(first.con.execute(
+                "SELECT value FROM eval_meta WHERE key='price_manifest'"
+            ).fetchone()[0])
+            manifest["per_million_tokens"]["grok-4.3"]["input"] = 99
+            first.con.execute(
+                "UPDATE eval_meta SET value=? WHERE key='price_manifest'",
+                (budget.canonical_json(manifest),),
+            )
+            first.con.commit()
+            first.close()
+            with self.assertRaisesRegex(EvaluationError, "price manifest changed"):
+                BudgetLedger(path)
 
 
 class IsolationTests(unittest.TestCase):

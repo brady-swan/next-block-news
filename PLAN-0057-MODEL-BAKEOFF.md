@@ -3,6 +3,11 @@
 **Status:** Approved after four independent lead-review passes. Phase-one execution complete;
 owner-blind adjudication and a genuinely prospective holdout remain before any production adoption.
 
+**September 5 owner-authorized extension:** Run `grok-4.5` at low and medium effort through the
+same frozen 24-draft editor corpus. This adds no production routing or prompt change. The existing
+ledger, corpus, outputs, and lifetime cap remain in force; the price manifest may grow only by
+append-only model entries whose addition leaves every previously recorded rate unchanged.
+
 ## Objective
 
 Determine provisionally which affordable model configuration best performs each existing NBN

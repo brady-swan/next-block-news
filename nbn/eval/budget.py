@@ -1,6 +1,7 @@
 """Restart-safe pre-call reservation ledger for the evaluation hard cap."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 import uuid
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from .core import EvaluationError, canonical_json
 
-PRICE_VERSION = "nbn-eval-public-2026-09-05-v2"
+PRICE_VERSION = "nbn-eval-public-2026-09-05-v3"
 DEFAULT_CAP_USD = 40.0
 
 PRICES = {
@@ -19,6 +20,7 @@ PRICES = {
     "gpt-5.4-mini-2026-03-17": {"input": 0.75, "output": 4.50, "cached": 0.075},
     "gpt-5.6-luna": {"input": 0.20, "output": 1.20, "cached": 0.02},
     "grok-4.3": {"input": 1.25, "output": 2.50, "cached": 0.20},
+    "grok-4.5": {"input": 2.00, "output": 6.00, "cached": 0.30},
 }
 
 # SerpAPI is deliberately absent until an isolated evaluation plan and its exact marginal
@@ -30,6 +32,20 @@ def price_manifest() -> dict:
     return {"version": PRICE_VERSION, "retrieved_date": "2026-09-05",
             "currency": "USD", "per_million_tokens": PRICES,
             "per_call_tools": TOOL_PRICES}
+
+
+def _is_append_only_price_update(previous: dict, current: dict) -> bool:
+    """Allow new priced models without rewriting rates used by settled requests."""
+    if previous.get("currency") != current.get("currency"):
+        return False
+    for section in ("per_million_tokens", "per_call_tools"):
+        old_values = previous.get(section)
+        new_values = current.get(section)
+        if not isinstance(old_values, dict) or not isinstance(new_values, dict):
+            return False
+        if any(new_values.get(key) != value for key, value in old_values.items()):
+            return False
+    return True
 
 
 def conservative_reservation(*, model: str, input_bytes: int, max_output_tokens: int,
@@ -88,7 +104,13 @@ class BudgetLedger:
             "SELECT value FROM eval_meta WHERE key='price_manifest'"
         ).fetchone()
         if existing and existing["value"] != canonical_json(manifest):
-            raise EvaluationError("price manifest changed for existing ledger")
+            previous = json.loads(existing["value"])
+            if not _is_append_only_price_update(previous, manifest):
+                raise EvaluationError("price manifest changed for existing ledger")
+            self.con.execute(
+                "UPDATE eval_meta SET value=? WHERE key='price_manifest'",
+                (canonical_json(manifest),),
+            )
         self.con.execute(
             "INSERT OR IGNORE INTO eval_meta(key,value) VALUES('price_manifest',?)",
             (canonical_json(manifest),),

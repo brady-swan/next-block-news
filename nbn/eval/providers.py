@@ -45,6 +45,8 @@ CONDITIONS = {
     "luna-medium": Condition("luna-medium", "openai", "gpt-5.6-luna", "medium"),
     "grok-low": Condition("grok-low", "xai", "grok-4.3", "low"),
     "grok-medium": Condition("grok-medium", "xai", "grok-4.3", "medium"),
+    "grok45-low": Condition("grok45-low", "xai", "grok-4.5", "low"),
+    "grok45-medium": Condition("grok45-medium", "xai", "grok-4.5", "medium"),
     "grok-medium-x-search": Condition(
         "grok-medium-x-search", "xai", "grok-4.3", "medium", ("x_search",)
     ),
