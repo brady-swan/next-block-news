@@ -1,0 +1,178 @@
+{
+  "schema_version": "nbn-eval-registry-v1",
+  "prompt_development_event_ids": [
+    "hyperscale-data-ends-michigan-bitcoin-mining",
+    "hargreaves-lansdown-bitcoin-etn-launch-uk",
+    "coldcard-wave3-hacker-thorchain-swap",
+    "btc-etf-inflows-record-since-jan14",
+    "bitcoin-gold-correlation-record-high-debasement-trade",
+    "el-salvador-imf-chivo-privatization"
+  ],
+  "packets": [
+    {
+      "packet_id": "calibration-desk-01",
+      "split": "calibration",
+      "lane": "calibration",
+      "items": [
+        {
+          "item_hash": "96c417aba9f8876c32b2ea38",
+          "event_id": "hyperscale-data-ends-michigan-bitcoin-mining",
+          "primary_stratum": "treasury_boundary",
+          "acceptable_dispositions": ["publish", "update"],
+          "clearly_wrong_dispositions": ["pass"],
+          "required_facts": ["Hyperscale ended Bitcoin mining at its Dowagiac facility", "the site is being converted for AI/data-center use"],
+          "supported_claims": ["the shutdown occurred September 1", "the Michigan facility is being repurposed for AI colocation"],
+          "unsupported_claims": ["AI always outbids Bitcoin mining for electricity"],
+          "freshness_labels": ["none", "NEW:"],
+          "serious_error_triggers": ["publish the source's broad AI-versus-mining thesis as established fact"]
+        },
+        {
+          "item_hash": "b111c1cbede6e5aacfa97373",
+          "event_id": "global-food-prices-sept-2026",
+          "primary_stratum": "macro_boundary",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish", "update"],
+          "required_facts": [],
+          "supported_claims": ["the post says global food prices reached their highest level since 2022"],
+          "unsupported_claims": ["the food-price move caused Bitcoin to move"],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": []
+        },
+        {
+          "item_hash": "291f008d2972a3e544cd2d6c",
+          "event_id": "etha-daily-flow-2026-09-04",
+          "primary_stratum": "explicit_negative",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish", "update"],
+          "required_facts": [],
+          "supported_claims": ["Farside reports a daily flow figure for an Ethereum ETF"],
+          "unsupported_claims": [],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": ["publish a standalone Ethereum ETF flow on the Bitcoin wire"]
+        },
+        {
+          "item_hash": "c01dbbf996a682f4db9036ab",
+          "event_id": "us-unemployment-rate-august-2026",
+          "primary_stratum": "macro_boundary",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish", "update"],
+          "required_facts": [],
+          "supported_claims": ["the St. Louis Fed card reports unemployment at 4.1%"],
+          "unsupported_claims": ["the unemployment print materially changed Bitcoin's outlook"],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": []
+        }
+      ]
+    },
+    {
+      "packet_id": "calibration-desk-02",
+      "split": "calibration",
+      "lane": "calibration",
+      "items": [
+        {
+          "item_hash": "2b6a815a93aa9f4132702f87",
+          "event_id": "sberbank-crypto-cross-border-settlements-launch",
+          "primary_stratum": "explicit_negative",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish", "update"],
+          "required_facts": [],
+          "supported_claims": ["Sberbank announced cross-border cryptocurrency settlement services"],
+          "unsupported_claims": ["Sberbank launched a Bitcoin settlement product"],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": ["turn a generic cryptocurrency settlement service into a Bitcoin-specific claim"]
+        },
+        {
+          "item_hash": "f5d92e76f5bab0ab09aed8a9",
+          "event_id": "el-salvador-imf-chivo-privatization",
+          "primary_stratum": "duplicate_update",
+          "acceptable_dispositions": ["research", "hold", "update"],
+          "clearly_wrong_dispositions": ["publish"],
+          "required_facts": ["Bukele disputed a report about the reserve", "Chivo and the sovereign reserve are distinct"],
+          "supported_claims": ["Bitcoin News reported Bukele's denial"],
+          "unsupported_claims": ["the guide post alone proves which interpretation of the IMF document is correct"],
+          "freshness_labels": ["UPDATE:"],
+          "serious_error_triggers": ["present the guide account's interpretation as independently established"]
+        },
+        {
+          "item_hash": "0bd1a9ef51db453da52051ec",
+          "event_id": "strategy-strc-one-times-btc-rating-claim",
+          "primary_stratum": "treasury_boundary",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish", "update"],
+          "required_facts": [],
+          "supported_claims": ["the guide post relays Strategy's hypothetical STRC downside calculation"],
+          "unsupported_claims": ["Bitcoin must fall 83%", "STRC is safe"],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": []
+        },
+        {
+          "item_hash": "b8d1d2e0170f229efc0e257e",
+          "event_id": "hargreaves-lansdown-bitcoin-etn-launch-uk",
+          "primary_stratum": "duplicate_update",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish"],
+          "required_facts": ["Hargreaves Lansdown made Bitcoin exposure available to retail customers"],
+          "supported_claims": ["the guide post says the firm reversed its prior stance"],
+          "unsupported_claims": ["this card alone establishes every product and eligibility detail"],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": ["publish a duplicate as first coverage"]
+        }
+      ]
+    },
+    {
+      "packet_id": "calibration-desk-03",
+      "split": "calibration",
+      "lane": "calibration",
+      "items": [
+        {
+          "item_hash": "eaf4f29e236f0f97abc545e6",
+          "event_id": "btc-gold-correlation-surge-sept2026",
+          "primary_stratum": "market_data",
+          "acceptable_dispositions": ["publish", "update"],
+          "clearly_wrong_dispositions": ["pass"],
+          "required_facts": ["Bitcoin's 90-day correlation with gold reached about 0.50", "the correlation with Nasdaq fell to about 0.30"],
+          "supported_claims": ["the correlation figures and comparisons stated by Kobeissi"],
+          "unsupported_claims": ["the correlation predicts a Bitcoin rally", "Treasury buybacks caused the change"],
+          "freshness_labels": ["none", "NEW:", "UPDATE:"],
+          "serious_error_triggers": ["turn correlation data into a price forecast or trading signal"]
+        },
+        {
+          "item_hash": "ea49b29ddc35c3ee5d1d22cd",
+          "event_id": "dashjr-exchanges-fake-bitcoins-blake2b-fork",
+          "primary_stratum": "elevated_claim",
+          "acceptable_dispositions": ["pass", "research", "hold"],
+          "clearly_wrong_dispositions": ["publish"],
+          "required_facts": ["Dashjr made the accusation", "the underlying fork was already covered"],
+          "supported_claims": ["Bitcoin News relays Dashjr's statement"],
+          "unsupported_claims": ["major exchanges are in fact selling fake bitcoins"],
+          "freshness_labels": ["none", "UPDATE:"],
+          "serious_error_triggers": ["adopt the fraud accusation as the wire's own factual claim"]
+        },
+        {
+          "item_hash": "7d77a075657f81d5a27b8b11",
+          "event_id": "august-2026-jobs-report-fed-rate-outlook",
+          "primary_stratum": "duplicate_update",
+          "acceptable_dispositions": ["pass"],
+          "clearly_wrong_dispositions": ["publish", "update"],
+          "required_facts": ["the jobs report and rate repricing were already covered"],
+          "supported_claims": ["the guide post relays the 162,000 headline figure"],
+          "unsupported_claims": ["the jobs report guarantees a rate hike"],
+          "freshness_labels": ["none"],
+          "serious_error_triggers": ["publish a known duplicate as new"]
+        },
+        {
+          "item_hash": "2c2ed47a819bb04707a27ec9",
+          "event_id": "btc-etf-inflows-3-8b-three-week-streak-sept2026",
+          "primary_stratum": "market_data",
+          "acceptable_dispositions": ["update"],
+          "clearly_wrong_dispositions": ["pass", "publish"],
+          "required_facts": ["spot Bitcoin ETFs logged about $3.8 billion over three weeks", "the period was the strongest three-week stretch of 2026"],
+          "supported_claims": ["the Cointelegraph receipt attributes the aggregate to SoSoValue"],
+          "unsupported_claims": ["the inflows guarantee a price increase"],
+          "freshness_labels": ["UPDATE:", "none"],
+          "serious_error_triggers": []
+        }
+      ]
+    }
+  ]
+}
