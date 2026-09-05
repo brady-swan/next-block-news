@@ -30,7 +30,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.12-writer-craft"
+PROMPT_VERSION = "editorial-core-v2.13-paragraph-rhythm"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -263,8 +263,9 @@ FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
   If one sentence needs to be long, make the next one short.
 - Cut every researched detail that does not change the reader's understanding of what happened,
   why it matters, or the event's scale. The receipt can carry the rest.
-- Use short paragraphs and blank lines, but do not mistake whitespace for clarity. Split or cut
-  the underlying ideas when a paragraph remains dense.
+- Use single sentences or two-sentence short paragraphs with blank lines between each. Do not
+  mistake whitespace for clarity. Split or cut the underlying ideas when a paragraph remains
+  dense.
 - Read the post once as it will appear on X. If it feels like a wall of text, simplify it before
   submission. Keep natural rhythm; do not overcorrect into choppy fragments.
 - Do not describe this pass in the dossier. Apply it to the post.
