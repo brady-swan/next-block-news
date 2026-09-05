@@ -1896,3 +1896,49 @@ daily ETF flow rows can be background. A headline claiming a record, reversal, m
 or strongest period should reach Sonnet even when nearby ETF-flow coverage may ultimately make it
 redundant. Haiku should clean the desk, not settle close calls about whether a fresh aggregate
 changes the reader's picture.
+
+## 2026-09-05 — Audit: Sberbank crypto-settlement draft is clear but off-scope
+
+**Typefully draft:** `10636792` · **Story key:**
+`sberbank-crypto-cross-border-settlements-launch`
+
+**Submitted copy:**
+
+> Sberbank, Russia's largest bank, has launched cross-border crypto settlements for corporate
+> clients in foreign trade, first deputy chairman Alexander Vedyakhin said Sept. 1.
+>
+> There is no minimum payment size and the average fee is 0.3%, per the bank. Wallet-to-wallet
+> transfers settle in a couple of minutes, with bank and currency-control documentation generated
+> automatically.
+>
+> The launch coincides with Russia's digital currency law taking effect the same day, letting
+> exporters and importers use crypto for cross-border settlement without restriction. Russia's
+> central bank says such transactions are available for all wallet types and cryptocurrencies,
+> directly or through intermediaries.
+>
+> Sberbank had run crypto settlements since September 2024 under a central bank experimental legal
+> regime.
+
+**Writing-quality classification: PASS.** The six sentences average about 18.8 words; the longest
+is 25 words. Paragraphs contain 24, 30, 44, and 15 words. The lede is direct, the next sentence is
+shorter after each longer sentence, and the paragraphs scan cleanly. “For corporate clients in
+foreign trade” is slightly source-shaped after “cross-border,” but this is an optional trim rather
+than a writing-guidance failure.
+
+**Selection/scope assessment:** Do not publish as written. The Interfax receipt supports the facts,
+and the system correctly removed `NEW:` because the underlying Sept. 1 event was already four days
+old. But the post covers cryptocurrency settlement generically, says the rail supports all
+cryptocurrencies, and never establishes a concrete Bitcoin effect. That conflicts with the current
+Bitcoin-only rule: a broad crypto or regulatory development may run only when it materially affects
+Bitcoin and is framed on that impact. Major-bank monetary plumbing is interesting, but importance
+does not supply the missing Bitcoin connection.
+
+**Timing and delivery:** NBN detected the Sept. 5 X lead at 11:14:53 UTC and staged the draft at
+11:42:07 UTC, about 27 minutes later. The Typefully object is an intact two-post thread: clean lead,
+then the Interfax receipt in the first reply. The run cost about $0.317 across Haiku preparation,
+three Sonnet turns, and one Opus edit.
+
+**Reusable lesson:** Judge writing execution separately from story fit. A clean, well-supported,
+well-formatted post can still be wrong for the feed. For generic crypto payment or regulatory news,
+require a real Bitcoin consequence in the evidence and make that consequence the frame; do not infer
+one merely because Bitcoin is among the possible assets.
