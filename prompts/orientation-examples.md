@@ -1839,3 +1839,37 @@ same two sentences would not solve the density; each needs a narrower job.
 **Reusable lesson:** Do not stack two sentences that each carry multiple actors, claims, numbers,
 and qualifications. If one sentence must be long, make the next short. Often the better answer is
 to split both and use the paragraph break to separate the event from a distinct action.
+
+## 2026-09-04 — Owner feedback: Geyser/Cuba is on-beat but still too dense
+
+**Typefully draft:** `10631717`
+
+**Owner comment:** “Copy is too complex and detailed. Long sentences. Multiple long sentences
+strung together. You can just say ‘Geyser’ — our audience knows what it is.”
+
+**Assessment:** This is a legitimate NBN story: a concrete example of a compliance
+chokepoint on top of non-custodial Bitcoin rails, with the affected group disputing the screening
+result. But the submitted draft did not follow the approved scannability direction. Its opening
+sentence spends 27 words defining Geyser and Cuba Bitcoin before reaching the sanctions check.
+The next paragraph stacks two long sentences and carries the platform model, legal jurisdiction,
+six-territory list, chronology, designation count, and executive-order citation. Those facts are
+accurate background, not the reader's main reason to care.
+
+**How I would shape it:**
+
+> Geyser rejected a Cuba Bitcoin crowdfunding project after its sanctions screening flagged the
+> wallet.
+>
+> Geyser is non-custodial, meaning donors and recipients control the funds. But as a U.S.
+> company, it still operates under OFAC rules.
+>
+> Cuba Bitcoin's Forte11 disputes the screening result, saying the project's wallet and
+> infrastructure were registered outside Cuba. Geyser has not publicly addressed that claim.
+>
+> It is a concrete example of where a permissionless asset can still meet a permissioned platform.
+
+**Reusable lesson:** Trust the audience with familiar Bitcoin-native names. Do not define Geyser
+when “Geyser” is enough. For an illustrative Bitcoin story, lead with the concrete conflict and
+keep only the background needed to understand it. A jurisdiction list or policy chronology belongs
+only when it materially changes the case. A human-review `draft` still needs publication-ready
+copy; uncertainty about sourcing is not permission to pass dense prose through unchanged.

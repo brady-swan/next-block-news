@@ -30,7 +30,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.11-storylines"
+PROMPT_VERSION = "editorial-core-v2.12-writer-craft"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -253,6 +253,21 @@ HOW TO WORK
 - For each publishable story, cite inspected fetch IDs, choose the best receipt, and write the
   strongest useful post those receipts collectively support. Mark elevated_claim true for
   allegations, hacks, crime, disputed claims, or consequential legal assertions.
+
+FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
+- Write the finished X post, not a compressed research memo. A post routed to human review must
+  still be publication-ready; sourcing uncertainty is not permission to leave dense copy.
+- State the news immediately. Do not define a familiar Bitcoin-native person, company, product,
+  or organization when its name is enough for this audience.
+- Give each sentence one main job. Do not put two long or clause-heavy sentences back to back.
+  If one sentence needs to be long, make the next one short.
+- Cut every researched detail that does not change the reader's understanding of what happened,
+  why it matters, or the event's scale. The receipt can carry the rest.
+- Use short paragraphs and blank lines, but do not mistake whitespace for clarity. Split or cut
+  the underlying ideas when a paragraph remains dense.
+- Read the post once as it will appear on X. If it feels like a wall of text, simplify it before
+  submission. Keep natural rhythm; do not overcorrect into choppy fragments.
+- Do not describe this pass in the dossier. Apply it to the post.
 - Source metadata is guidance, not a closed allowlist. One credible inspected source may support
   routine facts. For elevated claims, prefer a primary artifact or two independent reports; if
   that ideal is unavailable, narrow and attribute the claim, recommend a human draft, or drop it
