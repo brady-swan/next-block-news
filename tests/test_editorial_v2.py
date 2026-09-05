@@ -618,6 +618,40 @@ class EditorialV2Tests(unittest.TestCase):
                            if row["canonical_key"] == "facility-shutdown")
             self.assertFalse(cluster["reader_covered"])
             self.assertFalse(cluster["draft_open"])
+            self.assertNotIn(
+                "The company shut its Michigan mining facility.",
+                cluster["post_leads"],
+            )
+
+    def test_failed_proposed_update_is_not_presented_as_open_draft_copy(self):
+        with temporary_store() as con:
+            store.log_post(
+                con, "chivo-privatization", "original-item", "news",
+                "The IMF says Chivo passed to private control.",
+                "https://example.com/original", "DRAFT", "draft-42",
+            )
+            store.save_newsroom_story_attempt(
+                con, "chivo-privatization", "editor_feedback", {
+                    "story_id": "bukele-update", "members": ["later-item"],
+                    "headlines": ["Bukele disputes reserve transfer report"],
+                    "proposed_post": "UPDATE: Bukele says the reserve did not transfer.",
+                    "failure": "unexpected_post_structure", "evidence": [],
+                },
+            )
+            clusters = store.story_cluster_context(con)
+            cluster = next(row for row in clusters
+                           if row["canonical_key"] == "chivo-privatization")
+            self.assertTrue(cluster["draft_open"])
+            self.assertFalse(cluster["reader_covered"])
+            self.assertEqual(
+                cluster["post_leads"],
+                ["The IMF says Chivo passed to private control."],
+            )
+            memory = store.newsroom_story_memories(con)[0]
+            self.assertEqual(
+                memory["attempts"][-1]["proposed_post"],
+                "UPDATE: Bukele says the reserve did not transfer.",
+            )
 
     def test_editor_prompt_distinguishes_specific_current_fact_from_old_general_intent(self):
         self.assertIn("facility-specific action", editor.BATCH_EDITOR_PROMPT)

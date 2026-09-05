@@ -3613,9 +3613,9 @@ def story_cluster_context(con, days: float = 2.0, limit: int = 50,
         for title in list(attempt.get("headlines") or [])[:3]:
             if title and title not in entry["titles"] and len(entry["titles"]) < 3:
                 entry["titles"].append(str(title)[:240])
-        lead = str(attempt.get("proposed_post") or "").split("\n")[0][:260]
-        if lead and lead not in entry["post_leads"] and len(entry["post_leads"]) < 2:
-            entry["post_leads"].append(lead)
+        # Proposed copy belongs on the continuity board, not the coverage board.
+        # A proposal may have failed delivery and must never masquerade as the
+        # contents of an open draft or as copy readers have already seen.
         entry["statuses"].add("workbench:" + str(memory.get("state") or "unknown")[:40])
         entry["updated_at"] = max(entry["updated_at"], float(memory["updated_at"] or 0))
 

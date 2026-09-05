@@ -257,7 +257,14 @@ def replace_draft(draft_id: str, prior_texts: list[str], desired_texts: list[str
         x = raw.get("platforms", {}).get("x", {})
         if set(x) - {"enabled", "posts", "settings"}:
             return PublishOutcome.FAILED, "unexpected_x_structure"
-        allowed_post = {"text", "media_ids", "quote_post_url", "subscribers"}
+        # Typefully returns the complete current X-post schema on reads. Preserve
+        # every documented field while changing only text; keep the legacy
+        # ``subscribers`` key for drafts created before ``subscribers_only``.
+        allowed_post = {
+            "text", "media_ids", "quote_post_url", "subscribers",
+            "subscribers_only", "paid_partnership", "made_with_ai",
+            "hide_link_preview",
+        }
         posts = x.get("posts") or []
         if any(set(post) - allowed_post for post in posts):
             return PublishOutcome.FAILED, "unexpected_post_structure"

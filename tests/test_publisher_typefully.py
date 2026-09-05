@@ -24,7 +24,10 @@ class TypefullyTests(unittest.TestCase):
             "platforms": {"x": {"enabled": True, "settings": {"reply": "all"},
                                 "posts": [{"text": "old", "media_ids": ["m1"],
                                            "quote_post_url": "https://x.com/a/status/1",
-                                           "subscribers": False}]}},
+                                           "subscribers_only": False,
+                                           "paid_partnership": False,
+                                           "made_with_ai": True,
+                                           "hide_link_preview": True}]}},
         }
         desired = {**prior, "platforms": {"x": {**prior["platforms"]["x"],
                                                    "posts": [{**prior["platforms"]["x"]["posts"][0],
@@ -37,8 +40,28 @@ class TypefullyTests(unittest.TestCase):
         self.assertEqual(ref, "42")
         body = patch_http.call_args.kwargs["json"]
         self.assertEqual(body["platforms"]["x"]["posts"][0]["media_ids"], ["m1"])
+        self.assertFalse(body["platforms"]["x"]["posts"][0]["subscribers_only"])
+        self.assertFalse(body["platforms"]["x"]["posts"][0]["paid_partnership"])
+        self.assertTrue(body["platforms"]["x"]["posts"][0]["made_with_ai"])
+        self.assertTrue(body["platforms"]["x"]["posts"][0]["hide_link_preview"])
         self.assertNotIn("draft_title", body)
         self.assertNotIn("force_overwrite_comments", body)
+
+    @patch.object(tf.httpx, "patch")
+    @patch.object(tf, "get_draft")
+    def test_replace_draft_still_rejects_unknown_post_fields(self, get_draft,
+                                                             patch_http):
+        get_draft.return_value = {
+            "id": "42", "social_set_id": "set", "status": "draft",
+            "platforms": {"x": {"enabled": True, "posts": [
+                {"text": "old", "future_unreviewed_field": True},
+            ]}},
+        }
+        with patch.object(tf.config, "TYPEFULLY_SOCIAL_SET_ID", "set"):
+            outcome, reason = tf.replace_draft("42", ["old"], ["new"])
+        self.assertIs(outcome, tf.PublishOutcome.FAILED)
+        self.assertEqual(reason, "unexpected_post_structure")
+        patch_http.assert_not_called()
 
     @patch.object(tf.httpx, "patch")
     @patch.object(tf, "get_draft")
