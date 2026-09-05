@@ -25,14 +25,32 @@ checks or causes a regression, and report the action and evidence.
 ## Automatically accumulate editorial evidence
 
 Add strong examples, misses, weak drafts, owner comments, peer comparisons, and suggested
-rewrites to the tuning record. These are observations and proposals, not live prompt changes.
+rewrites to the tuning record.
+
+## Automatically tune approved writing execution
+
+The audit may make bounded changes to the Sonnet writer or editor prompts and their curated
+examples when the change only helps the models execute the currently approved writing style.
+This includes clearer ledes, simpler sentence structure, paragraph rhythm, scannability,
+removing expendable detail, avoiding needless definitions for the Bitcoin-native audience, and
+reinforcing already-approved formatting conventions.
+
+Such a change must be grounded in observed drafts or owner feedback, preserve natural prose,
+include focused regression coverage, bump the prompt version when production behavior changes,
+and be tested, deployed, smoked, and reported. Prefer the smallest prompt clarification before
+adding machinery.
+
+Writing-tuning authority may not change which stories qualify, source weighting, publication
+standards, corroboration, freshness, model choice, cadence, research behavior, system design,
+or publishing behavior. If a proposed writing change could materially affect any of those, seek
+Brady's approval first.
 
 ## Propose editorial improvements
 
-Do not autonomously ship source weighting, publication standards, prompt or orientation changes,
-corroboration policy, model choice, cadence, or any other change expected to materially affect
-what gets published. Diagnose the issue, collect examples, and recommend a bounded change for
-Brady's approval.
+Do not autonomously ship source weighting, publication standards, prompt or orientation changes
+outside the bounded writing-execution authority above, corroboration policy, model choice,
+cadence, or any other change expected to materially affect what gets published. Diagnose the
+issue, collect examples, and recommend a bounded change for Brady's approval.
 
 ## Emergency autopost authority
 
@@ -51,7 +69,6 @@ autopost back on.
 - Enable autopost.
 - Publish, dismiss, rewrite, or otherwise mutate Typefully content or resolve ambiguous Typefully
   state.
-- Ship editorial improvements without approval.
+- Ship editorial improvements outside the bounded writing-execution authority without approval.
 - Alter credentials.
 - Perform destructive database work.
-
