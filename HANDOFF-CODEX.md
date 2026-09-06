@@ -120,3 +120,8 @@ Read SPRINT-0059-FINDINGS.md and ROSTER-REPLAY-FINDINGS-2026-09-05.md for limits
 
 Plan 0060 adds observability/docs/PDF, not editorial policy or model changes. Its release
 record tracks tests, deployment, natural-cycle smoke, and audit restoration.
+
+Plan 0060 shipped runtime `2d9dcad` in Railway deployment
+`5996010b-e732-47ae-98e6-ef138696d7a3` (SUCCESS). Clean suite: 422 tests; 42 production HTTP
+checks and a natural cycle passed. Eight-page PDF visually checked. Autopost OFF; existing
+15-minute rolling audit ACTIVE with unchanged authority plus observability checks.

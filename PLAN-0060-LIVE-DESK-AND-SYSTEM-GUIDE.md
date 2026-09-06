@@ -1,6 +1,6 @@
 # Plan 0060 - Live Desk and system guide
 
-Status: implementation and independent code review approved on 2026-09-06; release verification in progress.
+Status: shipped and smoke-tested on 2026-09-06. Independent plan/code reviews approved; rolling audit ACTIVE.
 
 Review refinements: SQLite `mode=ro` (never migration-bearing `store.connect()`); count
 confirmed publications separately from sent outputs; bound daily costs by both timestamps;
@@ -97,4 +97,33 @@ The old review links/actions still work, autopost is off, and the rolling audit 
   preserved in labeled history. Evaluation results and plans retain dated findings and new status
   pointers. Unrelated evaluator code and tuning work are preserved outside this release.
 
-Production deployment, clean-release result, natural-cycle smoke and audit restoration follow below.
+## Production release
+
+- Runtime commit: `2d9dcad` (pushed to main). Clean archive deployed explicitly to the existing
+  Railway project/service/production environment; unrelated dirty evaluator/tuning files excluded.
+- Railway deployment: `5996010b-e732-47ae-98e6-ef138696d7a3`, SUCCESS; one replica, `/data` retained.
+- Online backup: `/data/backups/nbn-pre-source-policy-20260906T060258Z.db`.
+- Clean-release Python 3.12 suite: **422 passed**. Working-tree suite: **424 passed** (two
+  existing unreleased evaluator cases). The dependency-free JS controller tests passed for
+  pause/resume, hidden tabs, stale-error retention, date/run preservation, disclosure state
+  and reading-focus behavior. No browser screenshot test was performed; HTTP/controller
+  verification and the PDF's separate rendered visual review are the documented checks.
+- **42 production HTTP checks passed**, split across localhost/container and public HTTPS:
+  health; unauthenticated pages/assets/PDF refused; authenticated unknown route 404; five
+  views and historical snapshots; static assets; legacy report/backlink; PDF exact-byte readback;
+  filtered intake and actual latest-run detail. New views took 4-95 ms inside the container in
+  this smoke, including first import, with ordinary public snapshots 12-28 ms from the container.
+  These samples are not an uptime or latency guarantee.
+- Natural post-deploy cycle completed: process started `1788674630.706077`, successful cycle
+  `1788674637.3118486`, no worker error. SQLite quick_check: `ok`. No forced editorial run,
+  provider research probe, Typefully write, publication or content dismissal was used as a test.
+- Autopost remained **false** before and after deploy. Prompt remains
+  `editorial-core-v2.15.2-craft`; model roster, cadence, editorial prompt bodies and dependencies unchanged.
+- PDF: eight pages, 21,313 bytes; SHA-256
+  `4bca260f0c54c7f01d7a323d52c6c08d85cbaf6c10561ab28b4d3b8a144f5865`.
+- Existing `audit-nbn-production` heartbeat restored **ACTIVE**, every 15 minutes, same task.
+  Added Desk freshness/metric-scope checks and the cost-ledger caveat; preserved all autonomy,
+  writing-quality, misses, peer-speed, replay-exclusion and meaningful-notification boundaries.
+
+The new site is reached through **Live Desk** at the top of the existing authenticated report.
+The existing review URL and tools remain supported. Current-document entry point: DOCUMENTATION.md.
