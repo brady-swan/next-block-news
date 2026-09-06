@@ -13,6 +13,9 @@ editorial judgment.
 - Before calling a story missed, search NBN's recent posts, current Typefully drafts, prior
   Typefully drafts, and event/continuity records. A hold or skip caused by an existing draft or
   prior post is not a miss merely because the latest decision did not create a new output.
+- Before calling two outputs duplicates, compare their latest reader-visible claims. A shared
+  storyline, event key, prior model grouping, or old audit note is not sufficient proof.
+  Explicitly correct superseded audit conclusions rather than carrying them into later reviews.
 
 ## Automatically fix clear technical regressions
 

@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-05. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-06. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It ingests news every minute, opens a fresh Grok
@@ -128,6 +128,9 @@ In enforce mode, a batch containing only Background cards uses no newsroom call.
 visible on the Desk with **SEND TO DESK**. For advanced cards, code may prefetch up to six unique
 likely receipts and 24,000 characters, while reserving at least eight fetches and 80,000 characters
 for the newsroom's own reporting. Preparation prose is not evidence.
+Materialization preserves current-run enforced Background provenance instead of relabeling those
+audit-only skips as newsroom rejections. Plan 0059 fixes new runs; historical mislabeled rows
+are not rewritten or automatically promoted.
 
 When one member of a preparation same-event group advances, any Background companions in that exact
 run-local group advance with it. This changes only which leads reach the newsroom; it is not canonical
@@ -152,6 +155,10 @@ focused verification job to Grok 4.3 medium with native web and X search. That r
 at most five source findings. The provider's native limit is not represented as a hard dollar cap;
 actual search counts and charges are recorded. There is no recursive research or automatic
 second research request.
+
+Plan 0059 tested stronger selective research-routing prompts but did not demonstrate reliable
+native assignment. Those experimental instructions and turn-budget fields were not shipped.
+The existing research behavior and limits remain unchanged; see `SPRINT-0059-FINDINGS.md`.
 
 Research returns a bounded memo plus source-specific findings. Only provider-observed citation
 URLs can supply native extracts. Existing/directly fetched text is preferred; blocked pages and
@@ -221,6 +228,8 @@ also become the next workbench objective rather than being reduced to a transien
 - Research can be broad while public copy stays selective. The writer and editor lead with the
   Bitcoin-relevant consequence, split overloaded sentences, avoid consecutive clause-heavy
   sentences, and cut verified detail that does not change the reader's picture.
+- The orientation includes historical ETF and CFTC/CLARITY craft illustrations, explicitly not
+  current facts, fixed-length templates, or permission to omit necessary attribution.
 
 ## Practical evidence standard
 

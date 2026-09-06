@@ -488,10 +488,24 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
 
     store.set_newsroom_state(con, pipeline_run_id, "materializing")
 
+    # Preparation skips are merged into the outcome for audit visibility, but
+    # were never newsroom decisions. Keep their applied provenance and the
+    # owner's one-time SEND TO DESK control. Use persisted, run-owned state,
+    # never a model-authored reason prefix (or an older preparation decision).
+    prep_background_ids = {row["item_hash"] for row in con.execute(
+        "SELECT d.item_hash FROM desk_preparations d"
+        " JOIN items i ON i.url_hash=d.item_hash"
+        " WHERE d.run_id=? AND d.mode='enforce' AND d.application_state='applied'"
+        " AND d.effective_route='background' AND d.promoted_at IS NULL"
+        " AND i.status='skipped' AND i.decision_stage='desk_prep'"
+        " AND i.decision_category='background'", (pipeline_run_id,),
+    )}
     # Completed editorial drops are terminal; defers remain in the next clean desk.
     for verdict in outcome.verdicts:
         action = verdict.get("action")
         if action == "skip":
+            if verdict["url_hash"] in prep_background_ids:
+                continue
             store.set_status(con, verdict["url_hash"], "skipped", verdict.get("story_key"),
                              verdict.get("reason"), stage="newsdesk", category="editorial_drop")
         elif action == "hold":

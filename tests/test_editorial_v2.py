@@ -101,7 +101,7 @@ class EditorialV2Tests(unittest.TestCase):
                 "uncertain": 0, "failed": 0, "taped": 0}
 
     def test_v212_prompts_teach_writer_craft_without_style_gates(self):
-        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.14.1-tool-contract")
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.15.2-craft")
         self.assertIn("FINAL WRITING PASS", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("still be publication-ready", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("Do not define a familiar Bitcoin-native", newsroom.NEWSROOM_V2_SYSTEM)
@@ -121,6 +121,16 @@ class EditorialV2Tests(unittest.TestCase):
         self.assertIn("MUST repeat the complete final post", editor.BATCH_EDITOR_PROMPT)
         self.assertNotIn("Research deeply", newsroom.ORIENTATION_BRIEF)
         self.assertNotIn("24 words", newsroom.ORIENTATION_BRIEF)
+
+    def test_craft_examples_are_illustrations_not_a_routing_change(self):
+        self.assertIn("Craft illustrations, not current facts", newsroom.ORIENTATION_BRIEF)
+        self.assertIn("three sources told CNBC", newsroom.ORIENTATION_BRIEF)
+        self.assertIn("not a fixed length", newsroom.ORIENTATION_BRIEF)
+        self.assertIn("not these illustrative numbers", newsroom.ORIENTATION_BRIEF)
+        self.assertEqual(newsroom.ASSIGN_RESEARCH_TOOL["description"],
+                         "Assign one focused verification job to the reporting assistant, "
+                         "with native web and X search when configured.")
+        self.assertNotIn("Missing source support is a research gap", newsroom.NEWSROOM_V2_SYSTEM)
 
     def test_assignment_desk_can_suppress_empty_sonnet_wake(self):
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
@@ -149,6 +159,60 @@ class EditorialV2Tests(unittest.TestCase):
                 outcome = session.conduct_v2()
             self.assertEqual(outcome.verdicts[0]["action"], "skip")
             self.assertEqual(session.successful_newsdesk_calls, 0)
+
+    def test_materialization_preserves_preparation_background_controls(self):
+        for mixed in (False, True):
+            with self.subTest(mixed=mixed), temporary_store() as con, ExitStack() as stack:
+                run_id = "run:background-finalization"
+                rows = store.upsert_new_items(con, [{
+                    "source": "Example", "title": f"Background {index}",
+                    "url": f"https://example.com/background-{index}",
+                    "published": "", "summary": "",
+                } for index in range(2 if mixed else 1)])
+                prep = desk_prep._synthetic(
+                    rows[0], run_id=run_id, reason="No development.",
+                    outcome="model", model_route="background",
+                )
+                prep["effective_route"] = "background"
+                store.save_desk_preparations(con, [prep], mode="enforce")
+                # A genuine newsroom skip may use the same words: provenance,
+                # not a model-authored reason prefix, determines promotion rights.
+                verdicts = [{**row, "action": "skip", "reason": "desk_prep: no news"}
+                            for row in rows]
+                outcome = newsroom.NewsroomOutcome(
+                    run_id, {"stories": []}, "b" * 64, verdicts,
+                    {}, {}, {}, {}, Mock(), {},
+                )
+                session = Mock()
+                session.conduct.return_value = outcome
+                stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="r"))
+                stack.enter_context(patch.object(newsroom, "start_session", return_value=session))
+                publish = stack.enter_context(patch.object(publisher, "publish"))
+                stack.enter_context(patch.object(config, "RUN_NEWSROOM_MODE", "live"))
+                main._run_editorial_v2(
+                    con, lease_owner="test", pipeline_run_id=run_id,
+                    inventory=rows, pending=rows, result=self.result_counts(),
+                    theme_snapshot=[], overrides={}, run_started=time.time(),
+                )
+                current = dict(con.execute(
+                    "SELECT * FROM items WHERE url_hash=?", (rows[0]["url_hash"],)
+                ).fetchone())
+                self.assertEqual(current["decision_stage"], "desk_prep")
+                self.assertEqual(current["decision_category"], "background")
+                self.assertIn("SEND TO DESK", report._prep_control(
+                    {**current, "item_hash": rows[0]["url_hash"]}, "2026-09-06"))
+                self.assertTrue(store.request_operator_action(
+                    con, rows[0]["url_hash"], "promote")["ok"])
+                self.assertFalse(store.request_operator_action(
+                    con, rows[0]["url_hash"], "promote")["ok"])
+                if mixed:
+                    self.assertEqual(con.execute(
+                        "SELECT decision_category FROM items WHERE url_hash=?",
+                        (rows[1]["url_hash"],),
+                    ).fetchone()[0], "editorial_drop")
+                    self.assertFalse(store.request_operator_action(
+                        con, rows[1]["url_hash"], "promote")["ok"])
+                publish.assert_not_called()
 
     def test_prefetch_respects_its_budget_and_preserves_parent_research(self):
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
