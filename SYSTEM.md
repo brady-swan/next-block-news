@@ -114,6 +114,9 @@ At each due boundary, a run-scoped Luna low assignment desk sees every eligible 
 all intake lanes. It distills the apparent event, Bitcoin relevance, freshness question,
 research objective, source leads, supplied related event keys, at most two relevant NBN storyline
 keys from a compact index, and a run-local same-event group.
+Preparation is bounded to three source leads, three related event keys, and two storyline keys
+per card. Responses schemas expose these same parser limits explicitly; Anthropic retains its
+compatible schema subset. No validation failure may silently discard a candidate.
 It may mark a card Background
 only when it is facially outside scope, contains no development, or is an exact code-identified
 duplicate. Guide tips, official/primary items, operator promotions, research
@@ -139,6 +142,8 @@ continuity, storyline, and handle context is sent as compact indexes with code-i
 retrieve bounded full records twice rather than paying to replay every body in every round. The
 stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
 output state, including encrypted reasoning, in bounded run history only—not editorial memory.
+Responses newsroom turns require a tool call (research or dossier); plain-text-only completion
+is not a valid protocol result. The last allowed round still forces the dossier specifically.
 
 Candidate cards, storyline summaries, and search snippets are leads. The writer may submit
 immediately or research selectively with existing SerpAPI and safe fetch tools. It may assign one

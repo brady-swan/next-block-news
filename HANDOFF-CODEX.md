@@ -22,6 +22,14 @@ model/effort settings, dashboard, DB integrity, and autopost OFF were verified. 
 15-minute rolling audit is ACTIVE with roster, provenance, cost, and prep failure checks.
 See Plan 0058's deployment record for the natural-run observation and smoke limitations.
 
+**Replay follow-up, 2026-09-05:** realistic batches exposed a plain-text-only Responses turn
+and preparation records failing parser-only list limits. Technical fix `8984e21` makes tool
+submission required and exposes existing prep bounds; deployment
+`ff64b138-128e-427c-8183-f791e57fa573` succeeded, with 407 clean-release tests and live smoke.
+Autopost remains OFF. Read `ROSTER-REPLAY-FINDINGS-2026-09-05.md` before interpreting the four
+Typefully REPLAY drafts as new coverage: they are isolated historical review copies, not
+production deliveries. Native-first research was a controlled test, not a shipped routing change.
+
 **Cost-control update, 2026-09-03 (Plan 0052):** a run-scoped Haiku assignment desk now
 prepares the cross-source batch before Sonnet; protected/high-attention work and every failure
 advance, while all-Background windows can avoid a Sonnet wake. Sonnet receives compact indexes

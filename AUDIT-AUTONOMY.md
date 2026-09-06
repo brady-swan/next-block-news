@@ -27,6 +27,12 @@ checks or causes a regression, and report the action and evidence.
 Add strong examples, misses, weak drafts, owner comments, peer comparisons, and suggested
 rewrites to the tuning record.
 
+Typefully drafts whose titles begin `REPLAY` are owner-requested historical review copies,
+not normal wire deliveries. Exclude them from production throughput, freshness/latency,
+duplicate-delivery incidents, and evidence that a current lead was covered. Their writing may
+be studied when explicitly labeled replay evidence. See `ROSTER-REPLAY-FINDINGS-2026-09-05.md`
+for the first roster replay and its limitations.
+
 ## Automatically tune approved writing execution
 
 The audit may make bounded changes to the configured writer or editor prompts and their curated
