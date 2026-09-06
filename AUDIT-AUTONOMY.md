@@ -25,7 +25,7 @@ delivery defects, or behavior that plainly violates an already-approved invarian
 owner changes and the current editorial policy. Roll back when the repair does not pass its
 checks or causes a regression, and report the action and evidence.
 
-## Observability checks (Plan 0060)
+## Observability checks (Plans 0060-0061)
 
 Use the read-only live Desk and its underlying records to inspect intake, run checkpoints,
 editor reasons, outputs and cost shape. Confirm that snapshots refresh and that worker errors
@@ -36,8 +36,24 @@ counts distinct. IMMEDIATE mode is not sufficient evidence of confirmed X public
 Measure speed using source/peer timestamps, first seen, local output, and confirmed publication
 as separate clocks; unknown stays unknown. Check actual Typefully copy/timestamps when needed,
 because locally tracked outputs do not include every remote draft. Exclude replay exports from
-normal throughput and misses. Recorded model-seat usage omits the retained daily receipt audit
-and external service costs, so do not call it the full bill. These checks add no new autonomy.
+normal throughput and misses. Recorded model-seat usage omits historical daily receipt-audit
+calls and external service costs, so do not call it the full bill. The in-worker daily receipt
+audit is disabled; the rolling audit is separate. These checks add no new autonomy.
+
+Use the run-first workspace's actual final writer packet, source-specific research returns,
+writer dossier and applied editor response when retained. Distinguish prepared versus delivered
+leads, missing/pruned history versus zero work, and editor recovery/fallback versus a real rewrite.
+Rich observations retain 14 days; historical gaps must not be reconstructed as model decisions.
+Check source health for failed/stale polling separately from successful zero-result polls.
+Keep direct per-run costs distinct from shared intake, full completed-period averages from
+partial periods, and estimates from provider-reported charges. Current roster is not historical
+run provenance. After a deployment, confirm observations on the next naturally nonempty run;
+do not manufacture a paid run or draft solely for telemetry verification.
+
+Owner skip reconsideration is a separate delivery intent, not publication approval. Inspect
+queued/completed/blocked state and verify that the writer receives Brady's override and prior
+skip reason, with real dates and normal editorial/duplicate checks intact. Completion means
+an accepted writer response, not acceptance of the story. Do not trigger overrides while auditing.
 
 ## Automatically accumulate editorial evidence
 
@@ -90,6 +106,7 @@ autopost back on.
 ## Never autonomously
 
 - Enable autopost.
+- Queue owner skip overrides or stage/dismiss/retry actions without an explicit owner request.
 - Publish, dismiss, rewrite, or otherwise mutate Typefully content or resolve ambiguous Typefully
   state.
 - Ship editorial improvements outside the bounded writing-execution authority without approval.

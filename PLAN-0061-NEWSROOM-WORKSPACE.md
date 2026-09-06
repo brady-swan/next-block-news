@@ -251,6 +251,18 @@ inline conflict handling, one request on double click, queued state after reload
 notice. Screenshots and the changed PDF page were visually inspected. Real queue POSTs ran
 only against the disposable loopback fixture; no production items were overridden for testing.
 
+Follow-up deployed as `f5b14a0` (implementation `dbb8ac7`), Railway deployment
+`59e9e098-8d22-4eff-b219-3abc9b363384`: SUCCESS. Final clean archive
+`/tmp/nbn-reconsider-deploy.rQ6RY5`: 447 released tests passed. Clean npm/TypeScript/build
+passed; refreshed generated CSS reproduced the clean build manifest. Backup before release:
+`/data/backups/pre-reconsider-20260906T190101Z.db`, 23,580,672 bytes, quick_check OK.
+Production routes, exact static asset hashes, all four API views, owner queue projection,
+history paging and browser sizes passed; zero browser errors and zero browser writes.
+Worker healthy, autopost OFF and daily receipt audit disabled. Rolling audit restored ACTIVE
+at its existing 15-minute interval with updated Plan 0061 observability/owner-override checks.
+No naturally nonempty newsroom run had occurred at the release check; the audit will confirm
+rich writer/research/editor observations on the next real run, without forcing paid work.
+
 - Implementation `250a6e7`, final state-label/test follow-up `d8bfe9e`, pushed to origin/main.
 - Final clean archive `/tmp/nbn-0061-final.h6odUq`: 438 released offline tests passed. The 440-test
   working tree includes two preexisting uncommitted evaluator tests, deliberately excluded.
