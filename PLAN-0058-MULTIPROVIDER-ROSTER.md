@@ -1,8 +1,9 @@
 # Plan 0058 — Deploy the bake-off roster
 
-Status: approved by independent lead coder after one focused provenance clarification.
-Owner authorized plan/review/build/deploy/smoke. Implementation and final independent diff
-review approved. Deployment/smoke in progress.
+Status: implemented, independently reviewed, deployed, and smoke-tested.
+Owner authorized plan/review/build/deploy/smoke. The lead coder approved the plan after one
+focused provenance clarification, then approved the implementation. See the deployment record
+for the live natural-run result and the remaining fresh-draft observation limit.
 
 ## Outcome and scope
 
@@ -118,7 +119,9 @@ the new five-seat roster. Do not silently retarget every ANTHROPIC_MODEL consume
 
 ## Verification record
 
-- Full suite: 407 tests pass, including ten new provider/research tests.
+- Full working-tree suite: 407 tests pass, including ten new provider/research tests.
+  Clean deployment snapshot: all 405 tests pass. Two unrelated, uncommitted evaluation tests
+  and the owner's other working-tree changes were intentionally excluded from the release.
 - Independent final review approved after fixing refusal-order handling and preserving both
   native findings and local wrapper text across memory reload. No remaining deploy blocker.
 - Existing-key live read-only probes passed: Luna low strict preparation; Grok 4.3 medium
@@ -131,3 +134,28 @@ the new five-seat roster. Do not silently retarget every ANTHROPIC_MODEL consume
   `/data/backups/nbn-pre-source-policy-20260906T033407Z.db`.
 - Rollout observation: Luna prep retains its existing 45-second timeout; watch fail-open rate
   against the benchmark's 43.8-second average before changing that setting.
+
+## Deployment record
+
+- Code commit: `3f4b054`, pushed to origin. Railway upload was a clean archive of that commit.
+- Production deployment: `b2e86d05-5380-4bf0-910e-5dbd2ffba175`, SUCCESS.
+- Effective configuration verified from the running container: all five seats match the roster,
+  effort settings match, prompt version is `editorial-core-v2.14-multiprovider`, autopost false,
+  database integrity `ok`. One replica and `/data` volume retained.
+- Deployed-container probes all passed: Luna prep, Grok writer two-turn production dossier,
+  Grok editor JSON, and native research (four web + three X calls, five citation-bound sources,
+  26 seconds, $0.0705835). All probes used a temporary DB and had no publishing side effects.
+- Live dashboard returned HTTP 200 and displays the correct roster, native search counts,
+  and billing provenance. Existing rolling audit remains ACTIVE at 15 minutes and has been
+  updated for roster, writing quality, native evidence, timing, cost, and Luna fail-open checks.
+- First natural due run `cycle:1788666342:e35fc3ea` completed at about 22:45 CT on September 5:
+  three candidates, Luna low preparation succeeded, three Background decisions, no fail-open
+  or run error. Duration 6.93 seconds; preparation cost $0.001344 (rate estimate).
+  With no advancing candidate, the newsroom correctly made no writer/editor calls and no
+  publishing mutations. Full live provider compatibility is verified by the deployed-container
+  probes; a fresh natural Typefully draft/source-reply delivery remains unobserved in this smoke
+  window. The active audit will inspect it when qualifying news arrives; no story was forced.
+
+Rollback settings, if a concrete regression requires them: newsroom `claude-sonnet-5` medium,
+desk preparation `claude-haiku-4-5`, research `claude-haiku-4-5`, editor `claude-opus-5` medium.
+Keep autopost OFF; do not restore the DB for an ordinary model/config rollback.

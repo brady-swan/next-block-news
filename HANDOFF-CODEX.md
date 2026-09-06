@@ -14,6 +14,14 @@ provider-reported provenance through continuity and editor review. The existing 
 15-minute cadence, lifecycle, and source-reply format are unchanged. Autopost stays OFF.
 Read SYSTEM.md before the historical architecture below.
 
+**Plan 0058 live proof:** code `3f4b054` shipped as Railway deployment
+`b2e86d05-5380-4bf0-910e-5dbd2ffba175`. The clean release passed all 405 tests.
+Read-only live probes from the deployed container passed Luna preparation, Grok writer
+tool round-trip/dossier submission, Grok editor output, and native web/X research. Effective
+model/effort settings, dashboard, DB integrity, and autopost OFF were verified. The existing
+15-minute rolling audit is ACTIVE with roster, provenance, cost, and prep failure checks.
+See Plan 0058's deployment record for the natural-run observation and smoke limitations.
+
 **Cost-control update, 2026-09-03 (Plan 0052):** a run-scoped Haiku assignment desk now
 prepares the cross-source batch before Sonnet; protected/high-attention work and every failure
 advance, while all-Background windows can avoid a Sonnet wake. Sonnet receives compact indexes

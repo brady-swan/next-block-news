@@ -1,9 +1,9 @@
 # Next Block News
 
 Autonomous Bitcoin news wire for X at `@nextblocknews_`. A single Python worker watches
-primary sources, press feeds, Perception, and selected X accounts. A bounded Haiku assignment
-desk prepares each due batch; a fresh run-scoped Sonnet desk researches and writes the useful
-work; an independent Sonnet editor makes
+primary sources, press feeds, Perception, and selected X accounts. A bounded Luna assignment
+desk prepares each due batch; a fresh run-scoped Grok 4.3 desk researches and writes the useful
+work; an independent Grok 4.5 editor makes
 the final editorial call; a small mechanical shell then delivers eligible work through
 Typefully.
 
@@ -13,17 +13,23 @@ truth is `prompts/wire_voice.md`; the complete owner's manual is `SYSTEM.md`.
 ## Pipeline
 
 ```text
-poll -> RSS/EDGAR Haiku mailroom -> Haiku assignment desk -> Sonnet newsroom -> Sonnet editor -> Typefully
+poll -> RSS/EDGAR Haiku mailroom -> Luna assignment desk -> Grok 4.3 newsroom -> Grok 4.5 editor -> Typefully
 ```
+
+Production uses Luna at low effort and both Grok seats at medium effort. The newsroom can
+delegate bounded native web/X research to Grok 4.3 medium. These are explicit per-seat
+production overrides; conservative Anthropic defaults remain available for rollback.
 
 | Module | Responsibility |
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
-| `nbn/desk_prep.py` | Run-scoped Haiku distillation/routing; protected work and every failure advance |
+| `nbn/desk_prep.py` | Run-scoped Luna distillation/routing; protected work and every failure advance |
 | `nbn/store.py` | SQLite deduplication, bounded exact-event workbenches and storyline memory, commit lifecycle, post log |
-| `nbn/newsroom.py` | Run-scoped Sonnet newsroom, compact/retrievable desk context, bounded Haiku delegation, and atomic dossier |
+| `nbn/newsroom.py` | Run-scoped Grok newsroom, compact/retrievable desk context, bounded research delegation, and atomic dossier |
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
+| `nbn/models.py` | Small OpenAI/xAI Responses adapter, tool history, and normalized provider usage |
+| `nbn/research.py` | Bounded native web/X research and citation-bound, source-specific findings |
 | `config/source_tiers.toml` | Canonical P0/T1/T2/T3/T4 source registry |
 | `nbn/source_policy.py` | Validated source classification, normalization, and ranking |
 | `nbn/search.py` | Bounded model-free SerpAPI discovery with typed failures and safe account status; returned links are untrusted pointers |
@@ -64,10 +70,12 @@ counts as independent corroboration. Any safely fetched public page with usable 
 inspectable in v2, but every receipt is labeled by capability: known reporting/research,
 known first-party statement, unknown-domain material, social statement, guide/discovery,
 aggregator/wrapper, or syndication. The editor sees those labels and every inspected body.
-Search snippets remain pointers, never evidence.
+Search snippets remain pointers, never evidence. Native research may also supply source-specific
+provider-reported extracts tied to observed citation URLs. These stay distinct from locally
+fetched text, including across sessions; citation membership alone does not establish support.
 
-NBN also keeps a bounded newsroom-native storyline ledger one level above exact events. Haiku
-selects only relevant lines inside its existing assignment call, and Sonnet receives revisioned
+NBN also keeps a bounded newsroom-native storyline ledger one level above exact events. Luna
+selects only relevant lines inside its existing assignment call, and the writer receives revisioned
 cards as untrusted continuity context. Storylines never establish truth, novelty, or publication.
 Marketing Node themes are not part of the live editorial payload.
 
@@ -77,8 +85,9 @@ trust does not cover third-party facts or allegations BPI merely cites.
 
 Optional search resilience adds a complete-query SQLite cache, exact-candidate/story pointer
 reuse, and a shared quota/rate-limit circuit. It never turns a search result into evidence;
-Sonnet must still fetch the page. Enable it with `NBN_SEARCH_RESILIENCE_ENABLED=true`; same-event
-Haiku companion routing is a separate `NBN_DESK_CLUSTER_COMPANIONS_ENABLED=true` rollout flag.
+the writer must obtain usable source material through direct fetch or labeled native research.
+Enable it with `NBN_SEARCH_RESILIENCE_ENABLED=true`; same-event assignment-desk companion
+routing is a separate `NBN_DESK_CLUSTER_COMPANIONS_ENABLED=true` rollout flag.
 
 ## Output modes
 
@@ -172,9 +181,9 @@ corroboration, style, and Editor holds only) or record **Dismiss**. Operator ret
 the complete source/Writer/lint/Editor stack with a fresh web source search, override only the displayed gate, and are
 always delivered as Typefully drafts—not autonomous posts.
 The Desk exposes both RSS-mailroom and assignment-desk Background decisions; **Send to desk**
-atomically restores one item to the Sonnet queue and advances the next desk deadline. It also
-shows per-seat model spend, the daily cost target, initial packet size, Sonnet attempts, prepared
-receipts, and delegated Haiku work.
+atomically restores one item to the newsroom queue and advances the next desk deadline. It also
+shows per-seat model spend, the daily cost target, initial packet size, newsroom attempts,
+prepared receipts, delegated research, native search counts, and billing provenance.
 
 See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
 publishing behavior.
