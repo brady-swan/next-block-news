@@ -672,6 +672,17 @@ aliases = ["bitcoin optech"]
 handles = ["bitcoinoptech"]
 
 [[sources]]
+id = "btcpay-server"
+display_name = "BTCPay Server"
+tier = "p0"
+category = "technical"
+independence_key = "btcpay-server"
+receipt_role = "official"
+domains = ["blog.btcpayserver.org"]
+aliases = ["btcpay server"]
+handles = []
+
+[[sources]]
 id = "bitcoin-stackexchange"
 display_name = "Bitcoin Stack Exchange"
 tier = "t2"

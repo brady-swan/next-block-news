@@ -310,6 +310,10 @@ def _retry_inventory(con, jobs: list[dict], pipeline_run_id: str,
             "_manual_draft_only": bool(job["manual_draft_only"]),
             "_run_id": pipeline_run_id,
         })
+        material = con.execute("SELECT source_material,first_seen FROM items WHERE url_hash=?",
+                               (retry["url_hash"],)).fetchone()
+        if material:
+            retry.update(dict(material))
         action = store.pending_retry_action(con, retry["url_hash"])
         if action:
             if materialize:
@@ -1029,9 +1033,12 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     if not store.renew_cycle_lease(con, lease_owner, ttl_seconds=config.CYCLE_LEASE_SECONDS):
         raise RuntimeError("cycle lease lost after fetch")
     inserted = store.upsert_new_items(con, items)
+    # Collector progress is safe only after all returned items are durable. A crash
+    # between these commits replays idempotent upserts instead of losing news.
+    sources.acknowledge(con, rss_items)
+    sources.acknowledge(con, x_items)
     mailroom = intake_triage.route_cycle(con, inserted, run_id=pipeline_run_id)
     mailroom_reservation = mailroom.pop("reservation", None)
-    summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
     if config.EDITORIAL_ENGINE == "v2" and config.RUN_NEWSROOM_MODE == "live":
         store.activate_reconsiderations(con)
     pending = store.pending_items(con, config.MAX_ITEMS_PER_TRIAGE)
@@ -1058,7 +1065,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         if store.is_non_english(it.get("title", "")) and not it.get("_owner_reconsider"):
             store.set_status(con, it["url_hash"], "skipped", None, "non-English source")
             continue
-        it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
+        # Read the durable candidate, not a different new tweet sharing its outbound URL.
         it["_run_id"] = pipeline_run_id
         fresh.append(it)
     if config.RUN_NEWSROOM_MODE == "off":

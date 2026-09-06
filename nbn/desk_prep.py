@@ -10,10 +10,10 @@ from dataclasses import dataclass
 
 import anthropic
 
-from . import brain, config, guide_context, source_policy, store, models
+from . import brain, config, guide_context, source_policy, store, models, lead_material
 
 log = logging.getLogger("nbn.desk_prep")
-PROMPT_VERSION = "assignment-desk-v2.3.1-bounded-preparation"
+PROMPT_VERSION = "assignment-desk-v2.4-lead-context"
 ROUTES = {"advance", "background"}
 
 SYSTEM = """You prepare the assignment desk for Next Block News, an automated Bitcoin wire.
@@ -27,6 +27,13 @@ Use BACKGROUND only when the card is facially outside Bitcoin/monetary scope, fa
 new development, or code says it is an exact duplicate. Examples include unrelated enforcement,
 ordinary corporate news, generic crypto/altcoin promotion, trading forecasts, and commentary with
 no new fact. A source being obscure is not a reason to background it.
+
+Concrete Bitcoin use, access/adoption, inventive demonstrations, and substantive Bitcoin
+culture can qualify without market or protocol impact. Standalone software releases do not;
+a release can be a development in a bigger ongoing story. Do not confuse those with promotion.
+The x_lead card may preserve longer text and a quoted original. Follow those source paths when
+useful. A fresh post's low likes/reposts are not a reason to dismiss it. Media metadata is a
+lead, not proof that anyone inspected the image/video. Missing quoted text is unknown, not empty.
 
 For each candidate, distill what appears to have happened, why it could matter to a Bitcoin reader,
 what freshness question exists, and the most useful research objective. Source/search leads are
@@ -133,6 +140,7 @@ def _card(item: dict) -> dict:
         "headline_or_post": _text(item.get("title"), 300),
         "summary": _text(item.get("summary"), 500),
         "url": _text(item.get("url"), 1000),
+        "x_lead": lead_material.preview(item.get("source_material")),
         "attention": {
             "guide": bool(guide),
             "marketing_node_discovery": from_node,
@@ -171,6 +179,7 @@ def _packet(cards: list[dict], coverage_keys: list[str], max_bytes: int,
     for row in payload["supplied_storyline_index"]:
         row["summary_excerpt"] = _text(row.get("summary_excerpt"), 140)
     for card in cards:
+        card["x_lead"] = lead_material.compact_preview(card.get("x_lead"))
         card["summary"] = _text(card.get("summary"), 240)
         if card.get("event_hint"):
             card["event_hint"] = {
@@ -181,6 +190,9 @@ def _packet(cards: list[dict], coverage_keys: list[str], max_bytes: int,
     if len(packet.encode("utf-8")) <= max_bytes:
         return packet, compacted
     for card in cards:
+        if card.get("x_lead"):
+            card["x_lead"] = {"text": card["x_lead"]["text"][:120], "text_truncated": True,
+                              "status": "discovery_preview"}
         card["summary"] = ""
         card["event_hint"] = {}
         card["headline_or_post"] = _text(card.get("headline_or_post"), 220)

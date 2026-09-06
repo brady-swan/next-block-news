@@ -10,7 +10,7 @@ import unicodedata
 import uuid
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from . import config, guide_context, source_policy, theme_context
+from . import config, guide_context, source_policy, theme_context, lead_material
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
@@ -448,6 +448,7 @@ ITEM_COLUMNS = {
     "discovery_key": "TEXT",
     "discovery_origin": "TEXT DEFAULT 'legacy'",
     "discovery_context": "TEXT DEFAULT ''",
+    "source_material": "TEXT DEFAULT ''",
     "discovery_candidate_id": "TEXT",
     "decision_stage": "TEXT",
     "decision_category": "TEXT",
@@ -1870,11 +1871,19 @@ def upsert_new_items(con, items) -> list:
     for it in items:
         key = canonical_discovery_key(it["url"])
         existing = con.execute(
-            "SELECT url_hash,status,discovery_context FROM items"
+            "SELECT url_hash,status,discovery_context,source_material FROM items"
             " WHERE discovery_key=? ORDER BY first_seen LIMIT 1",
             (key,),
         ).fetchone()
+        material = lead_material.parse(it.get("source_material"))
         if existing:
+            prior = lead_material.parse(existing["source_material"])
+            # A later post may point to the same article. Never relabel its author/text
+            # as the earlier post. Node/RSS-first records can attach a separate X tip.
+            if material and (not prior or prior["post"]["id"] == material["post"]["id"]):
+                material = lead_material.merge(prior, material)
+                con.execute("UPDATE items SET source_material=? WHERE url_hash=?",
+                            (lead_material.encode(material), existing["url_hash"]))
             if existing["status"] == "new":
                 merged = guide_context.merge_context(
                     existing["discovery_context"], str(it.get("discovery_context") or "")
@@ -1891,14 +1900,19 @@ def upsert_new_items(con, items) -> list:
         candidate_id = str(it.get("discovery_candidate_id") or "")[:32] or None
         cur = con.execute(
             "INSERT OR IGNORE INTO items(url_hash,source,title,url,published_at,first_seen,"
-            "summary,discovery_key,discovery_origin,discovery_context,discovery_candidate_id)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "summary,discovery_key,discovery_origin,discovery_context,discovery_candidate_id,source_material)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (h, it["source"], it["title"], it["url"], it.get("published", ""),
              time.time(), str(it.get("summary") or "")[:600], key, origin, context,
-             candidate_id),
+             candidate_id, lead_material.encode(material) if material else ""),
         )
         if cur.rowcount:
-            fresh.append({**it, "url_hash": h})
+            if it.get("_bootstrap_background"):
+                con.execute("UPDATE items SET status='skipped',decision_stage='intake',"
+                            "decision_category='bootstrap_background',note=? WHERE url_hash=?",
+                            ("Pilot feed initialization: older archive entry, not a new arrival", h))
+            else:
+                fresh.append({**it, "url_hash": h})
     con.commit()
     return fresh
 
@@ -3451,7 +3465,7 @@ def pending_items(con, limit: int) -> list:
     """Items awaiting triage — includes anything stranded by a crash mid-cycle."""
     rows = con.execute(
         "SELECT i.url_hash,i.source,i.title,i.url,i.published_at AS published,"
-        " i.summary,i.discovery_origin,i.discovery_context,i.discovery_candidate_id,"
+        " i.summary,i.discovery_origin,i.discovery_context,i.discovery_candidate_id,i.source_material,i.first_seen,"
         " i.story_key,i.note,i.decision_stage,i.decision_category,"
         " t.route AS intake_route,t.promoted_at AS intake_promoted_at"
         " FROM items i LEFT JOIN intake_triage t ON t.item_hash=i.url_hash"

@@ -116,6 +116,11 @@ For each candidate, use practical editorial judgment:
   intent. When current evidence supports a narrower accurate version, revise to that scope
   instead of dropping useful news;
 - use recent coverage to prevent genuine repetition while allowing useful later developments;
+- concrete Bitcoin use, access/adoption, inventive demonstrations, and substantive Bitcoin
+  culture can earn coverage without market or protocol impact. Require a real interesting
+  development or finding, not promotion or generic celebration. Standalone software releases
+  are not the beat; a release can advance a bigger ongoing security/protocol/governance story.
+  A newborn guide post's low engagement is not a reason to reject its story;
 - if revision removes the actual new development and leaves only a static total or background
   fact, drop the story rather than publish a fact with no news peg;
 - a famous investor, large portfolio, or small holding in Bitcoin-linked equities does not by

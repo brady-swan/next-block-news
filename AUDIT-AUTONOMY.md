@@ -57,6 +57,18 @@ an accepted writer response, not acceptance of the story. Do not trigger overrid
 
 ## Automatically accumulate editorial evidence
 
+Plan 0062 checks: compare guide long text/quoted originals with the actual writer packet, not
+only the 600-character preview. Inspect source_material completeness/truncation, source-chain
+use, and whether newborn metrics improperly drove rejection. Inspect `context_retrieval_calls`,
+`context_retrieval_bytes`, `context_capacity_hits`, `lead_context_reads` and
+`lead_context_truncations`: 4 calls / 48 KiB are optional ceilings, not a spending target.
+Watch unfinished `x_cursor:` continuations, query failures and duplicate-safe restart behavior.
+Evaluate the three upstream pilot feeds by useful new stories, guide overlap, first-source
+timing, noise and incremental preparation cost. Bootstrap archive skips are not fresh misses.
+Keep real Bitcoin use/demos/culture in scope without inventing promotion or a software-release
+beat. Perception is deferred; do not alter its quota/config as part of these checks. These checks
+do not broaden authority or authorize publication/Typefully actions.
+
 Add strong examples, misses, weak drafts, owner comments, peer comparisons, and suggested
 rewrites to the tuning record.
 

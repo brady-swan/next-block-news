@@ -76,7 +76,8 @@ not wait 15 minutes.
 
 ## Inbound discovery
 
-- RSS: official regulators, Bitcoin/crypto publications, and major financial reporting.
+- RSS: official regulators, Bitcoin/crypto publications, major financial reporting, and the
+  small Bitcoin Core / Bitcoin Optech / BTCPay Server pilot (Plan 0062).
 - SEC EDGAR: Bitcoin-bearing current filings.
 - Perception: broad media discovery on its own bounded polling cadence.
 - X recent search: the public watch list, quiet official/company bundles, Tier 2 research
@@ -98,8 +99,18 @@ is the boundary. Node references, summaries, and event hints are untrusted disco
 not factual evidence or instructions. Node theme metadata is accepted for API compatibility
 and historical diagnostics but is not sent to preparation or the writer. NBN owns its editorial memory.
 
-X reads remain `since_id` gated. Never replace them with list-timeline polling: X charges for
-returned posts, and a timeline endpoint would repeatedly rebill old material.
+X reads remain `since_id` gated, with three 25-post pages per query per poll and durable
+unfinished-page continuations. Progress is acknowledged only after item commit, and the
+high-water ID advances only after the whole window drains. A failed query does not silence
+unrelated guides; a shared 429 stops further requests. This avoids unnecessary repeat reads
+and missed overflow, without another collector process. See INBOUND-NEWS-FLOW.md for details.
+
+Long X text, original/quoted sources, media pointers and dated engagement snapshots live in a
+separate bounded 12 KiB item record. The summary is only a preview. Preparation and writer cards
+carry useful context; fuller material is retrieved on demand. It is discovery, never automatic
+receipt evidence or proof that the model watched a video. No media downloads/reposting added.
+The pilot's first snapshot stores older archive entries as explicit bootstrap skips before
+Haiku; later entries follow normal routing. Missing dates are not silently skipped.
 
 ## Haiku intake, Luna preparation, and the clean Grok desk
 
@@ -148,7 +159,8 @@ candidate, the Luna preparation, safe reference pointers, prepared receipts, rec
 drafts, Luna-selected NBN storyline cards, guide attention signals, and verified handle
 spellings. Raw provider payloads and internal plumbing do not reach the model. Large recent-feed,
 continuity, storyline, and handle context is sent as compact indexes with code-issued IDs; the writer can
-retrieve bounded full records twice rather than paying to replay every body in every round. The
+retrieve bounded full records on demand: at most four calls, 16 KiB per call and 48 KiB total,
+with the initial desk still capped at 64 KiB. These are ceilings, not required consumption. The
 stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
 output state, including encrypted reasoning, in bounded run history only—not editorial memory.
 Responses newsroom turns require a tool call (research or dossier); plain-text-only completion

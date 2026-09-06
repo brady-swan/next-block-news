@@ -69,7 +69,7 @@ COMPACT_DESK_HISTORY_BYTES = int(
     os.environ.get("NBN_COMPACT_DESK_HISTORY_BYTES", str(192 * 1024))
 )
 COMPACT_DESK_RETRIEVAL_CALLS = int(
-    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_CALLS", "2")
+    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_CALLS", "4")
 )
 COMPACT_DESK_RETRIEVAL_ROWS = int(
     os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_ROWS", "8")
@@ -78,7 +78,7 @@ COMPACT_DESK_RETRIEVAL_BYTES = int(
     os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_BYTES", str(16 * 1024))
 )
 COMPACT_DESK_RETRIEVAL_TOTAL_BYTES = int(
-    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_TOTAL_BYTES", str(24 * 1024))
+    os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_TOTAL_BYTES", str(48 * 1024))
 )
 
 # A separately configured assignment seat prepares the cross-source writer desk.

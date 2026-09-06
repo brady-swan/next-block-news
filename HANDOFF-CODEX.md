@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-06 for Plan 0060. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-06 for Plan 0062. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -62,7 +62,8 @@ Typefully is the production rail. Scheduling, publication and read-back confirma
 different states. Durable mutation intents prevent blind retries of ambiguous writes.
 Same-event work can replace only a sole untouched, comment-free draft when enabled; a
 scheduled/publishing/published event blocks duplicate creation. A genuine material update
-may justify a separate UPDATE. Owner actions force draft-only.
+may justify a separate UPDATE. Legacy gate/stage actions force draft-only; a skip override
+requests normal reconsideration, not forced publication or forced draft-only.
 
 Never enable autopost, mutate Typefully content, resolve ambiguous remote state, rotate
 credentials or do destructive database work without specific authority. Corrections are
@@ -153,4 +154,13 @@ update-label deferrals now record held with the exact reason instead of leaving 
 run completion. No editorial, retry or publishing behavior changed. Deployment
 `995a195e-9ae9-4458-8ef3-6d2096791b18` succeeded; 426 clean-release tests, authenticated
 route checks and natural worker cycles passed. Historical rows were not rewritten. See
-AUDIT-FIX-2026-09-06-PRE-EDITOR-LIFECYCLE.md. The separate Plan 0061 redesign remains unshipped.
+AUDIT-FIX-2026-09-06-PRE-EDITOR-LIFECYCLE.md. Plan 0061 and its owner skip-override follow-up
+subsequently shipped as recorded in PLAN-0061-NEWSROOM-WORKSPACE.md.
+
+Plan 0062's contract: bounded richer X material survives pending/retry inventory; pagination
+acknowledgments happen only after upsert commits; unfinished windows resume next poll. Guide
+source/media context is still discovery, not evidence. Bitcoin Core, Optech and BTCPay feeds
+are a measured upstream pilot with explicit first-snapshot archive skips. No standalone
+software-release beat, model/cadence change or Perception work. Owner-approved retrieval caps
+are four calls / 48 KiB total, 16 KiB per call and 64 KiB initial. See its release record for
+deployment and smoke status. Autopost remains OFF; restore the separate rolling audit after smoke.

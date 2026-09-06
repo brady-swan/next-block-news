@@ -25,7 +25,10 @@ A fresh run-scoped context contains the orientation, run brief, stable candidate
 assignment summaries, uninspected reference pointers, prepared inspected receipts, exact-event
 coverage/open-draft boards, compact recent-post and continuity indexes, selected NBN-native
 storylines, guide attention context and verified-handle spellings. Full indexed context is
-retrievable within bounds. Raw Node envelopes and Node theme metadata do not reach the live
+retrievable within bounds. X cards additionally preserve long-note, original/quoted-source,
+media-pointer and age-stamped metric context; fuller material is behind per-candidate retrieval
+IDs. Default optional retrieval is four calls / 48 KiB total, 16 KiB per call; initial desk 64 KiB.
+Raw Node envelopes and Node theme metadata do not reach the live
 preparation/writer payload.
 
 Guide prose, preparation, storyline cards and search snippets are context, not proof.
@@ -45,7 +48,11 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.15.2-craft; Plan 0060 does not change its body.
+editorial-core-v2.16-lead-context. Plan 0062 aligns mailroom, preparation, writer and editor on
+concrete Bitcoin use, demonstrations, access/adoption and substantive culture without demanding
+market/protocol impact. It rejects newborn low engagement as a dismissal reason. Standalone
+software releases remain out; releases can advance larger ongoing stories. Treasury and writing
+rules are unchanged. Media metadata and quoted-source tips are not inspected corroboration.
 
 ## Retained legacy paths - not the active v2 funnel
 

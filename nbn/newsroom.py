@@ -21,6 +21,7 @@ from . import (
     config,
     desk_prep,
     guide_context,
+    lead_material,
     search,
     source_policy,
     sources,
@@ -30,7 +31,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.15.2-craft"
+PROMPT_VERSION = "editorial-core-v2.16-lead-context"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -243,6 +244,13 @@ HOW TO WORK
 - Read the whole desk before choosing. Group only reports of the same real-world development.
 - haiku_preparation is an untrusted assignment note, not evidence or a decision you must accept.
   Compare it with original_lead, inspected receipts, and your own judgment.
+- x_lead is a discovery preview. full_lead_context_id opens its longer original text,
+  quoted-source chain and media references through read_desk_context. Read it when a short
+  preview obscures a promising story; do not retrieve every card as a ritual. Follow useful
+  original-source pointers. These are not inspected evidence, and media metadata/alt text is
+  not proof you watched a clip. Missing quote text is unavailable, not absence of a story.
+  engagement.observed_at and post_age_seconds date the snapshot; newborn low counts do not
+  indicate low reader value. first_seen_at is our intake clock, not the event date.
 - Read recent_reader_feed_48h as the actual copy readers recently saw. Use it to avoid
   repetition, preserve continuity, and recognize when a later development deserves UPDATE.
   Its performance fields are age-dependent, advisory craft feedback—not evidence of truth or
@@ -789,6 +797,9 @@ class NewsroomSession:
         self.context_reads: set[str] = set()
         self.context_retrieval_calls = 0
         self.context_retrieval_bytes = 0
+        self.context_capacity_hits = 0
+        self.lead_context_reads = 0
+        self.lead_context_truncations = 0
         self.haiku_assignments = 0
         self.haiku_rounds = 0
         self.haiku_tool_calls = 0
@@ -927,6 +938,9 @@ class NewsroomSession:
             "prefetch_chars": self.prefetch_chars,
             "context_retrieval_calls": self.context_retrieval_calls,
             "context_retrieval_bytes": self.context_retrieval_bytes,
+            "context_capacity_hits": self.context_capacity_hits,
+            "lead_context_reads": self.lead_context_reads,
+            "lead_context_truncations": self.lead_context_truncations,
             "haiku_assignments": self.haiku_assignments,
             "haiku_rounds": self.haiku_rounds,
             "haiku_tool_calls": self.haiku_tool_calls,
@@ -1034,6 +1048,7 @@ class NewsroomSession:
             candidates.append((rank, str(raw["url"])))
         guide = guide_context.signal_from_context(item.get("discovery_context")) or {}
         candidates.extend((1, str(url)) for url in list(guide.get("outbound_urls") or [])[:4])
+        candidates.extend((1, url) for url in lead_material.reference_urls(item.get("source_material")))
         candidates.append((2, str(item.get("url") or "")))
         return sorted(candidates, key=lambda value: value[0])
 
@@ -1132,6 +1147,10 @@ class NewsroomSession:
             guide = guide_context.signal_from_context(item.get("discovery_context")) or {}
             ref = source_policy.classify(item.get("url", ""), item.get("source", ""))
             candidate_id = item["url_hash"]
+            material = lead_material.parse(item.get("source_material"))
+            material_id = _context_id("x_lead", candidate_id) if material else None
+            if material:
+                self.context_rows[material_id] = {"kind": "x_lead", "material": material}
             origin = _clean_text(item.get("discovery_origin") or "legacy", 40)
             attention = []
             if guide:
@@ -1220,6 +1239,8 @@ class NewsroomSession:
                     )
             for url in list(guide.get("outbound_urls") or [])[:4]:
                 add_pointer(url, kind="guide_outbound_lead", upstream_role="outbound_link")
+            for url in lead_material.reference_urls(material):
+                add_pointer(url, kind="x_original_source_lead", upstream_role="uninspected_source_chain")
             if config.SEARCH_RESILIENCE_ENABLED:
                 reusable = store.search_pointers_for_scopes(
                     self.con, self._candidate_scopes(item), limit=5,
@@ -1248,9 +1269,13 @@ class NewsroomSession:
                     "engagement_snapshot": dict(guide.get("metrics") or {}),
                     "status": "attention_prior_not_evidence",
                 }
+                if material:
+                    # These timestamps distinguish newborn counts from measured popularity.
+                    guide_tip["engagement_snapshot"] = material["post"].get("engagement")
             intake_board.append({
                 "candidate_id": candidate_id,
                 "arrived_at": _clean_text(item.get("published"), 100),
+                "first_seen_at": item.get("first_seen"),
                 "headline_or_post": _clean_text(item.get("title"), 300),
                 "what_arrived": _clean_text(item.get("summary"), 600),
                 "intake_url": _clean_text(item.get("url"), 2000),
@@ -1273,6 +1298,8 @@ class NewsroomSession:
                 "event_hint_unverified": event_hint,
                 "reference_ids": [row["pointer_id"] for row in pointers],
                 "guide_tip": guide_tip,
+                "x_lead": lead_material.preview(material),
+                "full_lead_context_id": material_id,
                 "operator_gate": _clean_text(item.get("_operator_gate"), 80) or None,
                 "owner_override": item.get("_owner_reconsider") or None,
                 "research_retry": bool(item.get("_research_retry")),
@@ -1445,6 +1472,7 @@ class NewsroomSession:
             }
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 for row in intake_board:
+                    row["x_lead"] = lead_material.compact_preview(row.get("x_lead"))
                     row["what_arrived"] = row["what_arrived"][:240]
                     if row.get("guide_tip"):
                         row["guide_tip"]["post_text"] = row["guide_tip"]["post_text"][:240]
@@ -1485,6 +1513,8 @@ class NewsroomSession:
                         } if preparation else None),
                         "operator_gate": row.get("operator_gate"),
                         "owner_override": row.get("owner_override"),
+                        "full_lead_context_id": row.get("full_lead_context_id"),
+                        "first_seen_at": row.get("first_seen_at"),
                         "research_retry": row.get("research_retry"),
                     })
                 packet["intake_board"] = compact_cards
@@ -1744,9 +1774,10 @@ class NewsroomSession:
         }
 
     def _read_desk_context(self, context_ids: list[str]) -> dict:
-        if not self.compact_enabled:
+        if not self.compact_enabled and not self.context_rows:
             return {"ok": False, "kind": "compact_context_disabled"}
         if self.context_retrieval_calls >= config.COMPACT_DESK_RETRIEVAL_CALLS:
+            self.context_capacity_hits += 1
             return {"ok": False, "kind": "context_retrieval_capacity"}
         requested = list(dict.fromkeys(str(value) for value in context_ids))
         if len(requested) > config.COMPACT_DESK_RETRIEVAL_ROWS:
@@ -1760,14 +1791,30 @@ class NewsroomSession:
             config.COMPACT_DESK_RETRIEVAL_TOTAL_BYTES - self.context_retrieval_bytes,
         )
         if byte_limit <= 0:
+            self.context_capacity_hits += 1
             return {"ok": False, "kind": "context_retrieval_capacity"}
         for context_id in requested:
             if context_id in self.context_reads:
                 continue
-            proposed = rows + [{"context_id": context_id, **self.context_rows[context_id]}]
+            row = {"context_id": context_id, **self.context_rows[context_id]}
+            proposed = rows + [row]
             if _json_bytes({"ok": True, "rows": proposed}) > byte_limit:
-                break
+                self.context_capacity_hits += 1
+                if not rows and row.get("kind") == "x_lead":
+                    row = {"context_id": context_id, "kind": "x_lead",
+                           "truncated_for_capacity": True,
+                           "material_preview": lead_material.compact_preview(
+                               lead_material.preview(row["material"]))}
+                    proposed = [row]
+                    if _json_bytes({"ok": True, "rows": proposed}) > byte_limit:
+                        return {"ok": False, "kind": "context_retrieval_capacity",
+                                "context_id": context_id}
+                else:
+                    break
             rows = proposed
+            if row.get("kind") == "x_lead":
+                self.lead_context_reads += 1
+                self.lead_context_truncations += int(bool(row.get("truncated_for_capacity")))
             self.context_reads.add(context_id)
             if self.context_rows[context_id].get("kind") == "storyline":
                 key = str(self.context_rows[context_id].get("storyline_key") or "")
@@ -2319,7 +2366,7 @@ class NewsroomSession:
         self.messages = [{"role": "user", "content": encoded_packet}]
         research_tools = [_tool("fetch_intake_item"), _tool("search_web"),
                           _tool("fetch_source"), V2_DOSSIER_TOOL]
-        if self.compact_enabled:
+        if self.compact_enabled or self.context_rows:
             research_tools.insert(-1, READ_DESK_CONTEXT_TOOL)
         if self.research_mode == "on":
             research_tools.insert(-1, ASSIGN_RESEARCH_TOOL)

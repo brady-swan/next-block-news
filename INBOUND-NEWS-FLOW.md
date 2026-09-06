@@ -37,7 +37,7 @@ of preparation, research, writing or editing.
 | --- | --- | --- |
 | RSS | Every worker cycle; up to 30 entries per feed | Loop sleeps 60 seconds after work; long work delays polls |
 | SEC EDGAR | Every worker cycle; up to 25 Bitcoin-bearing 8-K hits | Query covers today/yesterday, not all filing types |
-| X recent search | 180-second throttle | since_id per query; initial lookback six hours |
+| X recent search | 180-second throttle; up to three 25-post pages/query/poll | Durable continuation; since_id advances only after storage and full window drain; initial lookback six hours |
 | X public-list membership | 3,600 seconds | The list supplies accounts, not a polled timeline |
 | Direct Perception | 900-second throttle; up to 50 results | Broad Bitcoin discovery, yesterday/today |
 | Node wire API | Persisted 300-second throttle | Each valid run consumed once, including empty runs |
@@ -58,14 +58,21 @@ calendar date. It never treats stale Node prose as source evidence.
 
 The current RSS roster in nbn/sources.py is Federal Reserve, SEC Press Releases, CFTC,
 Bitcoin Magazine, CoinDesk, The Block, Cointelegraph, Bloomberg Markets, CNBC, Wall Street
-Journal, Fox Business, and PR Newswire Financial. Feed failures are isolated, not proof
+Journal, Fox Business, PR Newswire Financial, plus the Plan 0062 pilot: Bitcoin Core,
+Bitcoin Optech, and BTCPay Server. Feed failures are isolated, not proof
 that every listed feed is currently responding. No general Treasury/congress/court RSS
 feed is present just because those institutions are allowed source categories.
 
 EDGAR searches Bitcoin-bearing 8-Ks from today/yesterday. Official-feed candidates still
 pass through the cheap mailroom; the user explicitly accepted false-negative review there.
 
-X uses recent-search queries with persisted since_id, never the repeatedly billed list
+Pilot feeds initialize without flooding the desk with archives: on their first successful
+snapshot only, entries older than the configured intake window (24 hours) are persisted as
+`bootstrap_background` skips before Haiku. Unknown dates pass normally. Initialization is
+acknowledged after item commit; later new entries use normal routing. Software releases are
+not a new beat: they qualify only as developments in a bigger ongoing story.
+
+X uses recent-search queries with persisted since_id, not repeated full-list
 timeline. The public X List supplies a user-managed primary roster. Fixed queries add
 official/company accounts, Tier 2 research (including Kobeissi Letter and Barchart), strong
 Bitcoin guide accounts, and broader detectors. BitcoinNewsCom, Bitcoin Archive, Bitcoin
@@ -78,8 +85,24 @@ A guide's news tip is not corroboration; inspected social text proves what the a
 not an independently verified underlying event. Links remain uninspected pointers until
 fetched or processed by the native research path.
 
+X also retains a separate, bounded 12 KiB `source_material` record: long note text, original
+author/post/date, one level of quoted/referenced sources, links, media metadata, and age-stamped
+engagement. Missing quote expansions and truncated text are explicit. Media is neither downloaded
+nor visually inspected by this intake change. Preparation gets a richer preview; the writer can
+retrieve the fuller card via `full_lead_context_id`. Source-chain URLs enter the existing pointer
+and prefetch path, not the evidence catalog automatically. Same-post enrichment never changes
+first-seen, first origin or disposition; different posts sharing an article do not overwrite
+one another's attached material. Pending inventory and research retries reload durable material.
+
+`x_cursor:<query hash>` stores the lower bound and unfinished page token/high-water ID. It is
+acknowledged after upsert, so an interruption replays instead of losing returned posts. A failed
+query leaves others running; a shared 429 stops further requests. Three-page overflow continues
+next poll, rather than jumping past unread posts. Existing `x_since_` keys seed the new cursor.
+
 Direct Perception queries the Bitcoin feed separately from the Node. Shared credentials
 do not imply free usage or shared NBN caching; provider overlap remains a measurement issue.
+The separate REST quota pool is currently exhausted. Perception changes are deferred by the owner;
+this release does not change its configuration or attempt to substitute another quota pool.
 
 ## Marketing Node boundary
 

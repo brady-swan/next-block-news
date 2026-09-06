@@ -9,12 +9,16 @@ import json
 import logging
 import re
 import socket
+import time
+import datetime as dt
+import hashlib
+from email.utils import parsedate_to_datetime
 import xml.etree.ElementTree as ET
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from . import config, guide_context
+from . import config, guide_context, lead_material
 
 log = logging.getLogger("nbn.sources")
 
@@ -45,6 +49,12 @@ def _assert_public_http_url(url: str) -> None:
     if not addresses or any(not address.is_global for address in addresses):
         raise UnsafeSourceURL("private, loopback, link-local, or reserved source host rejected")
 
+PILOT_FEEDS = {
+    "Bitcoin Core": "https://bitcoincore.org/en/rss.xml",
+    "Bitcoin Optech": "https://bitcoinops.org/feed.xml",
+    "BTCPay Server": "https://blog.btcpayserver.org/rss.xml",
+}
+
 FEEDS = {
     # Primary sources (an item here is presumptively class=primary)
     "Federal Reserve": "https://www.federalreserve.gov/feeds/press_all.xml",
@@ -62,12 +72,41 @@ FEEDS = {
     # Regulators + newswires (added with the speed package; URLs live-tested 2026-08-30)
     "CFTC": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml",
     "PR Newswire Financial": "https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss",
+    **PILOT_FEEDS,
 }
 
 PRIMARY_SOURCES = {"Federal Reserve", "SEC Press Releases", "CFTC", "SEC EDGAR"}
 
 UA = "NextBlockNews/0.1 (+news wire; contact via x.com)"
 _TAG_RE = re.compile(r"<[^>]+>")
+
+
+class CollectedBatch(list):
+    """Items plus collector-owned progress. Acknowledge only after durable upsert."""
+
+    def __init__(self):
+        super().__init__()
+        self.checkpoints = {}
+
+
+def acknowledge(con, batch) -> None:
+    if not isinstance(batch, CollectedBatch) or not batch.checkpoints:
+        return
+    with con:
+        con.executemany("INSERT OR REPLACE INTO kv(k,v) VALUES (?,?)",
+                        list(batch.checkpoints.items()))
+
+
+def _bootstrap_old(published: str, now: float) -> bool:
+    try:
+        try:
+            stamp = dt.datetime.fromisoformat(published.replace("Z", "+00:00"))
+        except ValueError:
+            stamp = parsedate_to_datetime(published)
+        return bool(stamp.tzinfo is not None and
+                    now - stamp.timestamp() > config.DESK_CANDIDATE_MAX_AGE_HOURS * 3600)
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        return False  # Unknown date is not silently suppressed.
 
 
 def _text(el, *names) -> str:
@@ -106,14 +145,21 @@ def _parse_feed(source: str, body: str) -> list:
 
 def fetch_feeds(con=None) -> list:
     """Fetch all feeds; per-feed failures are logged and skipped."""
-    from . import observations
-    out = []
+    from . import observations, store
+    out = CollectedBatch()
     with httpx.Client(timeout=15, headers={"User-Agent": UA}, follow_redirects=True) as client:
         for source, url in FEEDS.items():
             try:
                 resp = client.get(url)
                 resp.raise_for_status()
                 rows = _parse_feed(source, resp.text)
+                bootstrap_key = "pilot_feed_initialized:" + source
+                if (source in PILOT_FEEDS and con is not None
+                        and not store.kv_get(con, bootstrap_key)):
+                    for row in rows:
+                        if _bootstrap_old(row["published"], time.time()):
+                            row["_bootstrap_background"] = True
+                    out.checkpoints[bootstrap_key] = str(time.time())
                 out.extend(rows)
                 observations.source_poll(con, "rss:" + source, source, "rss", count=len(rows))
             except Exception as exc:  # noqa: BLE001 - one bad feed must not kill the cycle
@@ -287,117 +333,115 @@ def _list_member_queries(client) -> list:
 _last_x_poll = 0.0
 
 
+def _x_item(tweet: dict, includes: dict, query: str, captured: float) -> dict:
+    if not str(tweet.get("id") or "").isdigit() or not isinstance(tweet.get("text"), str):
+        raise ValueError("malformed X post; page not acknowledged")
+    material = lead_material.capture(tweet, includes, captured)
+    post = material["post"]
+    uname = post.get("handle") or "unknown"
+    canonical_guide = guide_context.normalize_handle(uname)
+    label = ("X guide" if canonical_guide else
+             "X detector" if query in X_DETECTOR_QUERIES else "X")
+    outbound = []
+    for url in post.get("linked_urls", []):
+        host = (urlsplit(url).hostname or "").lower()
+        if not any(host == h or host.endswith("." + h) for h in ("x.com", "twitter.com", "t.co")):
+            outbound.append(url)
+    story_url = outbound[0] if label == "X" and len(outbound) == 1 else post["url"]
+    item = {
+        "source": f"{label} @{uname}", "title": post["text"][:200],
+        "url": story_url, "published": post.get("published_at") or "",
+        "summary": post["text"][:600], "source_material": lead_material.encode(material),
+    }
+    if canonical_guide:
+        metrics = post.get("engagement") or {}
+        item["discovery_context"] = json.dumps({
+            "untrusted_discovery_context": True, "origin": "bitcoin_news_guide_account",
+            "guide_signal": guide_context.build_signal(
+                canonical_guide, post["url"], post["text"], {
+                    "characters": post.get("text_characters", len(post["text"])),
+                    "likes": metrics.get("likes"), "reposts": metrics.get("reposts"),
+                    "quotes": metrics.get("quotes"),
+                }, outbound),
+        }, separators=(",", ":"))
+    return item
+
+
 def fetch_x(con=None) -> list:
-    """X reads are pay-per-POST-READ (~$0.005 each) on the shared bearer. since_id is the
-    cost seam: without it every poll re-returns (re-bills) the same recent tweets; with it
-    a quiet poll returns zero posts and costs zero."""
+    """Bounded recent search; no checkpoint moves until the worker stores this batch."""
     global _last_x_poll
-    import time as _time
-    if not config.X_BEARER_TOKEN:
+    if not config.X_BEARER_TOKEN or time.time() - _last_x_poll < config.X_POLL_SECONDS:
         return []
-    if _time.time() - _last_x_poll < config.X_POLL_SECONDS:
-        return []
-    _last_x_poll = _time.time()
+    _last_x_poll = time.time()
     from . import store, observations
-    out = []
+    out = CollectedBatch()
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
         queries = _list_member_queries(client) + X_PRIMARY_QUERIES + X_RESEARCH_QUERIES
         if config.X_DETECTOR_ENABLED:
             queries += X_GUIDE_QUERIES + X_DETECTOR_QUERIES
-        for qi, q in enumerate(queries):
+        for q in dict.fromkeys(queries):
+            qkey = hashlib.sha256(q.encode()).hexdigest()[:12]
+            cursor_key = "x_cursor:" + qkey
             try:
-                params = {
-                    "query": q, "max_results": 25,
-                    "tweet.fields": "created_at,public_metrics,author_id,entities",
-                    "expansions": "author_id", "user.fields": "username,verified",
-                }
-                # Key since_id by query CONTENT hash, not position — list edits reorder queries.
-                import hashlib as _hl
-                qkey = _hl.sha256(q.encode()).hexdigest()[:12]
-                since_id = store.kv_get(con, f"x_since_{qkey}") if con is not None else ""
-                if since_id:
-                    params["since_id"] = since_id
-                else:
-                    # First run: only the freshness window, not 7 days of backlog reads.
-                    import datetime
-                    params["start_time"] = (
-                        datetime.datetime.now(datetime.timezone.utc)
-                        - datetime.timedelta(hours=6)
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-                resp = client.get(
-                    "https://api.twitter.com/2/tweets/search/recent", params=params)
-                resp.raise_for_status()
-                data = resp.json()
-                newest = data.get("meta", {}).get("newest_id")
-                if newest and con is not None:
-                    store.kv_set(con, f"x_since_{qkey}", newest)
-                users = {u["id"]: u for u in data.get("includes", {}).get("users", [])}
-                for t in data.get("data", []):
-                    user = users.get(t["author_id"], {})
-                    uname = user.get("username", "unknown")
-                    canonical_guide = guide_context.normalize_handle(uname)
-                    if canonical_guide:
-                        label = "X guide"
-                    elif q in X_DETECTOR_QUERIES:
-                        label = "X detector"
-                    else:
-                        label = "X"
-                    tweet_url = f"https://x.com/{uname}/status/{t['id']}"
-                    # A tweet is usually a POINTER: when a primary/roster account links
-                    # out (FRED graph, press release, filing), THAT page is the story —
-                    # follow it down so drafting reads the source, not the tweet, and the
-                    # published receipt links the primary (SLF/PCE lesson, 2026-08-30).
-                    # Detector tips keep the tweet URL (their links get replaced by
-                    # web corroboration anyway).
-                    outbound = []
-                    if label in {"X", "X guide"}:
-                        for u in (t.get("entities", {}) or {}).get("urls", []):
-                            target = u.get("unwound_url") or u.get("expanded_url") or ""
-                            host = target.split("/")[2].lower() if target.count("/") >= 2 else ""
-                            if host and not host.endswith(("twitter.com", "x.com", "t.co")):
-                                outbound.append(target)
-                    # Keep guide posts as distinct leads even when RSS already ingested
-                    # the linked page. Their value is the independent attention signal;
-                    # source resolution receives the outbound links separately below.
-                    story_url = (outbound[0] if label == "X" and len(outbound) == 1
-                                 else tweet_url)
-                    summary = t["text"][:600]
-                    if story_url != tweet_url:
-                        summary += f"\n[original post: {tweet_url}]"
-                    elif label == "X guide" and outbound:
-                        summary += "\n[linked pages: " + " ".join(outbound[:4]) + "]"
-                    item = {
-                        "source": f"{label} @{uname}",
-                        "title": t["text"][:200],
-                        "url": story_url,
-                        "published": t.get("created_at", ""),
-                        "summary": summary,
+                saved = store.kv_get(con, cursor_key) if con is not None else ""
+                state = json.loads(saved) if saved else {}
+                if not isinstance(state, dict):
+                    raise ValueError("invalid X cursor")
+                legacy_since = store.kv_get(con, "x_since_" + qkey) if con is not None else ""
+                if not state:
+                    state = ({"since_id": legacy_since} if legacy_since else {"start_time":
+                        (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=6))
+                        .strftime("%Y-%m-%dT%H:%M:%SZ")})
+                lower = {k: state[k] for k in ("since_id", "start_time") if state.get(k)}
+                head = state.get("head") or ""
+                token = state.get("next_token") or ""
+                count = 0
+                for _ in range(3):
+                    params = {
+                        "query": q, "max_results": 25, **lower,
+                        "tweet.fields": "created_at,public_metrics,author_id,entities,note_tweet,referenced_tweets,attachments",
+                        "expansions": "author_id,referenced_tweets.id,referenced_tweets.id.author_id,attachments.media_keys",
+                        "user.fields": "username",
+                        "media.fields": "type,url,preview_image_url,alt_text,duration_ms",
                     }
-                    if label == "X guide":
-                        metrics = t.get("public_metrics") or {}
-                        signal = guide_context.build_signal(
-                            canonical_guide, tweet_url, t["text"], {
-                                "characters": len(t["text"]),
-                                "likes": int(metrics.get("like_count") or 0),
-                                "reposts": int(metrics.get("retweet_count") or 0),
-                                "quotes": int(metrics.get("quote_count") or 0),
-                            }, outbound,
-                        )
-                        item["discovery_context"] = json.dumps({
-                            "untrusted_discovery_context": True,
-                            "origin": "bitcoin_news_guide_account",
-                            "guide_signal": signal,
-                        }, separators=(",", ":"))
-                    out.append(item)
+                    if token:
+                        params["next_token"] = token
+                    resp = client.get("https://api.twitter.com/2/tweets/search/recent", params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if not isinstance(data, dict) or "meta" not in data:
+                        raise ValueError("invalid X search response")
+                    if data.get("errors") and not data.get("data"):
+                        raise ValueError("X search returned only errors")
+                    # Normalize the entire page before accepting any of its progress.
+                    rows = [_x_item(t, data.get("includes") or {}, q, time.time())
+                            for t in data.get("data", [])]
+                    meta = data.get("meta") or {}
+                    if not head:
+                        head = str(meta.get("newest_id") or
+                                   max((int(t["id"]) for t in data.get("data", [])), default=0) or "")
+                    token = str(meta.get("next_token") or "")
+                    if token and (not rows or not head):
+                        raise ValueError("X pagination omitted page identity")
+                    out.extend(rows)
+                    count += len(rows)
+                    progress = ({**lower, "head": head, "next_token": token} if token else
+                                {"since_id": head} if head else
+                                {"since_id": lower["since_id"]} if lower.get("since_id") else {})
+                    out.checkpoints[cursor_key] = json.dumps(progress, separators=(",", ":"))
+                    if not token:
+                        break
                 group = ("Bitcoin news guides" if q in X_GUIDE_QUERIES else
                          "Research accounts" if q in X_RESEARCH_QUERIES else
                          "Detectors" if q in X_DETECTOR_QUERIES else "Watched accounts")
-                observations.source_poll(con, "x:" + qkey, group + " · " + qkey, "x", count=len(data.get("data", [])))
-            except Exception as exc:  # noqa: BLE001
-                observations.source_poll(con, "x:" + qkey, "X query · " + qkey, "x", error=type(exc).__name__)
-                log.warning("x query failed: %s", exc)
-                break  # a 429 would fail the rest too
+                observations.source_poll(con, "x:" + qkey, group + " · " + qkey, "x", count=count)
+            except Exception as exc:  # one query must not suppress unrelated guides
+                observations.source_poll(con, "x:" + qkey, "X query · " + qkey, "x",
+                                         error=type(exc).__name__)
+                log.warning("x query %s failed: %s", qkey, type(exc).__name__)
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+                    break  # shared rate limit; retain acknowledged earlier-page progress
     return out
 
 

@@ -26,6 +26,7 @@ production overrides; conservative Anthropic defaults remain available for rollb
 | Module | Responsibility |
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
+| `nbn/lead_material.py` | Bounded long X text, quoted sources, media pointers and metric age; discovery, not evidence |
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
 | `nbn/desk_prep.py` | Run-scoped Luna distillation/routing; protected work and every failure advance |
 | `nbn/store.py` | SQLite deduplication, bounded exact-event workbenches and storyline memory, commit lifecycle, post log |

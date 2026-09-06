@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-06 for Plan 0061. This index separates how NBN works now from how earlier
+Updated 2026-09-06 for Plan 0062. This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -21,6 +21,7 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | .env.example | Safe local/rollout template, not a dump of production settings |
 | railway.toml, Dockerfile, requirements.txt | Actual deployment/build contract |
 | config/source_tiers.toml | Actual source registry; rank is not an automatic publish verdict |
+| PLAN-0062-LEAD-FIDELITY.md | Focused lead-context, durable X pagination and upstream-feed pilot release |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.
 Plan 0060 updates documentation metadata, not loaded editorial text. The charter
@@ -60,3 +61,8 @@ Module docstrings/comments were reviewed for obsolete seat names; compatibility 
 persisted field names and loaded prompts were preserved. Plan 0061 adds bounded observation and
 source-health tables, the approved static React workspace and owner-requested legacy audit disable.
 It does not change provider keys, editorial policy or enable autopost.
+
+Plan 0062 adds bounded X material, post-commit collector checkpoints, three pilot feeds and
+owner-approved Bitcoin-native story-selection clarifications. Models, clocks, Perception and
+publishing rails are unchanged. The dated visual PDF predates these incremental intake details;
+SYSTEM.md and INBOUND-NEWS-FLOW.md contain the current contract.
