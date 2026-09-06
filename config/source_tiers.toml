@@ -963,14 +963,27 @@ handles = ["decryptmedia"]
 
 [[sources]]
 id = "bitcoin-news-com"
+display_name = "Bitcoin News"
+tier = "t3"
+category = "discovery"
+independence_key = "bitcoin-news"
+receipt_role = "discovery"
+# @BitcoinNewsCom belongs to Bitcoin News, not Bitcoin.com News. Keep this
+# repair handle-only: it does not add a website or change any source tier.
+domains = []
+aliases = ["bitcoin news"]
+handles = ["BitcoinNewsCom"]
+
+[[sources]]
+id = "bitcoin-com-news"
 display_name = "Bitcoin.com News"
 tier = "t3"
 category = "discovery"
 independence_key = "bitcoin-com-news"
 receipt_role = "discovery"
 domains = ["news.bitcoin.com", "bitcoin.com"]
-aliases = ["bitcoin.com news", "bitcoin news"]
-handles = ["BitcoinNewsCom"]
+aliases = ["bitcoin.com news"]
+handles = []
 
 [[sources]]
 id = "bitcoin-archive"

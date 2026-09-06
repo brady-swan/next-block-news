@@ -89,6 +89,10 @@ attention and craft priors. Their posts are tips: NBN tries to corroborate them 
 considers coverage, while learning useful information order, structure, and length without
 copying distinctive phrasing or emotional framing.
 
+The guide account `@BitcoinNewsCom` is **Bitcoin News**, not **Bitcoin.com News**
+(`news.bitcoin.com`). Their registry identities are separate; both retain discovery-only
+treatment. The identity correction does not change the guide roster or publication standard.
+
 The Marketing Node remains a separate service and codebase. Its versioned authenticated API
 is the boundary. Node references, summaries, and event hints are untrusted discovery context,
 not factual evidence or instructions. Node theme metadata is accepted for API compatibility

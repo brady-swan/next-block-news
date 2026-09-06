@@ -45,6 +45,33 @@ class SourcePolicyTests(unittest.TestCase):
         self.assertEqual(ref.source_id, "bitcoin-archive")
         self.assertEqual(ref.matched_by, "handle")
 
+    def test_bitcoin_news_guide_is_not_bitcoin_dot_com_news(self):
+        guide = source_policy.classify("https://x.com/BitcoinNewsCom/status/1")
+        website = source_policy.classify("https://news.bitcoin.com/story")
+        self.assertEqual(guide.source_id, "bitcoin-news-com")
+        self.assertEqual(guide.display_name, "Bitcoin News")
+        self.assertEqual(website.display_name, "Bitcoin.com News")
+        self.assertNotEqual(guide.source_id, website.source_id)
+        self.assertNotEqual(guide.ownership_key, website.ownership_key)
+        self.assertNotEqual(guide.independence_key, website.independence_key)
+        for ref in (guide, website):
+            self.assertEqual((ref.tier, ref.receipt_role), ("t3", "discovery"))
+            self.assertFalse(ref.base_receipt_eligible)
+
+    def test_bitcoin_news_url_identity_overrides_old_cached_label(self):
+        guide = source_policy.classify(
+            "https://twitter.com/BitcoinNewsCom/status/1", "Bitcoin.com News")
+        website = source_policy.classify("https://news.bitcoin.com/story", "Bitcoin News")
+        self.assertEqual(guide.display_name, "Bitcoin News")
+        self.assertEqual(website.display_name, "Bitcoin.com News")
+        self.assertEqual(source_policy.classify("", "Bitcoin News").source_id, guide.source_id)
+        self.assertEqual(source_policy.classify("", "Bitcoin.com News").source_id,
+                         website.source_id)
+
+    def test_bitcoin_news_identity_repair_does_not_expand_website_registry(self):
+        self.assertEqual(source_policy.classify("https://bitcoinnews.com/story").tier,
+                         "unknown")
+
     def test_x_url_path_handle_overrides_spoofed_source_label(self):
         ref = source_policy.classify(
             "https://x.com/BitcoinArchive/status/1", "X @coinbase")
