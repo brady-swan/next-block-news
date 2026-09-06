@@ -101,6 +101,9 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(data["packet"],packet)
             self.assertEqual(data["stories"][0]["editor"]["origin"],"recovery")
             self.assertEqual(data["stories"][0]["editor"]["post"],"Editor copy")
+            con.execute("UPDATE run_observations SET payload_json=? WHERE kind='editor_applied'",
+                        (json.dumps({"verdict":"publish","post":"Writer copy","origin":"omitted_fallback"}),));con.commit()
+            self.assertEqual(desk_api.run_detail(con,row)["stories"][0]["outcome"],"Editor fallback")
             con.execute("UPDATE run_observations SET expired=1,payload_json=NULL");con.commit()
             data=desk_api.run_detail(con,row)
             self.assertFalse(data["packet_recorded"])

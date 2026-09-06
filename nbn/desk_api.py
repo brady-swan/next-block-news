@@ -96,7 +96,7 @@ def run_window(con, run_id="", direction=""):
 def output_card(r):
     confirmed = r.get("publisher_status") == "published" and r.get("confirmed_at") is not None
     state = "Published" if confirmed else {"DRAFT": "Draft", "UNCERTAIN": "Uncertain", "FAILED": "Failed", "TAPE": "Tape"}.get(r.get("mode"), "Delivery requested")
-    if not confirmed and r.get("publisher_status") in {"scheduled", "publishing", "error", "deleted", "planned"}:
+    if not confirmed and r.get("publisher_status") in {"scheduled", "publishing", "error", "deleted", "planned", "inactive"}:
         state = r["publisher_status"].capitalize()
     result = {k: r.get(k) for k in ("id", "created", "body", "receipt_url", "story_key", "publisher_status", "confirmed_at", "publisher_synced_at", "editor_note", "first_seen")}
     result.update({"state": state, "public_url": desk.safe_url(r.get("public_url")), "typefully_url": "", "performance": decode(r.get("performance_json")), "performance_synced_at": r.get("performance_synced_at")})
@@ -168,7 +168,8 @@ def run_detail(con, row):
         reason = (editor or {}).get("reason") or details.get("reason") or s.get("reader_value") or ""
         outcome = ("Dropped by editor" if verdict == "drop" else "Delivered" if commit.get("state") == "delivered"
                    else "Held" if commit.get("state") == "held" else "Unfinished record" if run["completed_at"] and commit.get("state") == "pending"
-                   else "Editor reviewed" if editor else "Writer proposal")
+                   else "Editor reviewed" if editor and editor.get("origin") in {"initial", "recovery"}
+                   else "Editor fallback" if editor else "Writer proposal")
         stories.append({"id": sid, "title": cards[members[0]]["title"] if members else str(s.get("story_key") or sid),
                         "source": cards[members[0]]["source"] if members else "Merged story", "members": members,
                         "writer": s.get("post"), "writer_reason": s.get("reader_value"), "story_key": s.get("story_key"),
