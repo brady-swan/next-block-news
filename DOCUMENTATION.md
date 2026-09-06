@@ -41,6 +41,8 @@ authority. It is intentionally not rewritten during a non-editorial sprint.
 - MODEL-COST-ANALYSIS.md, MODEL-BAKEOFF-RESULTS.md, MODEL-PREPARATION-RECALL-RESULTS.md,
   MODEL-RESEARCH-BAKEOFF-RESULTS.md, ROSTER-REPLAY-FINDINGS-2026-09-05.md and
   SPRINT-0059-FINDINGS.md preserve measured historical results, not current price promises.
+- AUDIT-FIX-2026-09-06-SOURCE-IDENTITY.md records the verified Bitcoin News / Bitcoin.com News
+  identity repair and its release evidence; it does not change editorial source weighting.
 - RAW-POOL-LAST-2H.md and X-ALGORITHM-DISTRIBUTION-BRIEF.md are dated research artifacts.
   Neither defines NBN's live architecture or grants authority to change publishing behavior.
 - docs/history/ contains preserved pre-0060 handoff, roadmap and inbound-flow snapshots.

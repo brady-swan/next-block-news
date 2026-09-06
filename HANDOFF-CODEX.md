@@ -125,3 +125,8 @@ Plan 0060 shipped runtime `2d9dcad` in Railway deployment
 `5996010b-e732-47ae-98e6-ef138696d7a3` (SUCCESS). Clean suite: 422 tests; 42 production HTTP
 checks and a natural cycle passed. Eight-page PDF visually checked. Autopost OFF; existing
 15-minute rolling audit ACTIVE with unchanged authority plus observability checks.
+
+Subsequent audit repair `c581510` corrected @BitcoinNewsCom's source identity to Bitcoin News,
+separate from Bitcoin.com News, without changing tiers, prompts or discovery. Deployment
+`7e3b8a34-b3e8-492e-ad60-adb1f207ad22` succeeded; 425 clean-release tests and production smoke
+passed. Existing Typefully copy was not edited. See AUDIT-FIX-2026-09-06-SOURCE-IDENTITY.md.
