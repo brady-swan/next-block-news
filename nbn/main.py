@@ -605,13 +605,18 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                   "incoherent distinct relation to reader-visible event")
                 continue
             if not post.lstrip().startswith("UPDATE:"):
+                reason = "defer:material_update_requires_update_label"
                 for member in members:
                     store.defer_item(
-                        con, member["url_hash"], "defer:material_update_requires_update_label",
+                        con, member["url_hash"], reason,
                         story_key=resolution.story_key, stage="hard_rail",
                         category="technical_defer",
                     )
                 result["held"] += len(members)
+                store.set_newsroom_story_state(
+                    con, pipeline_run_id, story_id, "held",
+                    details={"validation": "held", "reason": reason},
+                )
                 continue
             if output_state["drafts"]:
                 pending = output_state["drafts"][0]
@@ -634,13 +639,18 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 continue
             operation, target_draft = "replace_draft", output_state["drafts"][0]
         elif relation == "material_update":
+            reason = "defer:material_update_has_no_visible_base"
             for member in members:
                 store.defer_item(
-                    con, member["url_hash"], "defer:material_update_has_no_visible_base",
+                    con, member["url_hash"], reason,
                     story_key=resolution.story_key, stage="delivery",
                     category="identity_defer",
                 )
             result["held"] += len(members)
+            store.set_newsroom_story_state(
+                con, pipeline_run_id, story_id, "held",
+                details={"validation": "held", "reason": reason},
+            )
             continue
         row = {
             "story_id": story_id, "post": post,

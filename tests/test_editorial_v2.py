@@ -1155,6 +1155,55 @@ class EditorialV2Tests(unittest.TestCase):
             self.assertEqual(result["held"], 1)
             publish.assert_not_called()
 
+    def test_pre_editor_update_defers_finalize_story_lifecycle(self):
+        cases = (
+            (False, "defer:material_update_has_no_visible_base"),
+            (True, "defer:material_update_requires_update_label"),
+        )
+        for visible_base, reason in cases:
+            with self.subTest(visible_base=visible_base), temporary_store() as con, ExitStack() as stack:
+                run_id = "run:update-defer"
+                row, _record, draft, session = materialization_fixture(
+                    con, run_id, post=("The SEC announced a Bitcoin policy update."
+                                       if visible_base else
+                                       "UPDATE: The SEC announced a Bitcoin policy update."),
+                )
+                draft["coverage_relation"] = "material_update"
+                output_state = store.canonical_output_state(con, "sec-bitcoin-policy")
+                if visible_base:
+                    output_state.update(state="reader_visible", visible={"id": 99})
+                stack.enter_context(patch.object(
+                    store, "canonical_output_state", return_value=output_state,
+                ))
+                stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="token"))
+                stack.enter_context(patch.object(newsroom, "start_session", return_value=session))
+                review = stack.enter_context(patch.object(editor, "review_newsroom_batch"))
+                publish = stack.enter_context(patch.object(publisher, "publish"))
+                stack.enter_context(patch.object(config, "RUN_NEWSROOM_MODE", "live"))
+                self.assertTrue(store.acquire_cycle_lease(con, "test-owner"))
+                result = main._run_editorial_v2(
+                    con, lease_owner="test-owner", pipeline_run_id=run_id,
+                    inventory=[row], pending=[row], result=self.result_counts(),
+                    theme_snapshot=[], overrides={}, run_started=time.time(),
+                )
+                self.assertEqual(result["held"], 1)
+                item = con.execute("SELECT * FROM items WHERE url_hash=?",
+                                   (row["url_hash"],)).fetchone()
+                self.assertEqual(item["status"], "new")
+                self.assertEqual(item["note"], reason)
+                self.assertGreater(item["defer_until"], time.time())
+                commit = con.execute(
+                    "SELECT state,details_json FROM newsroom_story_commits WHERE run_id=?",
+                    (run_id,),
+                ).fetchone()
+                self.assertEqual(commit["state"], "held")
+                details = json.loads(commit["details_json"])
+                self.assertEqual(details["validation"], "held")
+                self.assertEqual(details["reason"], reason)
+                self.assertNotIn("editor", details)
+                review.assert_not_called()
+                publish.assert_not_called()
+
     def test_commit_rows_cover_invalid_and_shadow_story_lifecycle(self):
         with temporary_store() as con:
             rows = [candidate("valid"), candidate("invalid")]

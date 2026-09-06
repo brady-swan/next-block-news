@@ -72,6 +72,11 @@ Run decisions are frozen dispositions from that dossier; the adjacent current it
 may have advanced later. Assignment-Background cards can appear in the run's input inventory
 without appearing in the writer's decisions because they were never sent to the writer.
 
+The September 6 pre-editor lifecycle repair records update/base or update-label deferrals as
+held story commits with the exact reason; the editor was not reached. Older affected commits
+may still say pending after their run completed. Their historical rows were not rewritten:
+use the recorded item reason and run completion, not that old pending label, to interpret them.
+
 Run input links use each item's own first-seen day, including carried-over leads. Older
 completed runs may have pruned dossiers (normally after 14 days); missing detail is explicit,
 not interpreted as no work. Up to 100 inventory/decision entries and 50 story commits are
