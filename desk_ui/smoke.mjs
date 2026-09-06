@@ -25,6 +25,10 @@ try{
   assert.equal(response.status,200,view);const data=await response.json();assert.equal(data.version,1);
   assert.ok(!JSON.stringify(data).includes(token),'Access token excluded');
   summary.views.push({view,ms:Math.round(performance.now()-started),run:data.run?.run_id,artifacts:data.run?.artifacts.length,sources:data.sources?.length,outputs:data.outputs?.length});
+  if(view==='intake'){
+   assert.ok(data.items.every(i=>i.reconsider && Number.isInteger(i.reconsider.latest_action_id)),'Owner queue projection present');
+   summary.reconsider={eligible:data.items.filter(i=>i.reconsider.eligible).length,queued:data.items.filter(i=>i.reconsider.request?.state==='queued').length};
+  }
   if(view==='system'){assert.equal(data.now.autopost,false,'Autopost remains off');assert.equal(data.roster.seats.find(s=>s.role==='Daily receipt audit').mode,'disabled');summary.roster=data.roster.seats.map(({role,model,effort,mode})=>({role,model,effort,mode}));summary.worker=data.now.worker;summary.costs=data.costs.periods;}
   if(view==='newsroom'){
    summary.selected_run=data.run?.run_id;summary.run_status=data.run?.status;summary.packet_recorded=data.run?.packet_recorded;
@@ -34,7 +38,8 @@ try{
  assert.equal((await fetch(new URL('/desk/api/workspace',link.origin))).status,403,'API rejects missing key');
  const req=createRequire(process.env.NBN_QA_RUNTIME||'/Users/brady/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/package.json');
  const {chromium}=req('playwright');const browser=await chromium.launch({headless:true,channel:'chrome'});
- const page=await browser.newPage({viewport:{width:1728,height:1117}});const errors=[];
+ const page=await browser.newPage({viewport:{width:1728,height:1117}});const errors=[],writes=[];
+ page.on('request',r=>{if(r.method()!=='GET')writes.push(r.method())});
  page.on('pageerror',e=>errors.push(safeError(e)));await mkdir('outputs/production',{recursive:true});
  try{
   await page.goto(url('/desk'));await page.locator('.run-summary').waitFor();await page.waitForTimeout(300);
@@ -47,6 +52,7 @@ try{
   }
   for(const view of ['system','outputs','intake']){await page.goto(url('/desk',{view}));await page.locator('.support-view').waitFor();await page.screenshot({path:`outputs/production/${view}.png`,fullPage:true});summary.screenshots.push(view);}
   assert.equal(errors.length,0,errors.join('; '));summary.browser_errors=errors.length;
+  assert.deepEqual(writes,[],'Smoke never submits owner actions');summary.browser_writes=0;
  }finally{await browser.close()}
  await writeFile('outputs/production/smoke.json',JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));
 }catch(e){console.error(safeError(e));process.exitCode=1}
