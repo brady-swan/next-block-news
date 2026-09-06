@@ -30,6 +30,32 @@ def native_response(url="https://www.sec.gov/newsroom/test", author=""):
 
 
 class ModelsTests(unittest.TestCase):
+    def test_preparation_schema_matches_existing_parser_list_limits(self):
+        native = desk_prep.preparation_tool("gpt-5.6-luna")
+        fields = native["input_schema"]["properties"]["decisions"]["items"]["properties"]
+        for key, limit in (("source_leads", 3), ("related_keys", 3),
+                           ("related_storyline_keys", 2)):
+            self.assertEqual(fields[key]["maxItems"], limit)
+        legacy = desk_prep.preparation_tool("claude-haiku-4-5")
+        self.assertNotIn("maxItems", legacy["input_schema"]["properties"]["decisions"]
+                         ["items"]["properties"]["source_leads"])
+        self.assertEqual(legacy, desk_prep.TOOL)
+
+    def test_responses_newsroom_requires_a_tool_but_preserves_forced_final_tool(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"), \
+                patch.object(config, "NEWSROOM_MODEL", "grok-4.3"), \
+                patch.object(newsroom.brain, "consume_model_call"):
+            session = newsroom.NewsroomSession(run_id="required", inventory=[],
+                recent_clusters=[], theme_snapshot=[], handles={}, con=con,
+                reservation="r", prep_mode="off", research_mode="off", compact_enabled=True)
+            response = models.normalize(raw_response(), provider="xai", effort="medium")
+            with patch.object(session.client, "create", return_value=response) as call:
+                session._call(max_tokens=100)
+                self.assertEqual(call.call_args.kwargs["tool_choice"], {"type":"any"})
+                final = {"type":"tool", "name":"submit_editorial_dossier"}
+                session._call(max_tokens=100, tool_choice=final)
+                self.assertEqual(call.call_args.kwargs["tool_choice"], final)
+
     def test_responses_tools_and_history_preserve_complete_output(self):
         raw = [{"type": "reasoning", "id": "r1", "encrypted_content": "opaque", "summary": []},
                {"type": "function_call", "call_id": "c1", "name": "fetch_source",

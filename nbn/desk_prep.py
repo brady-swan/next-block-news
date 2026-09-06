@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import logging
 import re
 import time
@@ -12,7 +13,7 @@ import anthropic
 from . import brain, config, guide_context, source_policy, store, models
 
 log = logging.getLogger("nbn.desk_prep")
-PROMPT_VERSION = "assignment-desk-v2.3-multiprovider"
+PROMPT_VERSION = "assignment-desk-v2.3.1-bounded-preparation"
 ROUTES = {"advance", "background"}
 
 SYSTEM = """You prepare the assignment desk for Next Block News, an automated Bitcoin wire.
@@ -30,6 +31,7 @@ no new fact. A source being obscure is not a reason to background it.
 For each candidate, distill what appears to have happened, why it could matter to a Bitcoin reader,
 what freshness question exists, and the most useful research objective. Source/search leads are
 short suggestions, not evidence. Copy related keys only from supplied_coverage_keys. Assign a
+maximum of three source_leads and three related_keys per candidate; empty lists are fine. Use a
 short run-local event_group: exact same-event candidates share a value; unrelated candidates use
 different values. This is desk organization only, not canonical identity or evidence.
 
@@ -69,6 +71,17 @@ TOOL = {
         "required": ["decisions"],
     },
 }
+
+
+def preparation_tool(model: str) -> dict:
+    """Expose parser list bounds where supported; preserve Anthropic's schema subset."""
+    tool = copy.deepcopy(TOOL)
+    if models.provider_for(model) != "anthropic":
+        fields = tool["input_schema"]["properties"]["decisions"]["items"]["properties"]
+        for key, limit in (("source_leads", 3), ("related_keys", 3),
+                           ("related_storyline_keys", 2)):
+            fields[key]["maxItems"] = limit
+    return tool
 
 
 @dataclass(frozen=True)
@@ -327,7 +340,8 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
                     max_tokens=config.DESK_PREP_MAX_OUTPUT_TOKENS,
                     system=SYSTEM,
                     messages=[{"role": "user", "content": packet}],
-                    tools=[TOOL], tool_choice={"type": "tool", "name": TOOL["name"]},
+                    tools=[preparation_tool(config.DESK_PREP_MODEL)],
+                    tool_choice={"type": "tool", "name": TOOL["name"]},
                     **({} if is_anthropic else {"output_config": {"effort": config.DESK_PREP_EFFORT}}),
                 )
                 rows = _parse(

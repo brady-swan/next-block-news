@@ -30,7 +30,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.14-multiprovider"
+PROMPT_VERSION = "editorial-core-v2.14.1-tool-contract"
 MEMORY_EVIDENCE_MAX_AGE_SECONDS = 24 * 3600
 
 
@@ -1555,6 +1555,7 @@ class NewsroomSession:
 
     def _call(self, *, max_tokens: int, tool_choice: dict | None = None,
               tools: list[dict] | None = None):
+        from . import models
         if self.successful_newsdesk_calls >= config.RUN_NEWSROOM_MAX_ROUNDS:
             raise NewsroomError("round_limit", "newsroom model round limit reached")
         if time.monotonic() - self.started > config.RUN_NEWSROOM_TIMEOUT_SECONDS:
@@ -1574,11 +1575,14 @@ class NewsroomSession:
         )
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
+        elif isinstance(self.client, models.ResponsesClient):
+            # Every turn must research through a tool or submit a dossier. Responses
+            # otherwise permits plain text that our existing protocol cannot consume.
+            kwargs["tool_choice"] = {"type": "any"}
         if config.EDITORIAL_ENGINE == "v2":
             kwargs["system"] = [{"type": "text", "text": NEWSROOM_V2_SYSTEM,
                                  "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
         while True:
-            from . import models
             if isinstance(self.client, models.ResponsesClient):
                 remaining = config.RUN_NEWSROOM_TIMEOUT_SECONDS - (time.monotonic() - self.started)
                 if remaining <= 0:

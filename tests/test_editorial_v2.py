@@ -101,7 +101,7 @@ class EditorialV2Tests(unittest.TestCase):
                 "uncertain": 0, "failed": 0, "taped": 0}
 
     def test_v212_prompts_teach_writer_craft_without_style_gates(self):
-        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.14-multiprovider")
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.14.1-tool-contract")
         self.assertIn("FINAL WRITING PASS", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("still be publication-ready", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("Do not define a familiar Bitcoin-native", newsroom.NEWSROOM_V2_SYSTEM)
