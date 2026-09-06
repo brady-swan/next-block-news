@@ -55,6 +55,31 @@ queued/completed/blocked state and verify that the writer receives Brady's overr
 skip reason, with real dates and normal editorial/duplicate checks intact. Completion means
 an accepted writer response, not acceptance of the story. Do not trigger overrides while auditing.
 
+Check source-reply correctness on actual delivered Typefully content: the clean lead and its
+immediate receipt reply must belong to the same story. Local intended copy is not proof of
+what arrived remotely. Keep writing quality, duplication and owner overrides as standing checks.
+
+## Outcome checks after sourcing builds
+
+Prioritize outcomes over activity counts. Use targeted samples and changes since the previous
+pass; expand an investigation when the evidence warrants it, not a full historical rescan each time.
+
+- Trace promising peer stories end to end: discovery, preparation, writer selection, research,
+  editor and delivery. Identify the exact decision or failure that prevented a useful draft,
+  after checking prior coverage. Separate defensible skips from avoidable misses and unknowns.
+- Check whether richer context actually helped: did longer text, a quoted original, or an
+  upstream link resolve ambiguity? Was a promising lead dismissed from an incomplete preview
+  despite fuller material being available? No retrieval can be appropriate when the preview
+  and supplied receipts suffice; more retrieval calls are not success by themselves. Do not
+  infer causation from a decision alone when the saved handoffs do not establish it.
+- Compare before/after periods with their duration, source mix, sample sizes and rollout version
+  stated: useful drafts, avoidable misses, source-to-draft time and model cost per useful draft.
+  Mark usefulness as owner feedback or audit judgment, not an objective automatic score.
+  Separate human publication delays from system latency; exclude replays and bootstrap archives.
+  Zero useful drafts makes the cost-per-useful-draft ratio undefined, not zero. Small samples
+  are provisional. Watch for better Bitcoin-native coverage without promotion, routine software
+  releases or a new topic quota. Report evidence, not a demand to publish more at any cost.
+
 ## Automatically accumulate editorial evidence
 
 Plan 0062 checks: compare guide long text/quoted originals with the actual writer packet, not
