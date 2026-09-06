@@ -2,6 +2,11 @@
 
 September 6, 2026 · Analysis and recommendations, not an implementation plan or policy change.
 
+Implementation follow-up: the owner approved the focused Plan 0062 lead-fidelity sprint.
+Perception is explicitly deferred because its separate REST quota pool is exhausted. Standalone
+software releases are excluded; releases can be developments in larger ongoing stories. The
+phased plan/release record, not this wider idea inventory, defines what was built.
+
 ## The verdict
 
 **NBN is now quite good at noticing our reference accounts. It is less good at receiving the whole story they are showing us, recognizing the full range of useful Bitcoin stories, and going directly to the people or records behind those stories.**

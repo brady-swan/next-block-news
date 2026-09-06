@@ -1,6 +1,6 @@
 # Plan 0062 — better leads, without another ingestion platform
 
-Status: plan approved by independent lead; implementation underway, 2026-09-06.
+Status: independently reviewed, implemented and deployed; production smoke passed, 2026-09-06.
 
 ## Objective and evidence
 
@@ -127,3 +127,42 @@ any collector cursor. The live API accepts note_tweet; parsing also accepts note
 retrieval environment overrides are unset, so the owner-approved defaults apply on deployment.
 
 Deployment, clean-archive test, backup and natural-cycle smoke evidence follows below.
+
+## Release evidence
+
+- Runtime commit `f298b2c`, pushed to origin/main. Clean archive:
+  `/tmp/nbn-0062-release.tn9guy`; **463 released tests passed**. Unrelated evaluator/tuning
+  changes remain untouched and excluded.
+- Online SQLite backup `/data/backups/nbn-pre-source-policy-20260906T202846Z.db` passed the
+  backup script's full integrity check. Rollback runtime is the prior `f5b14a0`; the additive
+  item column is backward-compatible. Never rewind production data to roll back code.
+- Railway deployment `db6c7860-65d0-4cdc-85ee-a7dab205f142`: **SUCCESS**, existing service,
+  one replica and `/data` volume. No credential, Perception or publication-mode changes.
+- Public and internal health returned 200; natural worker cycles completed without error.
+  All four authenticated Desk API views returned 200/version 1; missing authorization returned
+  403. Runtime confirmed the new prompt, additive column, retrieval caps **4 / 16 KiB / 48 KiB**,
+  **64 KiB initial**, autopost OFF and the daily receipt audit still disabled.
+- Three pilot feeds returned valid parsed results and initialized after durable insertion.
+  Seventy older archive entries were recorded as explicit bootstrap skips before Haiku.
+  Six query cursors were committed, no unfinished windows at that check; two naturally
+  collected X items already carried the new material.
+- A separate bounded read-only lookup of one known guide quote returned 200, with the original
+  `@Rob1Ham` post available (267 characters), preserving authorship and text in a 2,114-byte
+  material card. No ingestion cursor or item was mutated by that contract check.
+- Offline normalization of the existing 430-post sample preserved all post text without
+  truncation: 85 note fields (78 longer than ordinary text), 347 media-bearing posts, and 58
+  reference chains. Median material 981 bytes, maximum 2,399. That older sample lacked expanded
+  quote bodies; the live lookup above verifies the newly requested expansions separately.
+- Rolling audit `audit-nbn-production` restored ACTIVE on its existing 15-minute schedule,
+  preserving autonomy/notification boundaries and adding lead fidelity, conversion, pagination,
+  retrieval-budget and pilot-quality checks. No forced production model calls or Typefully
+  mutations were used for testing.
+
+The first natural run, `cycle:1788726993:93716e48`, completed at 20:37:25 UTC without error.
+Its actual saved writer handoff contained seven candidates, three new X material previews and
+three full-context retrieval IDs, with no observation truncation. Initial packet: 63,213 bytes,
+below 64 KiB. Two successful writer calls, one search, three fetches; no optional context reads
+or capacity hits. It returned seven decisions and zero stories, so the editor/delivery path
+was not exercised by this natural run (those paths remain covered by the offline suite).
+Successful intake/handoff is not represented as proof the new guidance has improved output
+quality yet; the restored audit measures that over subsequent real runs.
