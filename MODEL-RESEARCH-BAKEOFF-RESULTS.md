@@ -1,5 +1,7 @@
 # NBN research model bake-off
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 - **Executed:** September 5, 2026
 - **Production changes:** none
 - **Corpus:** 10 frozen source-resolution assignments based on recent NBN failure modes

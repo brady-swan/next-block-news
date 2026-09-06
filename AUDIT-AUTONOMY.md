@@ -25,6 +25,20 @@ delivery defects, or behavior that plainly violates an already-approved invarian
 owner changes and the current editorial policy. Roll back when the repair does not pass its
 checks or causes a regression, and report the action and evidence.
 
+## Observability checks (Plan 0060)
+
+Use the read-only live Desk and its underlying records to inspect intake, run checkpoints,
+editor reasons, outputs and cost shape. Confirm that snapshots refresh and that worker errors
+or stale state are not presented as healthy. A saved researching checkpoint is not proof an
+API call is currently running; check its age and the worker. Keep selected-day and all-time
+counts distinct. IMMEDIATE mode is not sufficient evidence of confirmed X publication.
+
+Measure speed using source/peer timestamps, first seen, local output, and confirmed publication
+as separate clocks; unknown stays unknown. Check actual Typefully copy/timestamps when needed,
+because locally tracked outputs do not include every remote draft. Exclude replay exports from
+normal throughput and misses. Recorded model-seat usage omits the retained daily receipt audit
+and external service costs, so do not call it the full bill. These checks add no new autonomy.
+
 ## Automatically accumulate editorial evidence
 
 Add strong examples, misses, weak drafts, owner comments, peer comparisons, and suggested

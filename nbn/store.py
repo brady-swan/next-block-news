@@ -1200,7 +1200,7 @@ def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number:
     con.commit()
 
 
-def model_usage_summary(con, since: float) -> dict:
+def model_usage_summary(con, since: float, until: float | None = None) -> dict:
     row = con.execute(
         "SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,"
         "COALESCE(SUM(output_tokens),0) AS output_tokens,"
@@ -1213,7 +1213,8 @@ def model_usage_summary(con, since: float) -> dict:
         "COALESCE(SUM(native_web_calls),0) AS native_web_calls,"
         "COALESCE(SUM(native_x_calls),0) AS native_x_calls,"
         "COALESCE(SUM(cost_source='unknown'),0) AS unknown_cost_calls,"
-        "COUNT(*) AS calls FROM model_usage WHERE created_at>=?", (float(since),),
+        "COUNT(*) AS calls FROM model_usage WHERE created_at>=? AND created_at<?",
+        (float(since), float(until) if until is not None else float("inf")),
     ).fetchone()
     return dict(row) if row else {}
 

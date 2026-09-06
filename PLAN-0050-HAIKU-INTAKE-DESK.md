@@ -1,5 +1,7 @@
 # Plan 0050 — Haiku intake desk and primary-source fast lane
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Objective
 
 Give the run-scoped Sonnet newsroom a materially cleaner desk without restoring a brittle

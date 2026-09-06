@@ -1,4 +1,4 @@
-"""The loop: poll -> triage -> draft -> gate -> publish. Plus a /health endpoint."""
+"""Worker orchestration plus health, live Desk, and owner review HTTP routes."""
 import datetime
 import json
 import logging
@@ -1882,6 +1882,10 @@ class Health(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
+        if parsed.path == "/desk" or parsed.path.startswith("/desk/"):
+            from . import desk
+            desk.handle(self, parsed, STATE)
+            return
         if parsed.path == "/dismiss":
             q = parse_qs(parsed.query)
             token = (q.get("k") or [""])[0]
@@ -1915,6 +1919,8 @@ class Health(BaseHTTPRequestHandler):
             con.close()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(body)
             return

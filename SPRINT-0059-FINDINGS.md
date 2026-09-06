@@ -1,5 +1,7 @@
 # Sprint 0059 — selective research and craft
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 2026-09-06. Independently approved narrowed release is deployed and smoke-tested.
 
 ## Bottom line

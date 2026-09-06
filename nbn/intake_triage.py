@@ -1,4 +1,4 @@
-"""Cheap semantic mailroom for RSS/EDGAR before the run-scoped Sonnet desk."""
+"""Cheap semantic RSS/EDGAR mailroom before assignment preparation and the writer."""
 from __future__ import annotations
 
 import json

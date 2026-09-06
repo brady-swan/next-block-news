@@ -1,4 +1,4 @@
-"""One fresh, run-scoped Sonnet newsroom: survey, research, judge, and write."""
+"""Fresh run-scoped newsroom: selective research, judgment and writing; v1 retained."""
 from __future__ import annotations
 
 import copy

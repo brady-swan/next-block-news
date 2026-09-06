@@ -1,5 +1,7 @@
 # Orientation brief v3 — DRAFT (Claude, 2026-09-02)
 
+> Status reviewed 2026-09-06: Unshipped historical draft. This file is NOT loaded by production. The live orientation is orientation-brief-v2.md; see [PROMPTS.md](../PROMPTS.md).
+
 *Replaces ORIENTATION_BRIEF in `nbn/newsroom.py`. Design: the charter (which rides in the
 same system prompt) already carries voice, scope, sourcing, freshness, and price
 discipline — so this brief doesn't restate rules. It gives the writer the one thing the

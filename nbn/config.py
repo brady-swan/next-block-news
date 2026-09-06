@@ -10,14 +10,13 @@ NEWSROOM_MODEL = os.environ.get("NBN_NEWSROOM_MODEL", ANTHROPIC_MODEL)
 NEWSROOM_EFFORT = os.environ.get("NBN_NEWSROOM_EFFORT", "medium")
 TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
 TRIAGE_EFFORT = os.environ.get("NBN_TRIAGE_EFFORT", "medium")
-# The Editor: last-mile judgment seat. It runs only on autonomous candidates, so the
-# higher-judgment Fable seat remains a small share of the model budget.
+# The independent editor runs on surviving v2 stories regardless of autopost state.
 EDITOR_MODEL = os.environ.get("NBN_EDITOR_MODEL", "claude-sonnet-5")
 EDITOR_EFFORT = os.environ.get("NBN_EDITOR_EFFORT", "medium")
 MAX_LLM_CALLS_PER_HOUR = int(os.environ.get("NBN_MAX_LLM_CALLS_PER_HOUR", "60"))
 
-# One fresh Sonnet newsroom may own survey, research, judgment, and writing for a complete
-# intake run. Rollout is deliberately explicit: off -> shadow -> draft -> live.
+# A fresh configured newsroom owns each run. These mode controls also support the retained
+# v1 run protocol; live v2 has selective research rather than mandatory survey phases.
 RUN_NEWSROOM_MODE = os.environ.get("NBN_RUN_NEWSROOM_MODE", "off").strip().lower()
 if RUN_NEWSROOM_MODE not in {"off", "shadow", "draft", "live"}:
     raise RuntimeError("NBN_RUN_NEWSROOM_MODE must be off, shadow, draft, or live")
@@ -49,7 +48,7 @@ RUN_NEWSROOM_RETRY_ALLOWANCE = int(
     os.environ.get("NBN_RUN_NEWSROOM_RETRY_ALLOWANCE", "1")
 )
 # Editorial core v2 keeps the one-minute intake/health loop, but opens a fresh
-# run-scoped Sonnet desk only on a persisted editorial cadence. ``v1`` is a temporary,
+# run-scoped writer desk only on a persisted editorial cadence. ``v1`` is a temporary,
 # manual rollback switch; there is never an automatic fallback into it.
 EDITORIAL_ENGINE = os.environ.get("NBN_EDITORIAL_ENGINE", "v2").strip().lower()
 if EDITORIAL_ENGINE not in {"v1", "v2"}:
@@ -82,7 +81,7 @@ COMPACT_DESK_RETRIEVAL_TOTAL_BYTES = int(
     os.environ.get("NBN_COMPACT_DESK_RETRIEVAL_TOTAL_BYTES", str(24 * 1024))
 )
 
-# A run-scoped Haiku assigning editor prepares the cross-source desk before Sonnet.
+# A separately configured assignment seat prepares the cross-source writer desk.
 DESK_PREP_MODE = os.environ.get("NBN_DESK_PREP_MODE", "off").strip().lower()
 if DESK_PREP_MODE not in {"off", "observe", "enforce"}:
     raise RuntimeError("NBN_DESK_PREP_MODE must be off, observe, or enforce")
@@ -113,7 +112,8 @@ DESK_PREFETCH_RESERVE_CHARS = int(
     os.environ.get("NBN_DESK_PREFETCH_RESERVE_CHARS", "80000")
 )
 
-# Sonnet may delegate one bounded source-resolution assignment to Haiku.
+# The writer may delegate one bounded assignment. HAIKU_* names remain compatible;
+# RESEARCH_MODEL and RESEARCH_EFFORT select the actual reporting seat.
 HAIKU_RESEARCH_MODE = os.environ.get("NBN_HAIKU_RESEARCH_MODE", "off").strip().lower()
 if HAIKU_RESEARCH_MODE not in {"off", "on"}:
     raise RuntimeError("NBN_HAIKU_RESEARCH_MODE must be off or on")
@@ -161,7 +161,7 @@ def editorial_reservation_calls(*, include_mailroom: bool = False,
         total += int(include_mailroom)
     return total
 
-# One cheap semantic mailroom pass keeps broad RSS and EDGAR noise off Sonnet's desk.
+# One cheap semantic mailroom pass keeps broad RSS and EDGAR noise off the writer's desk.
 # Rollout is explicit; runtime failures always fail open as candidates.
 INTAKE_TRIAGE_MODE = os.environ.get("NBN_INTAKE_TRIAGE_MODE", "off").strip().lower()
 if INTAKE_TRIAGE_MODE not in {"off", "observe", "enforce"}:
@@ -220,10 +220,10 @@ YIELD_IDENTITY_NORMALIZER_ENABLED = os.environ.get(
     "NBN_YIELD_IDENTITY_NORMALIZER_ENABLED", "false"
 ).lower() == "true"
 
-# Desk Report (/report?k=<token>) — read-only editor view; unset token disables it
+# Owner Desk (/desk) and guarded review actions (/report); unset token disables both.
 REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")
 
-# Daily self-audit fire time (UTC HH:MM); empty disables
+# Daily self-audit fire time (UTC HH:MM); audit.maybe_run treats empty as 09:00.
 AUDIT_UTC = os.environ.get("NBN_AUDIT_UTC", "09:00")
 
 # Loop
@@ -279,7 +279,7 @@ PERCEPTION_DIRECT_ENABLED = (
 )
 
 # X read access — SHARED with the Marketing Node's bearer (Brady's call 2026-08-30);
-# recent-search rate limits are per app, Node's 2x/day pulse + our throttled poll fit easily.
+# Account quotas are shared; preserve since_id and measure combined usage.
 X_BEARER_TOKEN = os.environ.get("NBN_X_BEARER_TOKEN", "")
 X_POLL_SECONDS = int(os.environ.get("NBN_X_POLL_SECONDS", "180"))
 # Public X List whose MEMBERS define the primary watch roster (managed in the X app).
@@ -332,6 +332,7 @@ BRIEFING_MAX_AGE_SECONDS = int(
 # alerts fire on SILENCE, catching crash and stall alike. Empty = disabled.
 HEARTBEAT_URL = os.environ.get("NBN_HEARTBEAT_URL", "")
 
+# Legacy v1 freshness gate only; live v2 delegates event freshness to editorial judgment.
 # Events, not write-ups: a story whose underlying EVENT is older than the freshness
 # window never posts, however fresh the article covering it (HWI/quantum lesson,
 # 2026-08-30; Brady: "got to earn that NEW tag"). Default: the EVENT window tracks the

@@ -1,5 +1,7 @@
 # Plan 0048 — Run-scoped Sonnet newsroom
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Decision
 
 Replace the ordinary fragmented `triage -> per-item source assessor -> event clerk ->

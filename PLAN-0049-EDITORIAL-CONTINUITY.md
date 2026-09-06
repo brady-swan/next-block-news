@@ -1,5 +1,7 @@
 # Plan 0049 — Editorial continuity workbench
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Decision
 
 Keep each 15-minute Sonnet desk fresh, but carry bounded, structured story work between

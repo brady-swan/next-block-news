@@ -1,5 +1,7 @@
 # Plan 0059 — research routing and writing reinforcement
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 Final review decision: **approved narrower rollout** after all nine diagnostic runs. Ship craft
 examples, audit correction, and Background provenance repair. Do not ship experimental routing
 instructions/tool description or turn-budget fields: no replay demonstrated native selection.

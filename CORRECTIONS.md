@@ -34,8 +34,16 @@ Minor-error replies: "Correction to this post: [fix]. The story stands."
 
 ## Who fires it, and when
 
+Implementation note (reviewed 2026-09-06): the daily receipt self-audit is implemented in
+`nbn/audit.py`. It uses the retained Anthropic `NBN_MODEL` path, separate from the Grok editor
+and Codex rolling audit. It checks locally logged IMMEDIATE/UNCERTAIN output from the prior
+26 hours, reports findings, and stages a single correction draft for material findings.
+It does not itself attach the original quote-post, publish the correction, or turn autopost
+off. Those policy steps below require owner action or the rolling audit's explicit emergency
+OFF authority. The staging path's model usage is not currently in the editorial-seat ledger.
+
 - **Corrections NEVER auto-publish.** Whatever detects the error (Brady, a reader, an
-  agent, the future self-audit), the correction is drafted and staged as a Typefully
+  agent, the daily self-audit), the correction is drafted and staged as a Typefully
   DRAFT titled `CORRECTION: <story>`; Brady taps publish. The standing autopost grant
   covers news that passed the gates — it explicitly does not cover corrections.
 - Target latency: within the hour during waking hours; overnight errors are corrected
@@ -52,7 +60,10 @@ specific post in the thread that carried the error, not at the index post.
 
 ## Record
 
-Every public correction gets a line in the tape and a `correction` row note in the DB,
-so the Desk Report can show a running corrections count. The count is public-facing
-honesty made measurable: the goal is not zero corrections issued — it's zero errors
-found by readers that we never corrected.
+Every public correction should receive an operator-maintained record linking the original,
+correction, reason and publication time. The current daily staging helper only sends the
+Typefully draft and logs its result; it does not call `record_post`, append a correction row
+to the normal output ledger, or maintain a verified public corrections count. Do not infer
+that no corrections exist from an empty Desk count. Preserve evidence for the owner to
+complete the record. The goal is not zero corrections issued; it is zero known errors left
+uncorrected.

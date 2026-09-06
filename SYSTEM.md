@@ -3,7 +3,8 @@
 *Current as of 2026-09-06. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
-worker runs continuously on Railway. It ingests news every minute, opens a fresh Grok
+worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
+each cycle (long work can delay the next poll), opens a fresh Grok
 story desk every 15 minutes when prepared candidates exist, sends the resulting stories through a
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
@@ -17,6 +18,7 @@ Brady reviews drafts.
 | Run-scoped newsroom and writing | Grok 4.3 | medium |
 | Focused native web/X research | Grok 4.3 | medium |
 | Separate batch editor | Grok 4.5 | medium |
+| Internal daily receipt audit (separate legacy path) | Anthropic `NBN_MODEL` | legacy call defaults |
 
 Production seats have explicit environment overrides. `NBN_MODEL` remains the Anthropic
 legacy-stack setting; `NBN_NEWSROOM_MODEL` selects the v2 writer. Unconfigured installations
@@ -69,7 +71,7 @@ The editorial deadline is persisted in SQLite (`editorial:next_run_at`), so rest
 accidentally create rapid duplicate sessions. Empty due windows use zero model calls.
 Operator stage/retry requests bypass the wait, and a backlog larger than one 25-item batch
 is eligible to drain on the next healthy worker cycle. The global worker remains at 60
-seconds because source intake, health, Blocks, audits, and publication reconciliation must
+seconds because source intake, health, EIC discovery, audits, and publication reconciliation must
 not wait 15 minutes.
 
 ## Inbound discovery
@@ -211,7 +213,7 @@ also become the next workbench objective rather than being reduced to a transien
   privacy, security, regulation, market structure, sovereign debt, inflation, liquidity,
   and central banking may qualify when the Bitcoin connection is real.
 - Do not become a generic crypto feed or a stream of tiny macro statistics.
-- Roughly 5–8 worthwhile one-off stories a day plus the Blocks is a planning estimate, not
+- Roughly 5–8 worthwhile one-off stories a day is a planning estimate, not
   a quota.
 - A narrow story supported by the evidence is better than holding a promising lead while
   searching for a perfect version.
@@ -341,7 +343,9 @@ counts exclude cache reads/writes; reasoning is already included in output, not 
 It stores no prompts, article bodies, model reasoning text, or tool payloads. The Desk shows
 selected-day calls, tokens, and spend against a configurable $6/day target. The latest
 run shows its initial packet size, newsroom calls/attempts, prepared receipts, and research assignments.
-SerpAPI retrieval is counted separately in run diagnostics.
+SerpAPI retrieval is counted separately in run diagnostics. This is recorded editorial-seat
+usage, not a complete invoice: the retained internal daily receipt-audit path does not write
+this ledger, and source API subscriptions/reads, hosting and the external Codex audit are excluded.
 
 For xAI, reported cost ticks are authoritative and already include native searches. When unavailable,
 the fallback estimate includes tokens plus observed tools. Other providers use rate estimates.
@@ -363,12 +367,31 @@ human review.
 
 The separate rolling production audit follows `AUDIT-AUTONOMY.md`. It may diagnose and repair
 clear technical regressions, then test, deploy, smoke, or roll back the smallest safe fix. It may
-collect editorial evidence but must propose editorial improvements rather than changing live
-judgment on its own. Its only autonomous editorial-safety mutation is one-way: it may turn
+collect editorial evidence and make bounded prompt improvements to execute the already-approved
+writing style. Source weighting, standards, corroboration, research, model, cadence and design
+changes still require approval. Its emergency publication-safety authority is one-way: it may turn
 autopost off when a systemic publishing problem is evidenced, must notify the owner immediately,
 and may never turn autopost on.
 
 ## Operations
+
+### Live Desk and review tools
+
+Plan 0060 extends the existing Railway HTTP server, without changing the editorial core.
+The authenticated `/desk` website separates Live, Intake, Newsroom runs, Outputs, and
+System/costs. It polls read-only snapshots every 15 seconds in visible tabs and labels the
+last successful read, worker freshness, and dated run checkpoints. It never claims a saved
+researching state is proof of an active model session. No models or providers are called
+by page refresh. `/report` retains the existing guarded owner actions and deep links.
+
+Counts distinguish first-seen items, new backlog, local outputs created, and confirmed
+publications. Confirmation requires a published status and timestamp; IMMEDIATE mode alone
+does not suffice. The remote account is broader than the locally tracked output log.
+Replay/eval markers are excluded, and source time, first-seen, local output and publication
+are separate clocks. See `DESK-GUIDE.md` for definitions and limitations. The dated visual
+guide is `output/pdf/nbn-system-guide.pdf`, also available through the authenticated Desk.
+
+### Worker and release details
 
 - Database: `/data/nbn.db`; tape: `/data/tapes/`.
 - Cross-run story workbench: `newsroom_story_memory`, 72-hour row TTL, 24-hour evidence
@@ -388,8 +411,9 @@ and may never turn autopost on.
   probe cannot overwrite newer state. Typed fetch and search failures are visible on the Desk.
 - With resilience disabled, the legacy run-local circuit remains the rollback path: first 429 or
   second transport failure stops later provider calls in that run.
-- Health: `/health`; status: `/status`; owner Desk: token-gated `/report`.
-- Deploy: `railway up --detach` from this linked repository.
+- Health: `/health`; status: `/status`; live Desk: token-gated `/desk`; existing actions: `/report`.
+- Deploy a clean commit archive to the explicit existing Railway target; do not upload unrelated
+  dirty work. See `HANDOFF-CODEX.md` and the latest plan's release record.
 - Important knobs: `NBN_EDITORIAL_ENGINE=v2`, `NBN_DESK_INTERVAL_SECONDS=900`,
   `NBN_DESK_RECENT_FEED_HOURS=48`, `NBN_PUBLISH_ANALYTICS_SECONDS=900`,
   `NBN_INTAKE_TRIAGE_MODE=off|observe|enforce`,

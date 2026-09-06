@@ -1,75 +1,70 @@
 # Next Block News prompt inventory
 
-This file is an index, not a compiled copy. Prompt text previously lived here as a
-snapshot and repeatedly drifted from runtime. Read and edit the sources of truth below.
+Current 2026-09-06. This is an index, not a duplicated prompt snapshot.
+Live editorial orientation: prompts/orientation-brief-v2.md, body after its separator.
+The draft v3 brief and tuning examples are not loaded. The wire_voice charter is retained
+for legacy paths; its old "source of truth" heading does not make it current v2 authority.
 
-| Prompt | Source of truth | Used by | Runtime setting |
-|---|---|---|---|
-| Wire voice charter | `prompts/wire_voice.md` | Injected into triage and drafting | — |
-| Run newsroom | `nbn/newsroom.py` (`NEWSROOM_V2_SYSTEM` + strict tools) | One fresh context surveys, researches, judges, and writes a complete intake run | `NBN_MODEL`; `NBN_RUN_NEWSROOM_MODE` |
-| Legacy triage | `nbn/brain.py` (`TRIAGE_SYSTEM`) | Feature-off, shadow continuation, or pre-materialization fallback | `NBN_TRIAGE_MODEL` |
-| Legacy event identity reconciliation | `nbn/brain.py` (`CLUSTER_SYSTEM`) | Legacy fetched candidates vs. recent event catalog | `NBN_TRIAGE_MODEL` at low effort |
-| Legacy single-post drafting | `nbn/brain.py` (`DRAFT_SYSTEM`) | Legacy selected items and one lint retry | `NBN_MODEL` |
-| Legacy source resolution | `nbn/verify.py` (`RESOLVE_PROMPT`) | Legacy actionable non-primary receipts | `NBN_MODEL` |
-| Provider claim support | `nbn/verify.py` (`CLAIM_SUPPORT_PROMPT`) | One provider-specific redraft | `NBN_MODEL` |
-| Legacy publishing editor | `nbn/editor.py` (`EDITOR_PROMPT`) | Gate-passed legacy candidates | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
-| V2 batch editor | `nbn/editor.py` (`BATCH_EDITOR_PROMPT`) | Independent source-sufficiency, support, novelty, selection, compression, and craft judgment over all inspected receipts; one omitted-only recovery is permitted | `NBN_EDITOR_MODEL`, `NBN_EDITOR_EFFORT` |
-| Legacy Block thread | `nbn/briefing.py` (`BRIEFING_PROMPT`) | Disabled rollback/experiment path | `NBN_MODEL` |
-| Daily audit | `nbn/audit.py` (`AUDIT_PROMPT`) | Receipt and class verification | `NBN_MODEL` |
+## Active v2 seats
 
-V2 prompts own editorial judgment; code supplies a deliberately small mechanical boundary:
+| Seat | Runtime prompt source | Production model / effort | Configuration |
+| --- | --- | --- | --- |
+| RSS/EDGAR mailroom | nbn/intake_triage.py | Haiku 4.5 / default | NBN_INTAKE_TRIAGE_MODEL, MODE |
+| Assignment preparation and storyline selection | nbn/desk_prep.py | GPT-5.6 Luna / low | NBN_DESK_PREP_MODEL, EFFORT, MODE |
+| Run-scoped newsroom/writer | nbn/newsroom.py: NEWSROOM_V2_SYSTEM plus loaded orientation and strict tools | Grok 4.3 / medium | NBN_NEWSROOM_MODEL, EFFORT; NBN_EDITORIAL_ENGINE=v2 |
+| Optional research assignment | nbn/research.py | Grok 4.3 / medium with native web/X | NBN_RESEARCH_MODEL, EFFORT; compatibility switch NBN_HAIKU_RESEARCH_MODE |
+| Independent batch editor | nbn/editor.py: BATCH_EDITOR_PROMPT plus evidence and recent coverage | Grok 4.5 / medium | NBN_EDITOR_MODEL, EFFORT |
+| Internal daily receipt audit | nbn/audit.py: AUDIT_PROMPT | legacy Anthropic NBN_MODEL | NBN_AUDIT_UTC |
 
-- `nbn/main.py`: inspected-ID integrity, exact-delivery idempotency, lease, kill-switch, and
-  Typefully lifecycle routing.
-- `nbn/lint.py`: empty/long copy, embedded URLs, unsupported verbatim quotes, verified mentions,
-  and investment instructions. Scope/style/number concerns are editor warnings in v2.
-- `config/source_tiers.toml` + `nbn/source_policy.py`: canonical tiers, aliases, ownership,
-  domain/handle normalization, and receipt eligibility.
-- `nbn/verify.py`: candidate support, originality, independent evidence, and provider claims.
-- `nbn/briefing.py`: receipt allowlist and Swan-reference exclusion for Blocks.
-- `nbn/config.py`: master autopost switch and allowed delivery classes.
+The separate Codex rolling audit is an app automation governed by AUDIT-AUTONOMY.md, not a
+prompt seat in the worker. Runtime values on Desk / System take priority over this dated table.
 
-The run newsroom receives a curated desk, not persisted records verbatim. Its
-`run_brief`, `intake_board`, `reference_board`, exact-event `coverage_board`, selected
-`storyline_board`, and verified-handle directory explicitly separate tips, uninspected
-pointers, historical coverage, and advisory context. Raw Node envelopes and unknown
-discovery fields are not passed through. Every candidate retains one stable ID and must
-be accounted for in both the opening survey and terminal dossier.
+## What the writer receives
 
-The same Sonnet message history uses bounded search/fetch tools and ends with a strict
-`submit_newsroom_dossier`. Search results are pointers; only NBN-generated `fetch_id` records
-can be cited. Code validates structural IDs and reconstructs provenance, while the batch editor
-may use all inspected receipts together. Source sufficiency, corroboration, semantic novelty,
-freshness, numerical materiality, scope, and importance are model judgments, not post-model
-code vetoes. Unsupported verbatim quotation remains a hard rail both before and after editing.
-The production orientation explicitly separates research depth from output depth: write
-selectively, lead with the Bitcoin-relevant consequence, split overloaded sentences, and do not
-manufacture Bitcoin importance from a famous investor's small indirect equity exposure.
+A fresh run-scoped context contains the orientation, run brief, stable candidate cards,
+assignment summaries, uninspected reference pointers, prepared inspected receipts, exact-event
+coverage/open-draft boards, compact recent-post and continuity indexes, selected NBN-native
+storylines, guide attention context and verified-handle spellings. Full indexed context is
+retrievable within bounds. Raw Node envelopes and Node theme metadata do not reach the live
+preparation/writer payload.
 
-Cross-run continuity combines the bounded exact-event evidence/workbench with a small NBN-native
-storyline ledger. Storyline prose is untrusted, regenerable context; Haiku selects only relevant
-keys and Sonnet can update only full revisioned cards it actually received. It is not an immortal
-model conversation or factual source. SerpAPI also has a per-run failure circuit so search outages
-do not consume the desk's research budget repeatedly.
+Guide prose, preparation, storyline cards and search snippets are context, not proof.
+Inspected records have code-issued fetch IDs. Direct fetches and citation-bound native
+provider-reported extracts retain different provenance; paraphrases are not verbatim captures.
+The same writer history may search, fetch, retrieve, delegate once, or submit immediately.
+There is no compulsory survey or minimum research phase. A terminal dossier accounts for
+each candidate; omitted candidates defer, and a malformed story does not veto the entire batch.
 
-The newsroom must declare `coverage_relation` (`distinct`, `same_event`, or `material_update`);
-code—not prompt prose—enforces the resulting one-active-output Typefully invariant.
+The writer owns research, event grouping, selection and copy. The separate editor judges the
+whole usable evidence pool, source sufficiency, novelty, importance and craft. Code owns safe
+URLs, structural identity, exact delivery lifecycle, quote support, mention limits, publisher
+constraints, investment-instruction and kill-switch rails. Source tier and harmless numerical
+differences are not hidden semantic vetoes.
 
-Node theme metadata no longer reaches either live model. The Node remains supplemental discovery;
-NBN's exact-event coverage and its own bounded storyline ledger supply editorial continuity.
+The orientation teaches short, simple sentences, one- or two-sentence paragraphs with blank
+lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
+labels whose use must match event freshness or material development. Historical examples
+illustrate craft, not current facts or fixed templates. The current prompt version is
+editorial-core-v2.15.2-craft; Plan 0060 does not change its body.
 
-The identity clerk is the only component that may propose an event-key alias. Its closed
-event-type conflict guard can veto a proposal. When
-`NBN_YIELD_IDENTITY_NORMALIZER_ENABLED=true`, the prompt may propose only the demonstrated
-same-day U.S. 10-year Treasury-yield threshold family; deterministic code then requires
-the exact instrument/date/direction/percent unit and a reading within 0.10 percentage
-point. Code never turns a clerk `distinct` result into a merge.
+## Retained legacy paths - not the active v2 funnel
 
-Triage and Writer read guide examples through the versioned `guide-signal-v1` namespace
-(with legacy-read compatibility). Guide prose is an attention/format example only. It is
-never supplied as factual authority, and omitted-verdict recovery can route a substantive
-claim to research or a non-claim to visible hold, but cannot establish support.
+| Source | Purpose |
+| --- | --- |
+| prompts/wire_voice.md | Legacy charter loaded by brain.py |
+| nbn/brain.py: TRIAGE_SYSTEM, CLUSTER_SYSTEM, DRAFT_SYSTEM | Legacy triage, alias clerk, single-post drafting |
+| nbn/verify.py: RESOLVE_PROMPT, CLAIM_SUPPORT_PROMPT | Legacy source resolution/support checks |
+| nbn/editor.py: EDITOR_PROMPT | Legacy single-post editor |
+| nbn/briefing.py: BRIEFING_PROMPT | Disabled opt-in Block builder |
+| nbn/newsroom.py legacy run protocol | v1/shadow compatibility, not forced phases in live v2 |
 
-When a prompt changes, update its runtime source directly, add a regression case for the
-behavior where practical, and observe one complete live cycle after deployment as
-described in `HANDOFF-CODEX.md`.
+NBN_MODEL controls legacy Anthropic work, not the explicitly configured v2 writer.
+Old HAIKU_* settings and haiku_* / sonnet_inventory counter names survive for compatibility;
+read the recorded model/provider fields for actual execution.
+
+## Editing discipline
+
+Edit runtime sources, not this index. Do not modify runtime prompts merely to modernize
+historical model names. Policy changes require owner approval; the rolling audit may make
+bounded writing-execution improvements under its explicit scope. Test prompt-bound invariants,
+bump the version when behavior changes, deploy deliberately and inspect actual output.

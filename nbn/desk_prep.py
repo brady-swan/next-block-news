@@ -1,4 +1,4 @@
-"""Run-scoped Haiku assignment desk ahead of the expensive Sonnet newsroom."""
+"""Run-scoped assignment preparation and relevant NBN storyline selection."""
 from __future__ import annotations
 
 import json

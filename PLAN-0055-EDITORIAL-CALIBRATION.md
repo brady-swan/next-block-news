@@ -1,5 +1,7 @@
 # Plan 0055 — Editorial calibration and owner-feedback loop
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 **Status:** Implemented and deployed to production on 2026-09-04.
 
 ## Objective

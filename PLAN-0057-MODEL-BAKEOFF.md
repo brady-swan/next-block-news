@@ -1,5 +1,7 @@
 # Plan 0057 — Isolated NBN model bake-off
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 **Status:** Approved after four independent lead-review passes. Phase-one execution complete;
 owner-blind adjudication and a genuinely prospective holdout remain before any production adoption.
 

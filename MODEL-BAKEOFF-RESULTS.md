@@ -1,5 +1,7 @@
 # NBN model bake-off — phase-one results
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 - **Run:** `090799e2f78a49be98435420f66e295a`
 - **Executed:** September 5, 2026
 - **Spend:** `$2.72994060` across 105 settled provider calls

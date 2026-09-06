@@ -1,5 +1,7 @@
 # NBN model bake-off
 
+> Status reviewed 2026-09-06: Evaluator operations, not production behavior. The local working tree may contain unreleased evaluator additions; preserve them separately from runtime releases. Current system: [DOCUMENTATION.md](../DOCUMENTATION.md).
+
 This directory contains the immutable registry for Plan 0057. Generated corpora, provider
 responses, the evaluation SQLite ledger, scorecards, and blinded review sheets belong under the
 ignored `.model-eval/` directory.

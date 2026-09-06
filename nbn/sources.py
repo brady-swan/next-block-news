@@ -1,9 +1,7 @@
 """Feed watchers. RSS/Atom via stdlib XML parsing; optional X recent-search.
 
-Feed URLs are inherited from the proven swan-daily-brief curation (verified working
-config), trimmed to wire scope: Bitcoin-native + markets + primary regulatory.
-Bitcoin Magazine's feed has returned 403 for months upstream; kept here so a fix
-shows up on its own, failures are per-feed and non-fatal.
+The roster covers Bitcoin-native, markets and primary regulatory discovery. A listed
+feed is not guaranteed available; errors are isolated per feed and retried later.
 """
 import html
 import ipaddress

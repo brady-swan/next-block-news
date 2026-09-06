@@ -1,5 +1,7 @@
 # Plan 0054 — Output idempotency, editor recovery, and desk hygiene
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Objective
 
 Stabilize Editorial Core v2 without redesigning its editorial judgment. NBN is now producing

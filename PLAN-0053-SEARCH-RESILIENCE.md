@@ -1,5 +1,7 @@
 # Plan 0053 — Search resilience and same-event receipt pooling
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Objective
 
 Make NBN's source-discovery path reliable enough for a 15-minute newsroom without turning search

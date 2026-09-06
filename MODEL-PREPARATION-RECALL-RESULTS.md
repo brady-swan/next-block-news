@@ -1,5 +1,7 @@
 # NBN preparation-model editorial recall test
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 - **Evaluated:** September 5, 2026
 - **Frozen corpus:** 300 raw cards in six RSS-intake and six assignment-desk batches
 - **Gold set:** 33 high-confidence must-forward leads and 68 high-confidence safe-background

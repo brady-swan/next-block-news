@@ -1,5 +1,7 @@
 # NBN model cost analysis
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 _Planning snapshot: September 4, 2026 (Central). No provider migration is approved or implemented by this document._
 
 ## Objective
@@ -169,4 +171,3 @@ Suggested order:
 - Add credits and create a dedicated key in the [xAI Console](https://console.x.ai/).
 - Do not paste either key into chat or commit it to the repository.
 - Once the evaluation implementation is ready, add the keys to Railway as secrets and keep every non-Anthropic path in shadow until explicitly promoted.
-

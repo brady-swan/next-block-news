@@ -1,5 +1,7 @@
 # Plan 0052 — Haiku assignment desk and Sonnet-directed research
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Objective
 
 Bring the editorial core back to a justifiable operating cost without reducing the quality or

@@ -553,7 +553,7 @@ def render(con, day: str = None) -> str:
         for row in (decision_run or {}).get("theme_coverage_snapshot", [])
         if isinstance(row, dict) and row.get("theme_id")
     }
-    usage = store.model_usage_summary(con, s)
+    usage = store.model_usage_summary(con, s, until=e)
     mailroom_usage = store.model_usage_seat_summary(
         con, seat="rss_triage", since=s, until=e
     )
@@ -598,6 +598,9 @@ def render(con, day: str = None) -> str:
            f"<title>NBN Desk</title>"
            f"<link rel=icon type=image/png href='data:image/png;base64,{LOGO_B64}'>"
            f"{FONTS}<style>{CSS}</style>"]
+    from .desk import link as desk_link
+    out.append(f'<div class="metaline"><a href="{_esc(desk_link(d=day))}">← Live Desk</a>'
+               ' · Review tools · Existing actions remain guarded and unchanged.</div>')
 
     # ── Status strip ─────────────────────────────────────────────────────────
     auto = (f"<span class='pill on'>autopost on · "

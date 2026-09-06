@@ -8,7 +8,10 @@ the final editorial call; a small mechanical shell then delivers eligible work t
 Typefully.
 
 This project is independent and is not Swan-affiliated. The wire's editorial source of
-truth is `prompts/wire_voice.md`; the complete owner's manual is `SYSTEM.md`.
+truth is `prompts/orientation-brief-v2.md`; the complete owner's manual is `SYSTEM.md`.
+Start with [DOCUMENTATION.md](DOCUMENTATION.md) for current versus historical references.
+The live multi-view Desk is `/desk?k=<token>`; existing guarded actions remain at `/report`.
+See [DESK-GUIDE.md](DESK-GUIDE.md) and the visual guide in `output/pdf/nbn-system-guide.pdf`.
 
 ## Pipeline
 
@@ -40,6 +43,7 @@ production overrides; conservative Anthropic defaults remain available for rollb
 | `nbn/briefing.py` | Fresh AM/PM EIC one-off discovery; legacy Block builder (disabled) |
 | `nbn/audit.py` | Daily receipt and class audit; stages material correction drafts |
 | `nbn/report.py` | Token-protected Desk report |
+| `nbn/desk.py` + `nbn/desk_assets/` | Read-only live views, bounded snapshots, system-guide download |
 | `nbn/main.py` | Poll loop, orchestration, health/status HTTP server |
 
 ## Safety invariants
@@ -152,8 +156,10 @@ railway ssh -- printenv NBN_AUTOPOST_ENABLED
 # 3. Before new code/migrations exist remotely, make an online SQLite backup.
 railway ssh -- "python -c 'import datetime,os,sqlite3; p=os.environ.get(\"NBN_DB_PATH\",\"/data/nbn.db\"); d=\"/data/backups\"; os.makedirs(d,exist_ok=True); q=f\"{d}/nbn-pre-deploy-{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}.db\"; a=sqlite3.connect(p); b=sqlite3.connect(q); a.backup(b); print(q,b.execute(\"PRAGMA integrity_check\").fetchone()[0]); b.close(); a.close()'"
 
-# 4. Upload. Do not modify NBN_AUTOPOST_ENABLED as part of a code deployment.
-railway up --detach
+# 4. Deploy a clean archive of the intended commit, not a dirty working tree.
+# Set the release path from mktemp -d and git archive, then use railway up with
+# that path, --path-as-root, and explicit existing project/environment/service.
+# Do not modify NBN_AUTOPOST_ENABLED as part of a code deployment.
 
 # 5. Do not run scripts/run_once.py. Watch one natural worker cycle, logs, and /health.
 railway logs --since 10m
@@ -173,7 +179,9 @@ expires within two minutes. Fresh persisted resolutions are reused across worker
 
 The worker exposes `/health` and `/status`; both return runtime and database state, and
 health becomes HTTP 500 when the last completed cycle is more than ten minutes old. The
-Desk is available at `/report?k=<token>` when `NBN_REPORT_TOKEN` is configured. The worker
+Desk is available at `/desk?k=<token>` when `NBN_REPORT_TOKEN` is configured. The legacy
+`/report` page retains every review action and deep link. The new views poll a read-only
+snapshot every 15 seconds in visible tabs, never a model or provider. The worker
 reconciles recent Typefully publication receipts every five minutes, so drafts published
 manually are counted by their confirmed X publication time and leave the action queue.
 For held items, the Desk can queue a guarded **Stage draft** retry (freshness,
@@ -184,6 +192,9 @@ The Desk exposes both RSS-mailroom and assignment-desk Background decisions; **S
 atomically restores one item to the newsroom queue and advances the next desk deadline. It also
 shows per-seat model spend, the daily cost target, initial packet size, newsroom attempts,
 prepared receipts, delegated research, native search counts, and billing provenance.
+Recorded seat costs exclude the retained daily receipt-audit calls, external source APIs,
+hosting and the Codex audit; they are not a complete bill. New Desk publication counts require
+both a published status and confirmation timestamp, not just local IMMEDIATE mode.
 
 See `HANDOFF-CODEX.md`, `SYSTEM.md`, `ROADMAP.md`, and `CORRECTIONS.md` before changing
 publishing behavior.

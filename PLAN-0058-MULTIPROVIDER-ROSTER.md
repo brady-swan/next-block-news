@@ -1,5 +1,7 @@
 # Plan 0058 — Deploy the bake-off roster
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 Status: implemented, independently reviewed, deployed, and smoke-tested.
 Owner authorized plan/review/build/deploy/smoke. The lead coder approved the plan after one
 focused provenance clarification, then approved the implementation. See the deployment record

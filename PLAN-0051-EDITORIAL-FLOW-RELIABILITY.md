@@ -1,5 +1,7 @@
 # Plan 0051 — Editorial flow reliability and model-owned judgment
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 ## Decision
 
 Keep editorial core v2 and repair the seams that are suppressing good work. Do not start

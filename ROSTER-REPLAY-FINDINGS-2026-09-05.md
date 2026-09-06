@@ -1,5 +1,7 @@
 # New roster replay — findings and conclusions
 
+> Status reviewed 2026-09-06: Historical design/evaluation record. Preserve dated findings; later releases may supersede the proposal. For the current system, see [DOCUMENTATION.md](DOCUMENTATION.md) and [SYSTEM.md](SYSTEM.md).
+
 September 5, 2026, late evening Central. Historical review copies, not fresh publication recommendations.
 
 ## Bottom line
