@@ -9,6 +9,19 @@ from . import config, lint, store
 log = logging.getLogger("nbn.editor")
 
 EDITOR_PAYLOAD_MAX_BYTES = 256 * 1024
+BATCH_EDITOR_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {"decisions": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "story_id": {"type": "string"},
+            "verdict": {"type": "string", "enum": ["publish", "revise", "draft", "drop"]},
+            "post": {"type": ["string", "null"]}, "reason": {"type": "string"},
+        },
+        "required": ["story_id", "verdict", "post", "reason"],
+    }}},
+    "required": ["decisions"],
+}
 
 EDITOR_PROMPT = """You are the publishing editor of Next Block News, a Bitcoin news wire
 on X. A post has passed all factual and style gates and is seconds from publishing. You
@@ -119,6 +132,11 @@ For each candidate, use practical editorial judgment:
   from evidence.
 
 The payload stores receipt bodies once in evidence_catalog. Each candidate names its
+receipt IDs. A provider_reported_extract is a source-specific native-search paraphrase, not a
+verbatim captured page or automatic independent corroboration. Its URL was retrieved, but assess
+its factual support, authorship, dates, and limitations with that provenance visible. Do not treat
+unknown X authorship as first-party authority or an AI-generated answer as independent reporting.
+Each candidate also names its
 selected_evidence_ref and inspected_evidence_refs; use those references to inspect every
 receipt available to that story. Never treat an absent catalog body as inspected evidence.
 
@@ -244,7 +262,8 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[d
         for evidence in list(candidate.get("inspected_evidence") or [])[:8]:
             text = str(evidence.get("text") or "")[:8000]
             fingerprint = str(evidence.get("content_fingerprint") or "")
-            key = fingerprint or hashlib.sha256(text.encode()).hexdigest()
+            key = (str(evidence.get("retrieval_kind") or "direct_fetch") + ":"
+                   + (fingerprint or hashlib.sha256(text.encode()).hexdigest()))
             if key not in catalog:
                 catalog[key] = {
                     **evidence, "text": text,
@@ -322,18 +341,22 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
     if not payload["candidates"]:
         return {"ok": True, "decisions": {}, "payload_deferred": payload_deferred}
     called_at = time.monotonic()
+    usage_logged = False
+    resp = None
     try:
         resp = brain._create(
             config.EDITOR_MODEL,
             BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n" + newsroom.ORIENTATION_BRIEF,
             json.dumps(payload),
             max_tokens=8000, effort=config.EDITOR_EFFORT, reservation=reservation,
+            schema=BATCH_EDITOR_SCHEMA,
         )
         store.record_model_usage(
             con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
             round_number=1, response=resp,
             latency_ms=int((time.monotonic() - called_at) * 1000), outcome="ok",
         )
+        usage_logged = True
         out = brain._json_from(resp)
         rows = out.get("decisions")
         if not isinstance(rows, list):
@@ -371,6 +394,8 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 ),
             }
             recovery_started = time.monotonic()
+            recovery_logged = False
+            retry = None
             try:
                 retry = brain._create(
                     config.EDITOR_MODEL,
@@ -378,12 +403,14 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                     + newsroom.ORIENTATION_BRIEF,
                     json.dumps(recovery_payload), max_tokens=5000,
                     effort=config.EDITOR_EFFORT, reservation=reservation,
+                    schema=BATCH_EDITOR_SCHEMA,
                 )
                 store.record_model_usage(
                     con, run_id=run_id, seat="editor_recovery", model=config.EDITOR_MODEL,
                     round_number=1, response=retry,
                     latency_ms=int((time.monotonic() - recovery_started) * 1000), outcome="ok",
                 )
+                recovery_logged = True
                 retry_rows = brain._json_from(retry).get("decisions")
                 retry_rows = retry_rows if isinstance(retry_rows, list) else []
                 allowed_omitted = {row["story_id"] for row in omitted}
@@ -402,21 +429,24 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                     }
                     recovery["recovered"] += 1
             except Exception as recovery_exc:  # noqa: BLE001 - preserve first-pass decisions
-                store.record_model_usage(
-                    con, run_id=run_id, seat="editor_recovery", model=config.EDITOR_MODEL,
-                    round_number=1,
-                    latency_ms=int((time.monotonic() - recovery_started) * 1000),
-                    outcome="error",
-                )
+                if not recovery_logged:
+                    store.record_model_usage(
+                        con, run_id=run_id, seat="editor_recovery", model=config.EDITOR_MODEL,
+                        round_number=1, response=retry,
+                        latency_ms=int((time.monotonic() - recovery_started) * 1000),
+                        outcome="error",
+                    )
                 recovery["error"] = str(recovery_exc)[:200]
         return {"ok": True, "decisions": decisions,
                 "payload_deferred": payload_deferred, "recovery": recovery}
     except Exception as exc:  # noqa: BLE001 - preserve good desk work as drafts
-        store.record_model_usage(
-            con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
-            round_number=1, latency_ms=int((time.monotonic() - called_at) * 1000),
-            outcome="error",
-        )
+        if not usage_logged:
+            store.record_model_usage(
+                con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
+                round_number=1, response=resp,
+                latency_ms=int((time.monotonic() - called_at) * 1000),
+                outcome="error",
+            )
         log.warning("batch editor unavailable; staging candidates as drafts: %s", exc)
         return {"ok": False, "error": str(exc)[:300], "decisions": {},
                 "payload_deferred": payload_deferred}

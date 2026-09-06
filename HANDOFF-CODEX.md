@@ -4,6 +4,16 @@
 The deeper owner's manual is `SYSTEM.md`; this file is orientation and the rules you must
 not break.*
 
+**Roster update, 2026-09-05 (Plan 0058):** the owner approved the bake-off roster, independently
+reviewed before implementation. RSS/EDGAR intake stays Haiku 4.5; assignment preparation uses
+GPT-5.6 Luna low; newsroom/writing uses Grok 4.3 medium; focused research uses Grok 4.3 medium
+with native web and X search; separate editing uses Grok 4.5 medium. Production configuration
+and smoke results are recorded in Plan 0058. `NBN_MODEL` still controls legacy Anthropic work;
+`NBN_NEWSROOM_MODEL` controls the active desk. Source-specific native extracts retain their
+provider-reported provenance through continuity and editor review. The existing writing goals,
+15-minute cadence, lifecycle, and source-reply format are unchanged. Autopost stays OFF.
+Read SYSTEM.md before the historical architecture below.
+
 **Cost-control update, 2026-09-03 (Plan 0052):** a run-scoped Haiku assignment desk now
 prepares the cross-source batch before Sonnet; protected/high-attention work and every failure
 advance, while all-Background windows can avoid a Sonnet wake. Sonnet receives compact indexes

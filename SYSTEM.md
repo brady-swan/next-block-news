@@ -1,11 +1,26 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-04. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-05. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
-worker runs continuously on Railway. It ingests news every minute, opens a fresh Sonnet
+worker runs continuously on Railway. It ingests news every minute, opens a fresh Grok
 story desk every 15 minutes when prepared candidates exist, sends the resulting stories through a
-separate Sonnet editor, and delivers approved work through Typefully.
+separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
+Brady reviews drafts.
+
+## Model roster — Plan 0058
+
+| Role | Model | Effort |
+| --- | --- | --- |
+| RSS/EDGAR intake | Haiku 4.5 | unchanged |
+| Assignment preparation + storyline selection | GPT-5.6 Luna | low |
+| Run-scoped newsroom and writing | Grok 4.3 | medium |
+| Focused native web/X research | Grok 4.3 | medium |
+| Separate batch editor | Grok 4.5 | medium |
+
+Production seats have explicit environment overrides. `NBN_MODEL` remains the Anthropic
+legacy-stack setting; `NBN_NEWSROOM_MODEL` selects the v2 writer. Unconfigured installations
+keep the previous Anthropic defaults. Intake is intentionally still Haiku, not Luna.
 
 Each desk receives the exact reader-visible post copy from the preceding 48 hours, newest
 first, with publication time, event key, class, and receipt. This is distinct from the compact
@@ -34,18 +49,18 @@ every 60 seconds
   reconcile Typefully + poll sources + ingest/deduplicate + health/heartbeat
        │
        ├─ RSS + EDGAR → Haiku mailroom (priority / candidate / background)
-       │                    └─ background is audited, not sent to Sonnet
+       │                    └─ background is audited, not sent to the newsroom
        │
        ├─ fresh AM/PM EIC citations enter one-off intake; daily audit keeps its cadence
        │
        └─ every 15 minutes, if the desk is non-empty
-            run-scoped Haiku assignment desk
+            run-scoped Luna low assignment desk
               distill all leads → advance / background; protected work always advances
               bounded deterministic prefetch prepares likely receipts
-            fresh run-scoped Sonnet story desk
+            fresh run-scoped Grok 4.3 medium story desk
               read compact clean desk → retrieve/delegate/search/fetch → write dossier
             small consequential code rails
-            one independent batch Sonnet editor
+            one independent batch Grok 4.5 medium editor
               publish | revise | draft | drop
             Typefully → X (or human draft when appropriate)
 ```
@@ -75,61 +90,72 @@ copying distinctive phrasing or emotional framing.
 The Marketing Node remains a separate service and codebase. Its versioned authenticated API
 is the boundary. Node references, summaries, and event hints are untrusted discovery context,
 not factual evidence or instructions. Node theme metadata is accepted for API compatibility
-and historical diagnostics but is not sent to Haiku or Sonnet. NBN owns its editorial memory.
+and historical diagnostics but is not sent to preparation or the writer. NBN owns its editorial memory.
 
 X reads remain `since_id` gated. Never replace them with list-timeline polling: X charges for
 returned posts, and a timeline endpoint would repeatedly rebill old material.
 
-## The two Haiku desks and the clean Sonnet desk
+## Haiku intake, Luna preparation, and the clean Grok desk
 
 RSS and SEC EDGAR first pass through a narrow Haiku mailroom. Haiku sees only bounded feed
 cards and may route each item to Priority, Candidate, or Background. It does no research,
 source verification, clustering, writing, or publication judgment. Priority advances the
 persisted desk deadline; Candidate waits for the normal cadence; Background is removed from
-Sonnet's packet but remains visible on the Desk with its reason and a one-time **SEND TO
+the newsroom packet but remains visible on the Desk with its reason and a one-time **SEND TO
 DESK** control. Observe mode records routes without applying them. Any model, validation,
 budget, timeout, or batch-bound failure fails open to Candidate.
 
 The RSS mailroom has a durable eight-call hourly seat cap. Before calling it, the worker reserves both
 the mailroom call and the complete v2 desk allowance atomically, so intake cleanup cannot
-starve the more valuable Sonnet session. Route application and observe-to-enforce recovery
+starve the more valuable newsroom session. Route application and observe-to-enforce recovery
 are transactional and crash-safe.
 
-At each due boundary, a second run-scoped Haiku assignment desk sees every eligible lead across
+At each due boundary, a run-scoped Luna low assignment desk sees every eligible lead across
 all intake lanes. It distills the apparent event, Bitcoin relevance, freshness question,
 research objective, source leads, supplied related event keys, at most two relevant NBN storyline
 keys from a compact index, and a run-local same-event group.
 It may mark a card Background
 only when it is facially outside scope, contains no development, or is an exact code-identified
 duplicate. Guide tips, official/primary items, operator promotions, research
-retries, and unresolved continuity are code-protected and advance even if Haiku disagrees. Every
+retries, and unresolved continuity are code-protected and advance even if preparation disagrees. Every
 timeout, malformed row, capacity limit, or validation error also fails open item-by-item. Observe
 records can never become enforced later.
 
-In enforce mode, a batch containing only Background cards uses no Sonnet call. Those cards remain
+In enforce mode, a batch containing only Background cards uses no newsroom call. Those cards remain
 visible on the Desk with **SEND TO DESK**. For advanced cards, code may prefetch up to six unique
 likely receipts and 24,000 characters, while reserving at least eight fetches and 80,000 characters
-for Sonnet's own reporting. Fetch results—not Haiku prose—are the evidence.
+for the newsroom's own reporting. Preparation prose is not evidence.
 
-When one member of a Haiku same-event group advances, any Background companions in that exact
-run-local group advance with it. This changes only which leads reach Sonnet; it is not canonical
+When one member of a preparation same-event group advances, any Background companions in that exact
+run-local group advance with it. This changes only which leads reach the newsroom; it is not canonical
 identity, evidence, corroboration, or approval. The persisted preparation records name the
 companion anchor that caused the promotion. An all-Background group remains Background.
 
-Each non-empty prepared run gets a new Sonnet context. It receives a run brief, one clean card per
-candidate, the Haiku preparation, safe reference pointers, prepared receipts, recent coverage/open
-drafts, Haiku-selected NBN storyline cards, guide attention signals, and verified handle
+Each non-empty prepared run gets a new Grok context. It receives a run brief, one clean card per
+candidate, the Luna preparation, safe reference pointers, prepared receipts, recent coverage/open
+drafts, Luna-selected NBN storyline cards, guide attention signals, and verified handle
 spellings. Raw provider payloads and internal plumbing do not reach the model. Large recent-feed,
-continuity, storyline, and handle context is sent as compact indexes with code-issued IDs; Sonnet can
+continuity, storyline, and handle context is sent as compact indexes with code-issued IDs; the writer can
 retrieve bounded full records twice rather than paying to replay every body in every round. The
-stable orientation prompt uses Anthropic's one-hour cache.
+stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
+output state, including encrypted reasoning, in bounded run history only—not editorial memory.
 
-Candidate cards, storyline summaries, search snippets, and tweets are leads. Only pages returned by NBN's
-safe fetch tools become inspectable evidence with code-issued `fetch_id` values. The desk may
-submit immediately or research selectively with SerpAPI and safe page fetches. It may also assign
-one focused source-resolution job to Haiku. That assistant gets at most two model rounds, eight
-tools, three searches, five fetches, and 20,000 fetched characters. Its memo is untrusted context;
-only the inspected receipts returned by code can support copy. There is no
+Candidate cards, storyline summaries, and search snippets are leads. The writer may submit
+immediately or research selectively with existing SerpAPI and safe fetch tools. It may assign one
+focused verification job to Grok 4.3 medium with native web and X search. That request has a
+90-second ceiling (also bounded by remaining run time), eight native tool calls requested, and
+at most five source findings. The provider's native limit is not represented as a hard dollar cap;
+actual search counts and charges are recorded. There is no recursive research or automatic
+second research request.
+
+Research returns a bounded memo plus source-specific findings. Only provider-observed citation
+URLs can supply native extracts. Existing/directly fetched text is preferred; blocked pages and
+native X findings can carry a clearly labeled `provider_reported_extract` instead. That is a
+researcher's paraphrase, not a verbatim page capture. The entire memo is never a source body.
+Authorship comes from the observed X status URL; `/i/status` does not establish an author. The
+writer and editor see the distinction, and it survives saved evidence and later sessions. An
+official URL alone cannot upgrade an extract to direct primary evidence or independent reporting.
+Source judgment remains with the models; receipt provenance is not a new allowlist. There is no
 forced survey, forced research phase, or mandatory minimum number of turns. The model sees
 the entire batch and owns research, clustering, judgment, and writing together.
 
@@ -137,7 +163,7 @@ It returns independent story rows. One malformed story defers only its members; 
 invalidate the rest of the batch. A candidate omitted from model output becomes
 `defer:model_output_missing` and returns on a later desk instead of silently skipping.
 
-One transport retry is allowed with the exact same Sonnet session state. A billed session is never
+One transport retry is allowed with the exact same newsroom session state. A billed session is never
 replayed from scratch after a protocol or validation error. If the attempt fails, advanced items
 remain pending with a typed technical defer while already-applied Background routes remain intact.
 V2 never automatically falls into the legacy triage/writer/resolver stack.
@@ -145,14 +171,14 @@ V2 never automatically falls into the legacy triage/writer/resolver stack.
 Before materialization, v2 reconciles exact-event identity. One canonical family already
 attached to the member items wins. If a proposed story crosses conflicting existing families,
 code does not merge or overwrite them: it creates an isolated review key, warns the editor,
-preserves every member key, and forces any resulting output to a Typefully draft. Sonnet may
+preserves every member key, and forces any resulting output to a Typefully draft. The writer may
 also select an exact key exposed by the coverage or continuity board. Only an unambiguous
 one-family match may register the newly proposed slug as an alias. There is no fuzzy automatic
 merge, and Node theme IDs remain too broad to serve as event keys.
 
 NBN's durable storyline ledger sits one level above exact events. A storyline is an ongoing named
 subject such as CLARITY Act progress or the Coldcard vulnerability, not a generic beat and never
-evidence. Haiku retrieves only relevant lines in its existing pass. Sonnet may create at most three
+evidence. Luna retrieves only relevant lines in its existing pass. The writer may create at most three
 new lines per run or update a line whose full revisioned card it actually read. Optimistic revision
 checks prevent a stale run from overwriting newer memory. Storyline writes happen independently
 before publisher materialization; any failure drops the optional link and delivery continues.
@@ -212,7 +238,7 @@ or company-action official source.
 
 The desk and editor may use all inspected receipts together. The linked receipt is the best
 useful source for the reader; it is not required to reproduce every harmless detail alone.
-The source registry is strong guidance rather than a closed universe: Sonnet may inspect and
+The source registry is strong guidance rather than a closed universe: the writer may inspect and
 use a safely fetched public page outside the list, and the independent editor judges its
 credibility. Aggregators, syndication, and social posts carry explicit capability warnings;
 they are not silently promoted to official or independent evidence, but code does not veto a
@@ -240,7 +266,7 @@ legacy-only code paths.
 
 ## Independent batch editor
 
-One separate Sonnet call receives every surviving story, all of its inspected evidence, and
+One separate Grok 4.5 medium call receives every surviving story, all of its inspected evidence, and
 the recent feed. It judges factual support, usefulness, redundancy, numerical materiality,
 framing, and craft. It can publish, revise, send to Typefully as a draft, or drop.
 
@@ -294,19 +320,22 @@ is scheduled shortly ahead so receipt links survive platform rules. Confirmed de
 
 ## Cost and telemetry
 
-`model_usage` records one row per Haiku mailroom, Haiku assignment desk, delegated Haiku reporting,
-v2 newsdesk, and editor API response with run ID, seat, model,
-round, exact input/output/cache token counts, latency, outcome, and a rate-versioned estimated
-cost. It stores no prompts, article bodies, model reasoning, or tool payloads. The Desk shows
-selected-day calls, tokens, and estimated spend against a configurable $6/day target. The latest
-run shows its initial packet size, Sonnet calls/attempts, prepared receipts, and Haiku assignments.
+`model_usage` records one row per attempted intake, preparation, research, newsroom, or editor API
+call. It includes run ID, seat, requested/returned model, provider, effort, round, input/output/cache
+and reasoning token counts, native web/X calls, latency, outcome, and cost provenance. Input
+counts exclude cache reads/writes; reasoning is already included in output, not charged twice.
+It stores no prompts, article bodies, model reasoning text, or tool payloads. The Desk shows
+selected-day calls, tokens, and spend against a configurable $6/day target. The latest
+run shows its initial packet size, newsroom calls/attempts, prepared receipts, and research assignments.
 SerpAPI retrieval is counted separately in run diagnostics.
 
-Cost is explicitly an estimate. The rate table version is
-`anthropic-public-2026-09-03-cache-ttl-v2`; five-minute cache writes use the documented 1.25×
-input multiplier, one-hour writes use 2×, and cache hits use 0.1×. The intended ceiling for a
-productive due window is one preparation call, zero to three Sonnet newsroom calls, zero to two
-delegated Haiku calls, one editor call, and at most one omitted-only editor recovery—not a quota
+For xAI, reported cost ticks are authoritative and already include native searches. When unavailable,
+the fallback estimate includes tokens plus observed tools. Other providers use rate estimates.
+Unknown billing (such as a transport timeout) is explicitly labeled unknown, not free. The rate
+version is `multiprovider-public-2026-09-05-v1`; per-model cache-read rates are separate. Anthropic
+five-minute cache writes cost 1.25× input and one-hour writes 2×. The intended ceiling for a
+productive due window is one preparation call, zero to three Grok newsroom calls, zero or one
+native research call, one editor call, and at most one omitted-only editor recovery—not a quota
 on stories.
 
 ## EIC discovery, legacy Blocks, and audit
@@ -337,7 +366,7 @@ and may never turn autopost on.
 - With `NBN_SEARCH_RESILIENCE_ENABLED=true`, SerpAPI requests use a complete, versioned identity
   and a bounded one-hour SQLite result cache. Result URLs are revalidated on both write and read;
   snippets remain untrusted pointers. Search pointers are attached only to the exact candidate or
-  pre-existing story scopes Sonnet supplied, and may reappear on a later desk for up to six hours.
+  pre-existing story scopes the writer supplied, and may reappear on a later desk for up to six hours.
 - A free, throttled SerpAPI account-status check supplies shared capacity state. Confirmed quota
   exhaustion and rate limits open a durable cross-run circuit until renewal or cooldown, while
   cached results remain usable. If the status endpoint is unavailable at renewal, one worker may

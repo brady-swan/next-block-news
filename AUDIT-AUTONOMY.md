@@ -29,7 +29,7 @@ rewrites to the tuning record.
 
 ## Automatically tune approved writing execution
 
-The audit may make bounded changes to the Sonnet writer or editor prompts and their curated
+The audit may make bounded changes to the configured writer or editor prompts and their curated
 examples when the change only helps the models execute the currently approved writing style.
 This includes clearer ledes, simpler sentence structure, paragraph rhythm, scannability,
 removing expendable detail, avoiding needless definitions for the Bitcoin-native audience, and

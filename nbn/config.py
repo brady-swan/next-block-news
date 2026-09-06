@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # LLM
 ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-sonnet-5")
+NEWSROOM_MODEL = os.environ.get("NBN_NEWSROOM_MODEL", ANTHROPIC_MODEL)
+NEWSROOM_EFFORT = os.environ.get("NBN_NEWSROOM_EFFORT", "medium")
 TRIAGE_MODEL = os.environ.get("NBN_TRIAGE_MODEL", ANTHROPIC_MODEL)
 TRIAGE_EFFORT = os.environ.get("NBN_TRIAGE_EFFORT", "medium")
 # The Editor: last-mile judgment seat. It runs only on autonomous candidates, so the
@@ -85,6 +87,7 @@ DESK_PREP_MODE = os.environ.get("NBN_DESK_PREP_MODE", "off").strip().lower()
 if DESK_PREP_MODE not in {"off", "observe", "enforce"}:
     raise RuntimeError("NBN_DESK_PREP_MODE must be off, observe, or enforce")
 DESK_PREP_MODEL = os.environ.get("NBN_DESK_PREP_MODEL", "claude-haiku-4-5")
+DESK_PREP_EFFORT = os.environ.get("NBN_DESK_PREP_EFFORT", "low")
 DESK_PREP_BATCH_SIZE = int(os.environ.get("NBN_DESK_PREP_BATCH_SIZE", "25"))
 DESK_PREP_MAX_PACKET_BYTES = int(
     os.environ.get("NBN_DESK_PREP_MAX_PACKET_BYTES", str(48 * 1024))
@@ -115,6 +118,9 @@ HAIKU_RESEARCH_MODE = os.environ.get("NBN_HAIKU_RESEARCH_MODE", "off").strip().l
 if HAIKU_RESEARCH_MODE not in {"off", "on"}:
     raise RuntimeError("NBN_HAIKU_RESEARCH_MODE must be off or on")
 HAIKU_RESEARCH_MODEL = os.environ.get("NBN_HAIKU_RESEARCH_MODEL", "claude-haiku-4-5")
+RESEARCH_MODEL = os.environ.get("NBN_RESEARCH_MODEL", HAIKU_RESEARCH_MODEL)
+RESEARCH_EFFORT = os.environ.get("NBN_RESEARCH_EFFORT", "medium")
+RESEARCH_NATIVE_MAX_TOOL_CALLS = int(os.environ.get("NBN_RESEARCH_NATIVE_MAX_TOOL_CALLS", "8"))
 HAIKU_RESEARCH_MAX_ASSIGNMENTS = int(
     os.environ.get("NBN_HAIKU_RESEARCH_MAX_ASSIGNMENTS", "1")
 )

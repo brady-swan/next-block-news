@@ -353,7 +353,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
 
     brain.activate_model_reservation(reservation)
     store.start_newsroom_run(
-        con, pipeline_run_id, config.RUN_NEWSROOM_MODE, config.ANTHROPIC_MODEL,
+        con, pipeline_run_id, config.RUN_NEWSROOM_MODE, config.NEWSROOM_MODEL,
         newsroom.PROMPT_VERSION, [item["url_hash"] for item in inventory],
     )
     session = newsroom.start_session(
@@ -1126,7 +1126,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         if reservation:
             brain.activate_model_reservation(reservation)
             store.start_newsroom_run(
-                con, pipeline_run_id, newsroom_mode, config.ANTHROPIC_MODEL,
+                con, pipeline_run_id, newsroom_mode, config.NEWSROOM_MODEL,
                 newsroom.PROMPT_VERSION, [item["url_hash"] for item in inventory],
             )
             session = None

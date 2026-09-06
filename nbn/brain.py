@@ -104,7 +104,7 @@ def consume_model_call(token: str | None = None) -> None:
 
 
 def _create(model: str, system: str, user: str, max_tokens: int = 4000,
-            effort: str = None, reservation: str | None = None):
+            effort: str = None, reservation: str | None = None, schema: dict | None = None):
     consume_model_call(reservation)
     kwargs = dict(
         model=model,
@@ -114,6 +114,9 @@ def _create(model: str, system: str, user: str, max_tokens: int = 4000,
     )
     if effort:
         kwargs["output_config"] = {"effort": effort}
+    from . import models
+    if models.provider_for(model) != "anthropic":
+        return models.ResponsesClient(model).create(**kwargs, schema=schema)
     # Server-side refusal fallbacks exist only on Opus 5 / Fable 5 (Sonnet 5 400s on the
     # parameter — learned in production 2026-08-30); TypeError covers pre-fallbacks SDKs.
     if model.startswith(("claude-opus-5", "claude-fable-5")):
@@ -126,6 +129,8 @@ def _create(model: str, system: str, user: str, max_tokens: int = 4000,
 
 
 def _json_from(response, lenient_draft: bool = False) -> dict:
+    if response.stop_reason in {"max_tokens", "invalid_response"}:
+        raise RuntimeError(f"model response incomplete: {response.stop_reason}")
     if response.stop_reason == "refusal":
         raise RuntimeError(f"model refused: {response.stop_details}")
     text = "".join(b.text for b in response.content if b.type == "text")

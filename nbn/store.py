@@ -444,6 +444,13 @@ NEWSROOM_MEMORY_COLUMNS = {
 MODEL_USAGE_COLUMNS = {
     "cache_creation_5m_input_tokens": "INTEGER NOT NULL DEFAULT 0",
     "cache_creation_1h_input_tokens": "INTEGER NOT NULL DEFAULT 0",
+    "provider": "TEXT NOT NULL DEFAULT 'anthropic'",
+    "returned_model": "TEXT NOT NULL DEFAULT ''",
+    "effort": "TEXT NOT NULL DEFAULT ''",
+    "reasoning_tokens": "INTEGER NOT NULL DEFAULT 0",
+    "native_web_calls": "INTEGER NOT NULL DEFAULT 0",
+    "native_x_calls": "INTEGER NOT NULL DEFAULT 0",
+    "cost_source": "TEXT NOT NULL DEFAULT 'rate_estimate'",
 }
 
 DESK_PREPARATION_COLUMNS = {
@@ -1125,14 +1132,23 @@ _MODEL_RATES = {
     "claude-fable-5": (10.0, 50.0),
     "claude-fable-5-1": (10.0, 50.0),
     "claude-haiku-4-5": (1.0, 5.0),
+    "gpt-5.6-luna": (0.2, 1.2),
+    "grok-4.3": (1.25, 2.5),
+    "grok-4.5": (2.0, 6.0),
 }
-MODEL_RATE_VERSION = "anthropic-public-2026-09-03-cache-ttl-v2"
+_CACHE_RATES = {"gpt-5.6-luna": 0.02, "grok-4.3": 0.2, "grok-4.5": 0.3}
+MODEL_RATE_VERSION = "multiprovider-public-2026-09-05-v1"
 
 
 def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number: int,
                        response=None, latency_ms: int = 0, outcome: str = "ok") -> None:
     """Persist billing metadata only: never prompts, bodies, reasoning, or tool text."""
     usage = getattr(response, "usage", None)
+    from . import models
+    try:
+        provider = models.provider_for(str(model))
+    except ValueError:
+        provider = "unknown"
     input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
     output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
     cache_create = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
@@ -1149,9 +1165,21 @@ def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number:
         cache_create_5m = cache_create
     cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
     input_rate, output_rate = _MODEL_RATES.get(str(model), (0.0, 0.0))
-    estimated = ((input_tokens + cache_create_5m * 1.25 + cache_create_1h * 2.0
-                  + cache_read * 0.1) * input_rate
+    estimated = ((input_tokens + cache_create_5m * 1.25 + cache_create_1h * 2.0) * input_rate
+                 + cache_read * _CACHE_RATES.get(str(model), input_rate * 0.1)
                  + output_tokens * output_rate) / 1_000_000
+    reasoning = int(getattr(usage, "reasoning_tokens", 0) or 0)
+    web_calls = int(getattr(usage, "native_web_calls", 0) or 0)
+    x_calls = int(getattr(usage, "native_x_calls", 0) or 0)
+    ticks = getattr(usage, "cost_in_usd_ticks", None)
+    cost_source = "rate_estimate"
+    if provider == "xai" and isinstance(ticks, (int, float)) and ticks >= 0:
+        estimated = ticks / 1e10  # Includes native tools; do not add them again.
+        cost_source = "provider_reported"
+    else:
+        estimated += (web_calls + x_calls) * 0.005
+    if usage is None or getattr(response, "usage_available", True) is False or model not in _MODEL_RATES:
+        cost_source = "unknown"
     con.execute(
         "INSERT INTO model_usage(run_id,seat,model,round,input_tokens,output_tokens,"
         "cache_creation_input_tokens,cache_creation_5m_input_tokens,"
@@ -1161,6 +1189,13 @@ def record_model_usage(con, *, run_id: str, seat: str, model: str, round_number:
          input_tokens, output_tokens, cache_create, cache_create_5m, cache_create_1h,
          cache_read, max(0, int(latency_ms)),
          str(outcome)[:40], estimated, MODEL_RATE_VERSION, time.time()),
+    )
+    con.execute(
+        "UPDATE model_usage SET provider=?,returned_model=?,effort=?,reasoning_tokens=?,"
+        "native_web_calls=?,native_x_calls=?,cost_source=? WHERE id=last_insert_rowid()",
+        (provider, str(getattr(response, "model", "") or "")[:80],
+         str(getattr(response, "effort", "") or "")[:20], reasoning,
+         web_calls, x_calls, cost_source),
     )
     con.commit()
 
@@ -1174,6 +1209,10 @@ def model_usage_summary(con, since: float) -> dict:
         "COALESCE(SUM(cache_creation_1h_input_tokens),0) AS cache_creation_1h_input_tokens,"
         "COALESCE(SUM(cache_read_input_tokens),0) AS cache_read_input_tokens,"
         "COALESCE(SUM(estimated_cost_usd),0) AS estimated_cost_usd,"
+        "COALESCE(SUM(reasoning_tokens),0) AS reasoning_tokens,"
+        "COALESCE(SUM(native_web_calls),0) AS native_web_calls,"
+        "COALESCE(SUM(native_x_calls),0) AS native_x_calls,"
+        "COALESCE(SUM(cost_source='unknown'),0) AS unknown_cost_calls,"
         "COUNT(*) AS calls FROM model_usage WHERE created_at>=?", (float(since),),
     ).fetchone()
     return dict(row) if row else {}
@@ -2219,6 +2258,7 @@ def _bounded_memory_attempt(raw: dict) -> dict:
             "byline": str(card.get("byline") or "")[:200],
             "content_fingerprint": str(card.get("content_fingerprint") or "")[:400],
             "text": _utf8_prefix(card.get("text"), 8192),
+            "retrieval_kind": str(card.get("retrieval_kind") or "direct_fetch")[:40],
         })
     return {
         "at": round(float(raw.get("at") or time.time()), 3),
@@ -2263,6 +2303,7 @@ def _bounded_memory_evidence(raw: dict) -> dict:
         "byline": str(raw.get("byline") or "")[:200],
         "content_fingerprint": str(raw.get("content_fingerprint") or "")[:400],
         "text": _utf8_prefix(raw.get("text"), 8192),
+        "retrieval_kind": str(raw.get("retrieval_kind") or "direct_fetch")[:40],
     }
 
 
@@ -2278,14 +2319,15 @@ def _merge_memory_evidence(*groups: list[dict]) -> str:
     for row in rows:
         url = source_policy.normalize_url(row.get("canonical_url") or row.get("final_url") or "")
         fingerprint = str(row.get("content_fingerprint") or "")
-        if not row.get("text") or not url or url in seen_urls:
+        kind = row.get("retrieval_kind") or "direct_fetch"
+        if not row.get("text") or not url or (url, kind) in seen_urls:
             continue
-        if fingerprint and fingerprint in seen_fingerprints:
+        if fingerprint and (fingerprint, kind) in seen_fingerprints:
             continue
         row["canonical_url"] = url
-        seen_urls.add(url)
+        seen_urls.add((url, kind))
         if fingerprint:
-            seen_fingerprints.add(fingerprint)
+            seen_fingerprints.add((fingerprint, kind))
         kept.append(row)
         if len(kept) >= _STORY_MEMORY_MAX_EVIDENCE:
             break
