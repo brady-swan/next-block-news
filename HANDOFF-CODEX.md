@@ -4,6 +4,15 @@
 The deeper owner's manual is `SYSTEM.md`; this file is orientation and the rules you must
 not break.*
 
+**Plan 0059, 2026-09-06:** code `0b2e8e3`, deployment
+`f17b6c71-b5f6-4e1c-a43d-f3b72d82ade6` SUCCESS, prompt `editorial-core-v2.15.2-craft`.
+Shipped historical ETF/CFTC craft examples, audit exact-claim correction, and preservation of
+new preparation Background controls through finalization. Historical mislabeled rows were not
+rewritten. 409 clean tests and deployed isolated smoke passed; dashboard, DB integrity, roster,
+and autopost OFF verified. Audit ACTIVE. Nine $0.55 replays did not validate native tool selection;
+the stronger research-routing prompts and turn fields were deliberately NOT shipped. Read
+`SPRINT-0059-FINDINGS.md` rather than assuming the original plan shipped unchanged.
+
 **Roster update, 2026-09-05 (Plan 0058):** the owner approved the bake-off roster, independently
 reviewed before implementation. RSS/EDGAR intake stays Haiku 4.5; assignment preparation uses
 GPT-5.6 Luna low; newsroom/writing uses Grok 4.3 medium; focused research uses Grok 4.3 medium

@@ -5,6 +5,10 @@ examples, audit correction, and Background provenance repair. Do not ship experi
 instructions/tool description or turn-budget fields: no replay demonstrated native selection.
 See `SPRINT-0059-FINDINGS.md`. The original plan below is retained as the experiment record.
 
+Deployment complete: `0b2e8e3`, Railway `f17b6c71-b5f6-4e1c-a43d-f3b72d82ade6` SUCCESS.
+409 clean tests, deployed isolated regression smoke, health/dashboard and DB integrity passed.
+Autopost OFF; the existing audit is ACTIVE. No Typefully content was changed in this sprint.
+
 2026-09-06. Owner approved the scope; independent lead coder approved the plan before implementation.
 Review refinements: delegate early when a multi-step gap is apparent, before a second-turn
 fetch can consume the last research opportunity; ordinary search failure does not disable

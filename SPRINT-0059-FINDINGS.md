@@ -1,6 +1,6 @@
 # Sprint 0059 — selective research and craft
 
-2026-09-06. Independent review approved a narrower release; deployment verification below.
+2026-09-06. Independently approved narrowed release is deployed and smoke-tested.
 
 ## Bottom line
 
@@ -126,3 +126,25 @@ Raw artifacts: `.model-eval/0059-baseline`, `0059-changed`, and `0059-final`.
 The final experimental newsroom source and orientation are also saved in `0059-final` to keep
 the non-shipped wording distinct from the release. All nine results are retained; no cherry-picked
 reruns and no Typefully export.
+
+## Release verification
+
+- Independent lead coder approved the original plan, reviewed the implementation, and approved
+  the narrowed shipment after inspecting the failed routing traces and the report.
+- Runtime commit: `0b2e8e3` (pushed). Clean archive: `/tmp/nbn-0059-release.RLEZwx`.
+- Tests: **411 working-tree / 409 clean-release tests passed**. Two pre-existing dirty eval
+  tests were excluded from the clean archive along with unrelated eval work.
+- Backup: `/data/backups/nbn-pre-source-policy-20260906T052938Z.db`.
+- Deployment: `f17b6c71-b5f6-4e1c-a43d-f3b72d82ade6`, **SUCCESS**.
+- Live smoke: loaded `editorial-core-v2.15.2-craft`, authenticated dashboard showing the new
+  examples, production and backup SQLite integrity `ok`, healthy worker with a completed cycle
+  and no last error. All roster/effort, three-turn, one-assignment, 900-second settings unchanged.
+- Two focused tests also passed inside the deployed container, exercising mixed/all-Background
+  finalization and one-time promotion in temporary databases plus the shipped craft contract.
+  No production promotion, publisher mutation, or model call was performed by these smoke tests.
+- Autopost verified OFF. Rolling audit restored ACTIVE at its existing 15-minute interval,
+  with the narrowed-release findings and corrected IMF interpretation included in its instructions.
+- No new natural production draft was required to declare the mechanical rollout healthy;
+  sustained writing quality and research behavior remain ongoing audit questions.
+- Rollback reference: prior runtime `8984e21`, deployment
+  `ff64b138-128e-427c-8183-f791e57fa573` (clean HEAD baseline includes later docs at `bd64248`).
