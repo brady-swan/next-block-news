@@ -364,7 +364,7 @@ def system(con, opt, data):
               ("Newsroom / writer", config.NEWSROOM_MODEL, config.NEWSROOM_EFFORT, config.EDITORIAL_ENGINE),
               ("Delegated native research", config.RESEARCH_MODEL, config.RESEARCH_EFFORT, config.HAIKU_RESEARCH_MODE),
               ("Independent editor", config.EDITOR_MODEL, config.EDITOR_EFFORT, "configured")]
-    roster.append(("Internal daily receipt audit", config.ANTHROPIC_MODEL, "legacy defaults", "outside seat ledger"))
+    roster.append(("Internal daily receipt audit", config.ANTHROPIC_MODEL, "legacy defaults", "enabled" if config.AUDIT_UTC else "disabled"))
     from .newsroom import PROMPT_VERSION
     out = ['<section><h2>Runtime roster</h2><p>These values come from this running process, not a saved documentation snapshot.</p>',
            table(["Seat", "Model", "Effort", "Mode"], [[esc(v) for v in row] for row in roster]),
@@ -475,7 +475,7 @@ def respond(handler, code, body, content_type):
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Referrer-Policy", "no-referrer")
     handler.send_header("X-Content-Type-Options", "nosniff")
-    handler.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+    handler.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -490,6 +490,8 @@ def handle(handler, parsed, state):
     path = parsed.path.removeprefix("/desk").strip("/")
     assets = {"assets/desk.css": (ASSETS / "desk.css", "text/css; charset=utf-8"),
               "assets/desk.js": (ASSETS / "desk.js", "text/javascript; charset=utf-8"),
+              "assets/workspace.css": (ASSETS / "workspace.css", "text/css; charset=utf-8"),
+              "assets/workspace.js": (ASSETS / "workspace.js", "text/javascript; charset=utf-8"),
               "system-guide.pdf": (GUIDE, "application/pdf")}
     if path in assets:
         file, content_type = assets[path]
@@ -497,6 +499,23 @@ def handle(handler, parsed, state):
             respond(handler, 200, file.read_bytes(), content_type)
         except OSError:
             respond(handler, 404, "Artifact not available in this release", "text/plain; charset=utf-8")
+        return
+    if path == "api/workspace":
+        from . import desk_api
+        try:
+            with reader() as con:
+                data = desk_api.snapshot(con, query, dict(state))
+            respond(handler, 200, json.dumps(data), "application/json; charset=utf-8")
+        except LookupError:
+            respond(handler, 404, "Run not found", "text/plain; charset=utf-8")
+        except ValueError as exc:
+            respond(handler, 400, str(exc), "text/plain; charset=utf-8")
+        except sqlite3.Error:
+            respond(handler, 503, "Desk data temporarily unavailable. Retrying preserves your selection.", "text/plain; charset=utf-8")
+        return
+    if path in {"", "live", "runs", "intake", "outputs", "system"}:
+        # Route aliases/deep links remain supported; the client preserves the auth query.
+        respond(handler, 200, workspace_page(), "text/html; charset=utf-8")
         return
     view = query.get("view", ["live"])[0] if path == "api/snapshot" else (path or "live")
     if view not in VIEWS:
@@ -515,3 +534,12 @@ def handle(handler, parsed, state):
     except sqlite3.Error:
         # No raw SQLite errors/URLs or connection credentials in browser responses.
         respond(handler, 503, "Desk data temporarily unavailable. Retry shortly; prior snapshots may be stale.", "text/plain; charset=utf-8")
+
+
+def workspace_page():
+    return f'''<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
+<title>Newsroom · Next Block News</title><link rel="stylesheet" href="{esc(link('assets/workspace.css'))}">
+<script src="{esc(link('assets/workspace.js'))}" defer></script></head><body>
+<a class="skip" href="#main">Skip to workspace</a><div id="root"><p class="initial-loading">Opening the newsroom…</p></div>
+<noscript><p>Enable JavaScript for run navigation, or use <a href="{esc(review_link())}">the server-rendered review tools</a>.</p></noscript></body></html>'''

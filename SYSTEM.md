@@ -18,7 +18,7 @@ Brady reviews drafts.
 | Run-scoped newsroom and writing | Grok 4.3 | medium |
 | Focused native web/X research | Grok 4.3 | medium |
 | Separate batch editor | Grok 4.5 | medium |
-| Internal daily receipt audit (separate legacy path) | Anthropic `NBN_MODEL` | legacy call defaults |
+| Internal daily receipt audit | Disabled (`NBN_AUDIT_UTC` empty) | historical Anthropic path retained |
 
 Production seats have explicit environment overrides. `NBN_MODEL` remains the Anthropic
 legacy-stack setting; `NBN_NEWSROOM_MODEL` selects the v2 writer. Unconfigured installations
@@ -53,7 +53,7 @@ every 60 seconds
        ├─ RSS + EDGAR → Haiku mailroom (priority / candidate / background)
        │                    └─ background is audited, not sent to the newsroom
        │
-       ├─ fresh AM/PM EIC citations enter one-off intake; daily audit keeps its cadence
+       ├─ fresh AM/PM EIC citations enter one-off intake; legacy daily receipt audit disabled
        │
        └─ every 15 minutes, if the desk is non-empty
             run-scoped Luna low assignment desk
@@ -344,11 +344,12 @@ is scheduled shortly ahead so receipt links survive platform rules. Confirmed de
 call. It includes run ID, seat, requested/returned model, provider, effort, round, input/output/cache
 and reasoning token counts, native web/X calls, latency, outcome, and cost provenance. Input
 counts exclude cache reads/writes; reasoning is already included in output, not charged twice.
-It stores no prompts, article bodies, model reasoning text, or tool payloads. The Desk shows
-selected-day calls, tokens, and spend against a configurable $6/day target. The latest
+The usage ledger stores no prompts, article bodies, model reasoning text, or tool payloads.
+Separate bounded observations retain safe business handoffs. The Desk shows period spend and
+averages by stage/run/day/week/month; older Review diagnostics retain the $6/day target. The latest
 run shows its initial packet size, newsroom calls/attempts, prepared receipts, and research assignments.
 SerpAPI retrieval is counted separately in run diagnostics. This is recorded editorial-seat
-usage, not a complete invoice: the retained internal daily receipt-audit path does not write
+usage, not a complete invoice: historical internal daily receipt-audit calls did not write
 this ledger, and source API subscriptions/reads, hosting and the external Codex audit are excluded.
 
 For xAI, reported cost ticks are authoritative and already include native searches. When unavailable,
@@ -366,8 +367,9 @@ Fresh, provenance-valid Morning and Afternoon Marketing Node EIC briefs remain d
 inputs. Their cited reads enter the ordinary one-off intake and must earn publication through
 the same newsroom and editor as every other candidate. The scheduled multi-story Block product
 is disabled by default; its implementation remains behind `NBN_BRIEFING_ENABLED=true` as a
-rollback/experiment path. The daily audit re-checks recent output and stages corrections for
-human review.
+rollback/experiment path. The legacy daily receipt audit is disabled by owner decision on
+September 6 (`NBN_AUDIT_UTC` empty). Historical records and implementation remain; it no longer
+calls a model or stages correction drafts on schedule.
 
 The separate rolling production audit follows `AUDIT-AUTONOMY.md`. It may diagnose and repair
 clear technical regressions, then test, deploy, smoke, or roll back the smallest safe fix. It may
@@ -381,12 +383,23 @@ and may never turn autopost on.
 
 ### Live Desk and review tools
 
-Plan 0060 extends the existing Railway HTTP server, without changing the editorial core.
-The authenticated `/desk` website separates Live, Intake, Newsroom runs, Outputs, and
-System/costs. It polls read-only snapshots every 15 seconds in visible tabs and labels the
-last successful read, worker freshness, and dated run checkpoints. It never claims a saved
-researching state is proof of an active model session. No models or providers are called
-by page refresh. `/report` retains the existing guarded owner actions and deep links.
+Plan 0061 integrates the approved run-first React workspace as static assets on the existing
+Railway HTTP server. Python remains the sole runtime. `/desk` follows the latest run;
+Previous/Next and a timestamp picker pin history across dates. Decisions, Research, Delivered
+desk, Copy and Activity share the selected run. At 1440+ CSS px the inspector is persistent;
+below that it is a drawer. Supporting views are Intake, Outputs and System. Visible tabs poll
+read-only JSON every 15 seconds without model/provider calls. Current worker/intake clocks are
+separate from historical runs. `/report` is a focused owner queue with collapsed old diagnostics;
+guarded handlers and anchors are unchanged. A saved researching checkpoint is not proof of activity.
+
+`run_observations` records safe final writer input, dossier, research returns and editor handoffs,
+excluding raw provider envelopes/reasoning and credentials. Per row: 384 KiB. Per run: 80 ordinary
+rows/1 MiB plus 40 critical handoffs/2 MiB. Limit markers and 14-day payload expiration are visible;
+headers remain, including abandoned runs. Savepoints isolate nonfatal recording failures from
+caller transactions. Publisher finalization merges rather than replaces editor details.
+`source_poll_health` records ordinary existing polls, distinguishing zero results/errors and
+preserving last-success time. No extra source polling is introduced. DESK-GUIDE.md specifies
+cost denominators, coverage bounds, history gaps and all responsive interactions.
 
 Counts distinguish first-seen items, new backlog, local outputs created, and confirmed
 publications. Confirmation requires a published status and timestamp; IMMEDIATE mode alone

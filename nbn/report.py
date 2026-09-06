@@ -597,10 +597,31 @@ def render(con, day: str = None) -> str:
            "<meta name=viewport content='width=device-width,initial-scale=1'>"
            f"<title>NBN Desk</title>"
            f"<link rel=icon type=image/png href='data:image/png;base64,{LOGO_B64}'>"
-           f"{FONTS}<style>{CSS}</style>"]
+           f"<style>{CSS}</style>"
+           "<style>body{max-width:1280px;margin:0 auto;padding:32px;background:#191919;color:#e6e7e2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}"
+           "h2,.metaline,.pill,.ednote,summary,.flow,.days,.jumps,.dnav{font-family:inherit}"
+           ".body,.copy,.card p{line-height:1.75}.body{padding:22px}.metaline{font-size:13px;color:#adb2a5;line-height:1.8}"
+           "h1{font-size:32px;font-weight:500;letter-spacing:-.8px;margin:24px 0 12px}h2{font-size:18px;letter-spacing:0;text-transform:none;margin-top:32px}"
+           ".review-nav{display:flex;gap:24px;flex-wrap:wrap;border-bottom:1px solid #41463a;padding-bottom:20px;font-size:14px}.review-nav a{color:#dfbd95}"
+           ".legacy-diagnostics{border:1px solid #41463a;border-radius:10px;padding:16px 20px;margin:24px 0;background:#242720}"
+           ".legacy-diagnostics>summary{font-size:14px;color:#b8c0ad;cursor:pointer}.legacy-diagnostics .strip{margin-top:24px}"
+           ".review-intro{color:#aeb6a3;line-height:1.7;font-size:14px;max-width:75ch}.card,.need,.hrow{border-radius:10px}"
+           ".pills{gap:8px}.pill{font-size:11px}.jumps a{display:inline-block;padding:8px}.emptybox{background:#262a22;border-color:#444c39}"
+           "@media(min-width:1920px){body{max-width:1700px;padding:40px 60px}}"
+           "@media(max-width:767px){body{padding:22px 16px}.review-nav{gap:16px}.body{padding:18px}.legacy-diagnostics{padding:14px}.days{overflow-x:auto}.flow{flex-wrap:wrap}}</style>"]
     from .desk import link as desk_link
-    out.append(f'<div class="metaline"><a href="{_esc(desk_link(d=day))}">← Live Desk</a>'
-               ' · Review tools · Existing actions remain guarded and unchanged.</div>')
+    out.append('<nav class="review-nav">'
+               f'<a href="{_esc(desk_link(d=day))}">← Newsroom</a>'
+               f'<a href="{_esc(desk_link("intake",d=day))}">Intake &amp; sources</a>'
+               f'<a href="{_esc(desk_link("outputs",d=day))}">Outputs</a>'
+               f'<a href="{_esc(desk_link("system",d=day))}">System &amp; costs</a></nav>'
+               '<h1>Review tools</h1><p class="review-intro">The owner’s action queue. '
+               'Open a run in Newsroom to inspect writing and research. These existing actions '
+               'retain their publication and duplicate protections.</p>'
+               '<div class="jumps"><a href="#needs-you">Needs you</a> · '
+               '<a href="#published">Published</a> · <a href="#held">Held</a> · '
+               '<a href="#skipped">Skipped</a></div>'
+               '<details class="legacy-diagnostics"><summary>Legacy diagnostics &amp; preparation detail</summary>')
 
     # ── Status strip ─────────────────────────────────────────────────────────
     auto = (f"<span class='pill on'>autopost on · "
@@ -918,7 +939,8 @@ def render(con, day: str = None) -> str:
                     f"<p class=ednote>{_esc('; '.join(r.get('findings', [])))}</p>", [],
                     extra=_dismiss_link("audit", f"{audit.get('ran')}-{i}", day)))
 
-    out.append(f"<h2 class=needs><span class=fill>Needs you</span>"
+    out.append('</details>')
+    out.append(f"<h2 class=needs id=needs-you><span class=fill>Needs you</span>"
                f"<span class='count o'>{len(needs)}</span></h2>")
     if needs:
         out.append(f"<div class=stack>{''.join(needs)}</div>")
@@ -987,6 +1009,7 @@ def render(con, day: str = None) -> str:
         for key, value in sorted(search_failures.items()) if _bounded_count(value)
     ) or "none"
     out.append(
+        '<details class="legacy-diagnostics"><summary>Earlier research &amp; decision-run detail</summary>'
         "<h2><span class=fill>Research health</span></h2>"
         f"<div class=metaline><b>Backlog now</b> · pending {int(backlog.get('pending', 0))}"
         f" · processing {int(backlog.get('processing', 0))}"
@@ -1120,6 +1143,7 @@ def render(con, day: str = None) -> str:
         out.append("<div class=empty>no completed non-empty decision run recorded yet</div>")
 
     # ── Seven days + nav + jump links ────────────────────────────────────────
+    out.append('</details>')
     out.append("<h2><span class=fill>Seven days</span></h2><div class=days>")
     for i in range(6, -1, -1):
         d_dt = now - datetime.timedelta(days=i)
@@ -1259,7 +1283,8 @@ def render(con, day: str = None) -> str:
         out.append("<div class=empty>none this day</div>")
 
     # ── Self-audit ───────────────────────────────────────────────────────────
-    out.append("<h2><span class=fill>Self-audit</span></h2>")
+    out.append('<details class="legacy-diagnostics"><summary>Receipt audit history'
+               + (' · disabled' if not config.AUDIT_UTC else '') + '</summary>')
     if audit:
         out.append(f"<div class=metaline>last run {_esc(audit.get('ran'))} · "
                    f"{audit.get('posts_checked', 0)} posts checked</div><div class=hstack>")
@@ -1275,7 +1300,9 @@ def render(con, day: str = None) -> str:
                        f"</div></details>")
         out.append("</div>")
     else:
-        out.append(f"<div class=empty>no audit yet (daily at {_esc(config.AUDIT_UTC)} UTC)</div>")
+        out.append("<div class=empty>Receipt audit disabled; no historical result.</div>" if not config.AUDIT_UTC
+                   else f"<div class=empty>no audit yet (daily at {_esc(config.AUDIT_UTC)} UTC)</div>")
+    out.append('</details>')
 
     # ── Skipped ──────────────────────────────────────────────────────────────
     out.append(f"<details class=skipbox id=skipped><summary>Skipped "

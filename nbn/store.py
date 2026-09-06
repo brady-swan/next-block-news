@@ -208,6 +208,32 @@ CREATE TABLE IF NOT EXISTS newsroom_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_newsroom_runs_status_created
   ON newsroom_runs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_newsroom_runs_created_id ON newsroom_runs(created_at,run_id);
+CREATE TABLE IF NOT EXISTS run_observations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  ref TEXT NOT NULL DEFAULT '',
+  phase TEXT NOT NULL DEFAULT '',
+  at REAL NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  payload_json TEXT,
+  payload_bytes INTEGER NOT NULL DEFAULT 0,
+  truncated INTEGER NOT NULL DEFAULT 0,
+  expired INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_run_observations_run ON run_observations(run_id,id);
+CREATE INDEX IF NOT EXISTS idx_run_observations_at ON run_observations(at);
+CREATE TABLE IF NOT EXISTS source_poll_health (
+  source_key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  attempted_at REAL NOT NULL,
+  succeeded_at REAL,
+  outcome TEXT NOT NULL,
+  result_count INTEGER,
+  error_kind TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS newsroom_story_commits (
   run_id TEXT NOT NULL,
   story_id TEXT NOT NULL,
@@ -4198,14 +4224,18 @@ def finalize_publisher_mutation(
         )
         run_id, story_id = str(data.get("run_id") or ""), str(data.get("story_id") or "")
         if run_id and story_id:
-            details = json.dumps({"delivery": {"mode": mode,
-                                "backend_ref": str(provider_ref or "")[:200]}},
-                               separators=(",", ":"))
+            prior = con.execute(
+                "SELECT details_json FROM newsroom_story_commits WHERE run_id=? AND story_id=?",
+                (run_id, story_id),
+            ).fetchone()
+            merged = _safe_json_object(prior["details_json"]) if prior else {}
+            merged["delivery"] = {"mode": mode, "backend_ref": str(provider_ref or "")[:200]}
+            details = _bounded_commit_details(merged)
             con.execute(
                 "UPDATE newsroom_story_commits SET state=?,delivery_ref=?,details_json=?,"
                 "updated_at=? WHERE run_id=? AND story_id=?",
                 ("delivered" if mode != "FAILED" else "held",
-                 str(provider_ref or "")[:200], details[:4000], stamp, run_id, story_id),
+                 str(provider_ref or "")[:200], details, stamp, run_id, story_id),
             )
         item_hash = str(data.get("item_hash") or "")[:64] or f"mutation:{mutation_id[:40]}"
         con.execute(

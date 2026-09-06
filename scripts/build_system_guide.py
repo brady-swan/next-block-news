@@ -176,29 +176,29 @@ def build():
     card(c, 672, 165, 280, 300, "After the attempt", "Reconcile safely", "Ambiguous response? Do not blindly POST again.<br/><br/>Known Typefully records reconcile normally every five minutes. Manual publication updates confirmation time and coverage.", GREEN, 14)
     arrow(c, 332, 310, 355, 310); arrow(c, 644, 310, 667, 310)
     note(c, 493, "Owner-only actions", "The live views are read-only. Existing Review tools hold guarded stage/dismiss/promotion and mutation-resolution controls. The audit never enables autopost or mutates Typefully content on its own.", ORANGE, 85)
-    text(c, 48, 601, 904, "Corrections: the internal daily receipt audit may stage a correction draft. Publication, quote-linking the original and a complete correction record remain human steps. Emergency audit authority can turn autopost OFF for a systemic failure, never ON.", 12, MUTED)
+    text(c, 48, 601, 904, "The internal daily receipt audit is disabled by owner decision. Corrections remain human-reviewed. The rolling audit may turn autopost OFF for an evidenced systemic failure, never ON.", 12, MUTED)
 
     page(c, "07 / Reading the Desk", "See the work. Know what the numbers mean.",
-         "Five read-only views plus the existing Review tools. Browser snapshots refresh every 15 seconds while visible.", "DESK-GUIDE.md + desk.py")
-    views = [("Live", "Latest checkpoint, worker heartbeat, next deadline, intake and returned model calls."),
+         "A run-first workspace with a persistent wide-screen inspector. Visible browser tabs refresh every 15 seconds.", "DESK-GUIDE.md + desk_api.py + desk_ui/")
+    views = [("Newsroom", "Latest run; Previous/Next pin history. Input, research, decisions, copy and activity."),
              ("Intake", "Unique first-seen-day items, current status and preparation reasons. Search to drill down."),
-             ("Newsroom", "Run dispositions then versus item state now; editor and delivery reasons."),
+             ("Research inspector", "Assignments, returned findings, prepared captures and cited evidence. Missing is unknown."),
              ("Outputs", "Locally tracked copy, receipt, timestamps and confirmation. Not every remote draft."),
-             ("System & costs", "Actual roster/cadence, recorded editorial-seat spend, storylines and this PDF.")]
+             ("System & costs", "Current roster/effort, stage and period costs, averages, source/search health and PDF.")]
     for i, (title, body) in enumerate(views):
         y = 165 + i * 65
         rect(c, 48, y, 904, 57, colors.white, LINE, 5)
         text(c, 63, y + 12, 190, title, 15, BLUE, True)
         text(c, 272, y + 11, 659, body, 13, max_height=39)
     note(c, 509, "Do not collapse the clocks", "Source time != first seen != local output recorded != confirmed publication. Peer timing needs a separate audit comparison. Missing timestamps or costs remain unknown.", BLUE, 82)
-    text(c, 48, 609, 904, "A saved 'researching' checkpoint is not proof of a live call. Stale/error banners and last-success times matter. Selected-day filters remain fixed across midnight. Pause and manual refresh are available.", 12, MUTED)
+    text(c, 48, 609, 904, "History stays pinned until Back to latest. Rich observations expire after 14 days; gaps are not zero work. Editor fallbacks are not rewrites. Current publisher state has its own clock. Review tools retain guarded actions.", 12, MUTED)
 
     page(c, "08 / Operating discipline", "Observe, learn, make the smallest useful change.",
          "The machinery now supports calibration; it does not replace editorial taste or the owner's authority.", "AUDIT-AUTONOMY.md + HANDOFF-CODEX.md")
     card(c, 48, 165, 280, 324, "Costs", "Measure the right bill", "Recorded intake/prep/research/writer/editor usage includes tokens, cache shape, latency, native calls and cost provenance.<br/><br/>xAI reported totals where available; other supported calls are estimated.<br/><br/>Unknown costs are not zero.", BLUE, 13)
-    card(c, 360, 165, 280, 324, "Two audits", "Different jobs", "<b>Internal daily audit:</b> legacy Anthropic receipt checks and staged corrections.<br/><br/><b>Codex rolling audit:</b> health, quality, misses, peer speed, cost and smallest technical repairs.<br/><br/>Bounded approved-style prompt tuning is allowed; broader changes need approval.", ORANGE, 13)
+    card(c, 360, 165, 280, 324, "Audit scope", "Observe and improve", "<b>Internal daily audit: disabled.</b> Historical receipt checks remain available.<br/><br/><b>Codex rolling audit:</b> health, quality, misses, peer speed, cost and smallest technical repairs.<br/><br/>Bounded approved-style prompt tuning is allowed; broader changes need approval.", ORANGE, 13)
     card(c, 672, 165, 280, 324, "Release discipline", "Keep it reversible", "Independent review when requested.<br/><br/>Offline tests, clean release archive, SQLite backup.<br/><br/>Deploy to the existing Railway worker; smoke and observe a natural cycle.<br/><br/>Restore the audit. Never enable autopost as a release step.", GREEN, 13)
-    note(c, 514, "Known measurement gap", "The internal daily receipt-audit path is not in the editorial-seat ledger. Hosting, source/search services and Codex usage are also outside it. The displayed total is not a full invoice.", ORANGE, 88)
+    note(c, 514, "Cost boundaries", "Direct per-run costs use distinct metered production runs; unlinked intake stays shared. Day/week/month averages use complete Central periods. Historical receipt audits, hosting, source/search services and Codex remain outside the ledger.", ORANGE, 88)
     text(c, 48, 618, 904, "Current reference map: DOCUMENTATION.md. Detailed architecture: SYSTEM.md. Prompt authority: orientation-brief-v2.md. Historical plans and bake-offs remain dated evidence, not live instructions.", 11, MUTED)
     c.save()
     print(f"Created {OUTPUT} ({PAGE} pages)")

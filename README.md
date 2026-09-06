@@ -41,9 +41,10 @@ production overrides; conservative Anthropic defaults remain available for rollb
 | `nbn/editor.py` | Independent support, source-sufficiency, novelty, framing, and craft judgment |
 | `nbn/publisher.py` | Typefully-first lead-plus-source-reply routing plus the daily tape |
 | `nbn/briefing.py` | Fresh AM/PM EIC one-off discovery; legacy Block builder (disabled) |
-| `nbn/audit.py` | Daily receipt and class audit; stages material correction drafts |
+| `nbn/audit.py` | Disabled legacy receipt/class audit; historical records retained |
 | `nbn/report.py` | Token-protected Desk report |
-| `nbn/desk.py` + `nbn/desk_assets/` | Read-only live views, bounded snapshots, system-guide download |
+| `nbn/desk.py`, `nbn/desk_api.py`, `desk_ui/` | Authenticated run-first React workspace, bounded read-only API, static assets on Python/Railway |
+| `nbn/observations.py` | Safe bounded run handoffs and existing-source poll health; no editorial decisions |
 | `nbn/main.py` | Poll loop, orchestration, health/status HTTP server |
 
 ## Safety invariants
@@ -192,7 +193,7 @@ The Desk exposes both RSS-mailroom and assignment-desk Background decisions; **S
 atomically restores one item to the newsroom queue and advances the next desk deadline. It also
 shows per-seat model spend, the daily cost target, initial packet size, newsroom attempts,
 prepared receipts, delegated research, native search counts, and billing provenance.
-Recorded seat costs exclude the retained daily receipt-audit calls, external source APIs,
+Recorded seat costs exclude historical daily receipt-audit calls, external source APIs,
 hosting and the Codex audit; they are not a complete bill. New Desk publication counts require
 both a published status and confirmation timestamp, not just local IMMEDIATE mode.
 

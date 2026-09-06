@@ -737,12 +737,20 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
+        from . import observations
+        editor_origin = ("capacity_defer" if payload_deferred else
+                         "unavailable_fallback" if not editorial["ok"] else
+                         "omitted_fallback" if decision is None else decision.get("origin", "initial"))
+        observations.record(con, pipeline_run_id, "editor_applied", {
+            "verdict": verdict, "post": post, "reason": reason, "origin": editor_origin,
+            "canonical_key": resolution.story_key,
+        }, ref=story_id, phase="applied")
         store.save_newsroom_editor_feedback(
             con, resolution.story_key, verdict=verdict, reason=reason, post=post,
         )
         store.set_newsroom_story_state(
             con, pipeline_run_id, story_id, "pending",
-            details={"editor": {"verdict": verdict, "reason": reason},
+            details={"editor": {"verdict": verdict, "reason": reason, "origin": editor_origin},
                      "force_draft_reason": (
                          candidate["draft"].get("force_draft_reason") or
                          ("editor_payload_capacity" if payload_deferred else "")
@@ -758,7 +766,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                  category="editorial_drop")
             store.set_newsroom_story_state(
                 con, pipeline_run_id, story_id, "held",
-                details={"editor": {"verdict": verdict, "reason": reason}},
+                details={"editor": {"verdict": verdict, "reason": reason, "origin": editor_origin}},
             )
             continue
         errors = lint.hard_rails_v2(
@@ -1002,9 +1010,11 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     if newsroom_recovery["runs"]:
         log.warning("recovered interrupted newsroom runs: %s", newsroom_recovery)
     node_result = node_discovery.ingest(con)
-    rss_items = sources.fetch_feeds()
-    edgar_items = sources.fetch_edgar()
-    perception_items = sources.fetch_perception()
+    from . import observations
+    observations.prune(con)
+    rss_items = sources.fetch_feeds(con)
+    edgar_items = sources.fetch_edgar(con)
+    perception_items = sources.fetch_perception(con)
     x_items = sources.fetch_x(con)
     item_groups = (
         ("rss", rss_items),
@@ -1922,11 +1932,16 @@ class Health(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"forbidden")
                 return
-            from . import report
+            from . import report, desk
             day = (parse_qs(parsed.query).get("d") or [None])[0]
-            con = store.connect()
-            body = report.render(con, day=day).encode()
-            con.close()
+            try:
+                with desk.reader() as con:
+                    body = report.render(con, day=day).encode()
+            except Exception:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b"Review tools temporarily unavailable")
+                return
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")

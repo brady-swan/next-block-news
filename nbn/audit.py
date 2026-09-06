@@ -57,9 +57,11 @@ def _audit_one(post_row) -> dict:
 
 
 def maybe_run(con) -> bool:
-    """Fire once daily at NBN_AUDIT_UTC (default 09:00), kv-guarded."""
+    """Opt-in legacy audit. An empty NBN_AUDIT_UTC disables all work."""
+    if not config.AUDIT_UTC:
+        return False
     now = datetime.datetime.now(datetime.timezone.utc)
-    hh, mm = (config.AUDIT_UTC or "09:00").split(":")
+    hh, mm = config.AUDIT_UTC.split(":")
     fire = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
     if not (fire <= now < fire + datetime.timedelta(minutes=45)):
         return False

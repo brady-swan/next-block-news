@@ -26,7 +26,8 @@ over dated descriptions.
 | Optional native web/X research | grok-4.3 | medium |
 | Independent batch editor | grok-4.5 | medium |
 
-The legacy daily receipt audit still uses NBN_MODEL (Anthropic). NBN_NEWSROOM_MODEL controls
+The legacy daily receipt audit is disabled (NBN_AUDIT_UTC empty); its retained path uses NBN_MODEL.
+NBN_NEWSROOM_MODEL controls
 the active writer; old HAIKU_* configuration/counter names are compatibility names, not
 proof that Haiku performed a research or preparation call.
 
@@ -70,11 +71,11 @@ OFF for evidenced systemic publishing problems, never back on.
 
 ## Desk and monitoring
 
-- /desk?k=<token>: live overview.
+- /desk?k=<token>: latest run, Previous/Next history, input/research/copy and adaptive inspector.
 - /desk/intake: current status and decisions for a selected first-seen day.
 - /desk/runs: saved run checkpoints, candidate decisions, editor/delivery reasons.
 - /desk/outputs: locally tracked copy, receipts, observed timing and publisher state.
-- /desk/system: actual process roster/cadence, recorded seat costs, storyline cards and PDF.
+- /desk/system: current roster/effort, stage/period costs and averages, source/search health and PDF.
 - /report?k=<token>: existing guarded owner actions, background promotion and orientation.
 - /health and /status: worker status; completed-cycle staleness threshold is ten minutes.
 
@@ -84,10 +85,17 @@ stream or an exact live-stage monitor. Local output records are not the entire T
 account. Marked replays are excluded; isolated replay exports generally never entered the DB.
 See DESK-GUIDE.md for clock and metric definitions.
 
-There are two audits: the in-worker daily receipt audit, and the separate Codex rolling audit.
+The in-worker daily receipt audit is disabled by owner decision September 6; historical results
+remain. The separate Codex rolling audit continues after the build pause.
 The latter may repair technical regressions and tune execution of the approved writing style,
 but broader editorial/model/source/research/cadence changes need approval. Audit evidence,
 owner comments, rewrites, misses and peer speed comparisons remain part of the review.
+
+Plan 0061 adds bounded safe run observations and source-health recording. Exact writer packets
+are saved after shaping; research and true editor returns retain provenance. Missing/pruned history
+and costs are not zero. Delivery-now has its own clock. All GETs are read-only, including Review.
+Build `desk_ui` before committing its static assets; no Node server runs in production. No newsroom
+model, prompt, cadence or publishing rule changed. See DESK-GUIDE.md and Plan 0061 release evidence.
 
 ## Release playbook
 

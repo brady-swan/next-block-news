@@ -14,7 +14,7 @@ for legacy paths; its old "source of truth" heading does not make it current v2 
 | Run-scoped newsroom/writer | nbn/newsroom.py: NEWSROOM_V2_SYSTEM plus loaded orientation and strict tools | Grok 4.3 / medium | NBN_NEWSROOM_MODEL, EFFORT; NBN_EDITORIAL_ENGINE=v2 |
 | Optional research assignment | nbn/research.py | Grok 4.3 / medium with native web/X | NBN_RESEARCH_MODEL, EFFORT; compatibility switch NBN_HAIKU_RESEARCH_MODE |
 | Independent batch editor | nbn/editor.py: BATCH_EDITOR_PROMPT plus evidence and recent coverage | Grok 4.5 / medium | NBN_EDITOR_MODEL, EFFORT |
-| Internal daily receipt audit | nbn/audit.py: AUDIT_PROMPT | legacy Anthropic NBN_MODEL | NBN_AUDIT_UTC |
+| Legacy receipt audit (disabled) | nbn/audit.py: AUDIT_PROMPT, retained only | historical Anthropic NBN_MODEL | NBN_AUDIT_UTC empty |
 
 The separate Codex rolling audit is an app automation governed by AUDIT-AUTONOMY.md, not a
 prompt seat in the worker. Runtime values on Desk / System take priority over this dated table.

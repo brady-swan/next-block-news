@@ -34,7 +34,9 @@ Minor-error replies: "Correction to this post: [fix]. The story stands."
 
 ## Who fires it, and when
 
-Implementation note (reviewed 2026-09-06): the daily receipt self-audit is implemented in
+Implementation note (updated 2026-09-06): the daily receipt self-audit is **disabled by owner
+decision**, with NBN_AUDIT_UTC empty. Scheduled model checks/correction staging no longer run.
+Historical records and the implementation remain in
 `nbn/audit.py`. It uses the retained Anthropic `NBN_MODEL` path, separate from the Grok editor
 and Codex rolling audit. It checks locally logged IMMEDIATE/UNCERTAIN output from the prior
 26 hours, reports findings, and stages a single correction draft for material findings.
@@ -43,7 +45,7 @@ off. Those policy steps below require owner action or the rolling audit's explic
 OFF authority. The staging path's model usage is not currently in the editorial-seat ledger.
 
 - **Corrections NEVER auto-publish.** Whatever detects the error (Brady, a reader, an
-  agent, the daily self-audit), the correction is drafted and staged as a Typefully
+  agent), an authorized correction is drafted and staged as a Typefully
   DRAFT titled `CORRECTION: <story>`; Brady taps publish. The standing autopost grant
   covers news that passed the gates — it explicitly does not cover corrections.
 - Target latency: within the hour during waking hours; overnight errors are corrected

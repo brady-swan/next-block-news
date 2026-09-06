@@ -1,6 +1,6 @@
 # Documentation map
 
-Reviewed 2026-09-06 for Plan 0060. This index separates how NBN works now from how earlier
+Updated 2026-09-06 for Plan 0061. This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -57,5 +57,6 @@ prompt into multiple docs, adding speculative guarantees, or claiming an upstrea
 was verified when only the NBN consumer was inspected.
 
 Module docstrings/comments were reviewed for obsolete seat names; compatibility identifiers,
-persisted field names and loaded prompts were preserved. This sprint does not migrate data,
-change provider keys, alter editorial policy or enable autopost.
+persisted field names and loaded prompts were preserved. Plan 0061 adds bounded observation and
+source-health tables, the approved static React workspace and owner-requested legacy audit disable.
+It does not change provider keys, editorial policy or enable autopost.

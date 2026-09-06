@@ -199,7 +199,8 @@ class AuditTests(unittest.TestCase):
                 return {"verdict": "clean", "class_ok": True, "findings": [],
                         "source_drift": False}
 
-            with patch.object(audit.datetime, "datetime", FixedDateTime), \
+            with patch.object(config, "AUDIT_UTC", "09:00"), \
+                    patch.object(audit.datetime, "datetime", FixedDateTime), \
                     patch.object(audit, "_audit_one", side_effect=clean):
                 self.assertTrue(audit.maybe_run(con))
 
@@ -230,10 +231,19 @@ class AuditTests(unittest.TestCase):
                 return {"verdict": "clean", "class_ok": True, "findings": [],
                         "source_drift": False}
 
-            with patch.object(audit.datetime, "datetime", FixedDateTime), \
+            with patch.object(config, "AUDIT_UTC", "09:00"), \
+                    patch.object(audit.datetime, "datetime", FixedDateTime), \
                     patch.object(audit, "_audit_one", side_effect=clean):
                 self.assertTrue(audit.maybe_run(con))
             self.assertEqual(checked, ["late"])
+
+    def test_disabled_audit_does_not_read_write_fetch_or_call_models(self):
+        from unittest.mock import Mock
+        con = Mock()
+        with patch.object(config, "AUDIT_UTC", ""), patch.object(audit, "_audit_one") as check:
+            self.assertFalse(audit.maybe_run(con))
+        self.assertEqual(con.mock_calls, [])
+        check.assert_not_called()
 
 
 class ReportTests(unittest.TestCase):

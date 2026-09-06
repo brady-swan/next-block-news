@@ -331,13 +331,17 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[d
 def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                           reservation: str | None = None) -> dict:
     """One clean Sonnet editor call for the complete run; outage stages safe drafts."""
-    from . import brain, newsroom
+    from . import brain, newsroom, observations
     recent = store.recent_feed_posts(
         con, hours=config.DESK_RECENT_FEED_HOURS,
         limit=config.DESK_RECENT_FEED_LIMIT,
         modes=("IMMEDIATE", "DRAFT", "UNCERTAIN"),
     )
     payload, payload_deferred = _batch_editor_payload(candidates, recent)
+    observations.record(con, run_id, "editor_input", {
+        "payload": payload, "payload_deferred": payload_deferred,
+        "model": config.EDITOR_MODEL, "effort": config.EDITOR_EFFORT,
+    }, phase="delivered" if payload["candidates"] else "not_reached")
     if not payload["candidates"]:
         return {"ok": True, "decisions": {}, "payload_deferred": payload_deferred}
     called_at = time.monotonic()
@@ -358,6 +362,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         )
         usage_logged = True
         out = brain._json_from(resp)
+        observations.record(con, run_id, "editor_result", out, phase="initial")
         rows = out.get("decisions")
         if not isinstance(rows, list):
             raise ValueError("editor omitted decisions")
@@ -375,6 +380,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
             decisions[story_id] = {
                 "verdict": verdict, "post": final,
                 "reason": str(row.get("reason") or "")[:500],
+                "origin": "initial",
             }
         omitted = [row for row in payload["candidates"]
                    if row["story_id"] not in decisions]
@@ -394,6 +400,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 ),
             }
             recovery_started = time.monotonic()
+            observations.record(con, run_id, "editor_recovery_input", recovery_payload, phase="delivered")
             recovery_logged = False
             retry = None
             try:
@@ -412,6 +419,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 )
                 recovery_logged = True
                 retry_rows = brain._json_from(retry).get("decisions")
+                observations.record(con, run_id, "editor_result", {"decisions": retry_rows}, phase="recovery")
                 retry_rows = retry_rows if isinstance(retry_rows, list) else []
                 allowed_omitted = {row["story_id"] for row in omitted}
                 for row in retry_rows:
@@ -426,6 +434,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                     decisions[story_id] = {
                         "verdict": verdict, "post": final,
                         "reason": str(row.get("reason") or "")[:500],
+                        "origin": "recovery",
                     }
                     recovery["recovered"] += 1
             except Exception as recovery_exc:  # noqa: BLE001 - preserve first-pass decisions
@@ -440,6 +449,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         return {"ok": True, "decisions": decisions,
                 "payload_deferred": payload_deferred, "recovery": recovery}
     except Exception as exc:  # noqa: BLE001 - preserve good desk work as drafts
+        observations.record(con, run_id, "editor_result", {"error_kind": type(exc).__name__}, phase="unavailable")
         if not usage_logged:
             store.record_model_usage(
                 con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,

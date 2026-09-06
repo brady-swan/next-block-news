@@ -943,6 +943,8 @@ class NewsroomSession:
         }
 
     def prepare_desk(self) -> desk_prep.PreparationResult:
+        from . import observations
+        observations.record(self.con, self.run_id, "preparation", phase="started")
         continuity_ids = {
             candidate_id
             for card in self.continuity_cards
@@ -1010,6 +1012,10 @@ class NewsroomSession:
         self.storyline_read_keys = {
             str(row.get("storyline_key") or "") for row in supplied
         }
+        observations.record(self.con, self.run_id, "preparation", {
+            "delivered_ids": list(self.by_hash), "background_ids": [r["item_hash"] for r in self.prep_backgrounds],
+            "model": config.DESK_PREP_MODEL, "mode": self.prep_mode,
+        }, phase="completed")
         return result
 
     @staticmethod
@@ -1555,7 +1561,7 @@ class NewsroomSession:
 
     def _call(self, *, max_tokens: int, tool_choice: dict | None = None,
               tools: list[dict] | None = None):
-        from . import models
+        from . import models, observations
         if self.successful_newsdesk_calls >= config.RUN_NEWSROOM_MAX_ROUNDS:
             raise NewsroomError("round_limit", "newsroom model round limit reached")
         if time.monotonic() - self.started > config.RUN_NEWSROOM_TIMEOUT_SECONDS:
@@ -1591,9 +1597,12 @@ class NewsroomSession:
             brain.consume_model_call(self.reservation)
             self.rounds += 1
             called_at = time.monotonic()
+            observations.record(self.con, self.run_id, "writer_call", {"model": config.NEWSROOM_MODEL,
+                                "effort": config.NEWSROOM_EFFORT, "round": self.rounds}, phase="started")
             try:
                 response = self.client.messages.create(**kwargs)
             except Exception:
+                observations.record(self.con, self.run_id, "writer_call", {"round": self.rounds}, phase="failed")
                 store.record_model_usage(
                     self.con, run_id=self.run_id, seat="newsdesk",
                     model=config.NEWSROOM_MODEL, round_number=self.rounds,
@@ -1605,6 +1614,8 @@ class NewsroomSession:
                     continue
                 raise
             self.successful_newsdesk_calls += 1
+            observations.record(self.con, self.run_id, "writer_call", {"round": self.rounds,
+                    "stop_reason": getattr(response, "stop_reason", None)}, phase="returned")
             store.record_model_usage(
                 self.con, run_id=self.run_id, seat="newsdesk", model=config.NEWSROOM_MODEL,
                 round_number=self.rounds, response=response,
@@ -1976,6 +1987,16 @@ class NewsroomSession:
             self.haiku_tool_calls += native_calls
             self.tool_calls += native_calls
             memo, rows = research.extract_sources(response)
+            # Only the structured reporter answer, never response.raw/reasoning/provider state.
+            from . import observations
+            try:
+                answer = json.loads("".join(b.text for b in response.content if b.type == "text"))
+                observations.record(self.con, self.run_id, "research_return", {
+                    "assignment": packet, "returned": {k: answer.get(k) for k in research.SCHEMA["properties"]},
+                    "retained_sources": rows, "memo": memo,
+                }, phase="parsed")
+            except (TypeError, ValueError, AttributeError):
+                pass
             local_attempts = 0
             for row in rows:
                 # Provider citation membership establishes a retrieved URL, not truth.
@@ -2204,6 +2225,26 @@ class NewsroomSession:
 
     def _dispatch(self, block, *, allow_assignment: bool = True,
                   fetch_char_limit: int | None = None) -> dict:
+        from . import observations
+        assignment = {"tool": block.name, "arguments": block.input}
+        observations.record(self.con, self.run_id, "tool", assignment, ref=block.id, phase="started")
+        try:
+            result = self._dispatch_inner(block, allow_assignment=allow_assignment,
+                                          fetch_char_limit=fetch_char_limit)
+        except Exception as exc:
+            observations.record(self.con, self.run_id, "tool", {**assignment, "error_kind": type(exc).__name__},
+                                ref=block.id, phase="failed")
+            raise
+        try:
+            returned = json.loads(result.get("content") or "{}")
+        except (ValueError, TypeError):
+            returned = {"unavailable": "non-JSON tool return"}
+        observations.record(self.con, self.run_id, "tool", {**assignment, "returned": returned},
+                            ref=block.id, phase="failed" if result.get("is_error") else "completed")
+        return result
+
+    def _dispatch_inner(self, block, *, allow_assignment: bool = True,
+                  fetch_char_limit: int | None = None) -> dict:
         name, value = block.name, block.input
         allowed = {"fetch_intake_item", "search_web", "fetch_source", "finish_research",
                    "read_desk_context"}
@@ -2250,6 +2291,7 @@ class NewsroomSession:
 
     def conduct_v2(self) -> NewsroomOutcome:
         """Flexible one-run desk: research only when useful, then submit one dossier."""
+        from . import observations
         self.prepare_desk()
         if self.prep_mode == "enforce":
             self.prefetch_prepared_receipts()
@@ -2267,6 +2309,11 @@ class NewsroomSession:
         )
         encoded_packet = json.dumps(packet, separators=(",", ":"), ensure_ascii=False)
         self.initial_packet_bytes = len(encoded_packet.encode("utf-8"))
+        observations.record(self.con, self.run_id, "writer_input", {
+            "packet": packet, "model": config.NEWSROOM_MODEL, "effort": config.NEWSROOM_EFFORT,
+            "prompt_version": PROMPT_VERSION,
+            "prompt_sha256": hashlib.sha256(NEWSROOM_V2_SYSTEM.encode()).hexdigest(),
+        }, phase="delivered")
         self.messages = [{"role": "user", "content": encoded_packet}]
         research_tools = [_tool("fetch_intake_item"), _tool("search_web"),
                           _tool("fetch_source"), V2_DOSSIER_TOOL]
@@ -2291,6 +2338,8 @@ class NewsroomSession:
                     raise NewsroomError("invalid_dossier_batch",
                                         "dossier must be the only tool in its round")
                 self.dossier_tool_id = dossier_blocks[0].id
+                observations.record(self.con, self.run_id, "writer_result", dossier_blocks[0].input,
+                                    phase="returned")
                 return self._merge_prep_backgrounds(
                     self._validate_and_convert_v2(dossier_blocks[0].input)
                 )

@@ -223,8 +223,8 @@ YIELD_IDENTITY_NORMALIZER_ENABLED = os.environ.get(
 # Owner Desk (/desk) and guarded review actions (/report); unset token disables both.
 REPORT_TOKEN = os.environ.get("NBN_REPORT_TOKEN", "")
 
-# Daily self-audit fire time (UTC HH:MM); audit.maybe_run treats empty as 09:00.
-AUDIT_UTC = os.environ.get("NBN_AUDIT_UTC", "09:00")
+# Retired scheduled receipt audit; empty disables it. History/correction helpers remain.
+AUDIT_UTC = os.environ.get("NBN_AUDIT_UTC", "").strip()
 
 # Loop
 POLL_SECONDS = int(os.environ.get("NBN_POLL_SECONDS", "60"))

@@ -1,4 +1,5 @@
 import datetime
+import json
 import unittest
 from unittest.mock import patch
 
@@ -65,6 +66,9 @@ class OutputIdempotencyTests(unittest.TestCase):
             self.assertTrue(store.transition_publisher_mutation(
                 con, intent["mutation_id"], intent["owner_token"], 1, "in_flight"
             ))
+            con.execute("INSERT INTO newsroom_story_commits(run_id,story_id,state,dossier_digest,details_json,updated_at) VALUES ('run','story','pending','digest',?,1)",
+                        (json.dumps({"editor":{"verdict":"revise","reason":"Clearer","post":"Bitcoin event","origin":"initial"}}),))
+            con.commit()
             finalized = store.finalize_publisher_mutation(
                 con, intent["mutation_id"], intent["owner_token"], 2,
                 mode="DRAFT", provider_ref="draft-1", publisher_status="draft",
@@ -75,6 +79,9 @@ class OutputIdempotencyTests(unittest.TestCase):
             )
             self.assertTrue(finalized["ok"])
             self.assertTrue(again["already_finalized"])
+            preserved=json.loads(con.execute("SELECT details_json FROM newsroom_story_commits WHERE run_id='run' AND story_id='story'").fetchone()[0])
+            self.assertEqual(preserved["editor"]["post"],"Bitcoin event")
+            self.assertEqual(preserved["delivery"]["backend_ref"],"draft-1")
             self.assertEqual(con.execute("SELECT COUNT(*) n FROM posts").fetchone()["n"], 1)
             self.assertEqual(con.execute(
                 "SELECT status FROM items WHERE url_hash=?", (saved["url_hash"],)

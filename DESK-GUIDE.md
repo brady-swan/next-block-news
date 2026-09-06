@@ -1,6 +1,6 @@
-# The live Desk
+# The run-first Desk
 
-Current 2026-09-06. The Desk is part of the existing NBN Railway service, not a separate app
+Current 2026-09-06, Plan 0061. The Desk is part of the existing NBN Railway service, not a separate app
 or public news site. All /desk routes, assets, snapshots and the PDF require the existing
 NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documentation.
 
@@ -8,11 +8,11 @@ NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documen
 
 | View | Use it for |
 | --- | --- |
-| Live (/desk) | Worker health, next editorial deadline, latest checkpoint, recent intake and completed model calls |
+| Newsroom (/desk) | Latest run; page older/newer across dates, inspect input, research, decisions and copy |
 | Intake (/desk/intake) | First-seen-day pool; filter status/title/source/event; inspect mailroom/prep reasons for one item |
-| Newsroom (/desk/runs) | Historical run checkpoints; open a run for its terminal candidate decisions and editor/delivery reasons |
+| Newsroom (/desk/runs or /desk/live) | Compatible entry points for the same run-first workspace |
 | Outputs (/desk/outputs) | Locally tracked copy, receipt, observed timing, Typefully link, confirmation and weak engagement context |
-| System & costs (/desk/system) | Effective roster/cadence, recorded editorial-seat spend, current NBN storylines and visual PDF |
+| System & costs (/desk/system) | Current roster/effort, spend and averages by stage/run/period, source/search health and PDF |
 | Review tools (/report) | Existing guarded Stage draft, Dismiss, Send to desk, mutation-resolution controls and loaded orientation |
 
 No new view changes editorial settings or calls a model, source API or Typefully. Navigating
@@ -21,22 +21,44 @@ on Review; no automatic publishing, dismissing, draft editing or retry is trigge
 
 ## What “live” means
 
-The server renders an initial snapshot. JavaScript refreshes its read-only fragment every
-15 seconds while visible. Hidden tabs stop polling; returning refreshes. Pause/resume and
-Refresh now are explicit controls. Open details are retained across refreshes. Automatic
-refresh waits while you are selecting text or have a control focused inside the content.
-The selected Central day stays fixed, including over midnight; choose Today to advance it.
+The browser reads versioned same-origin JSON every 15 seconds while visible. Pause/resume is
+explicit; selected text and focused inputs are not replaced on automatic refresh. The default
+follows the latest production run. Previous/Next and the timestamp picker pin a historical run;
+new arrivals do not move it. Back to latest resumes following. Browser URLs/Back/Forward retain
+run, story and tab. Intake/output day filters are independent of cross-midnight run paging.
 
 The connection line gives the last successful snapshot time. A failed request keeps the
-previous content and labels it potentially stale. JavaScript off means manual reload only.
+previous content with an error/retry notice. Without JavaScript, use server-rendered Review tools.
 The worker banner is separate: starting, healthy, error or stale (no current-process completed
 cycle for ten minutes). An old persisted success is displayed, not confused with this process.
 
 Newsroom statuses are **last recorded checkpoints** (surveying, researching, validated,
 materializing, completed, deferred or fallback), not exact live stages. A stopped worker's
 old researching checkpoint is not proof of ongoing research. Model calls appear after they
-return; the Desk does not stream hidden reasoning or tokens. It does not poll every feed's
-health independently, so a healthy loop is not proof that every source responded.
+start and return; the Desk does not stream hidden reasoning or tokens. New source-health records
+come from existing ordinary polls, not extra probes. Successful zero results are healthy; failures
+retain last-success time; throttle skips do not replace observations. Not observed is not failure.
+
+## Run workspace and research review
+
+Decisions group source leads into stories. Delivered desk shows the actual safe writer packet,
+including coverage, recent reader feed, continuity and selected storyline context. Background
+is separate and not sent. Without a retained packet, preparation is an advanced estimate, not
+proof the writer received it. Missing/pruned dossiers and editor returns display as unavailable,
+not zero work. Intake polls or skipped cadence windows are not fabricated as newsroom runs.
+
+Research displays assignments, prepared source captures, tool returns and reporter findings.
+Provider-reported extracts are source-specific paraphrases, not verbatim page text. Evidence IDs
+establish recorded use, not how much a finding influenced judgment. Human quality questions
+guide review without an invented score. Unassigned research remains visible at run level.
+Copy compares writer proposals with actual editor-returned or submitted copy. Omitted/unavailable
+editor fallbacks are not editor rewrites. Activity shows actual timestamped handoffs.
+
+At 1440+ CSS px the inspector is a persistent side pane; intermediate widths use a drawer,
+mobile uses full-width detail. Selection and reading position survive resizing. Escape/close
+returns focus. Extra-wide monitors use the space for comparison/context, not unbounded prose.
+Post cards retain all-side padding. Review tools preserve guarded actions and old anchors while
+collapsing the earlier diagnostic wall. No new mutation powers or editorial rules were added.
 
 ## Count and timestamp definitions
 
@@ -77,10 +99,12 @@ held story commits with the exact reason; the editor was not reached. Older affe
 may still say pending after their run completed. Their historical rows were not rewritten:
 use the recorded item reason and run completion, not that old pending label, to interpret them.
 
-Run input links use each item's own first-seen day, including carried-over leads. Older
+Run inputs include carried-over leads. Older
 completed runs may have pruned dossiers (normally after 14 days); missing detail is explicit,
 not interpreted as no work. Up to 100 inventory/decision entries and 50 story commits are
 projected for a run. Lists page in groups of 40, at most 250 pages; search narrows the window.
+Later publisher-operation status and Output now have their own update clocks; they are not
+immutable run-time decisions. Deleted/planned/scheduled/publishing/ambiguous states stay distinct.
 
 ## Cost boundaries
 
@@ -88,21 +112,46 @@ Costs use [Central midnight, next Central midnight), not “since that date fore
 reported charges take precedence; other supported providers use recorded rate estimates.
 Unknown billing stays unknown, not free. Reasoning is already included in output tokens.
 The displayed ledger covers recorded intake/prep/research/writer/editor calls. It omits the
-legacy daily receipt-audit path, hosting, external source/search subscriptions/reads and
+historical legacy daily receipt-audit path, hosting, external source/search subscriptions/reads and
 Codex audit usage. It is not a full invoice or a monthly forecast.
+
+System shows today/week-to-date/month-to-date known spend, with stage breakdowns. Per-run cost
+uses directly linked production spend divided by distinct metered newsroom runs. Unlinked
+intake/preparation stays shared, not arbitrarily allocated. Writing includes in-session research;
+zero delegated research calls does not mean zero research. Replay/test/shadow and unclassified
+costs are separated. Current role/provider/effort/mode comes from live configuration, not old calls.
+
+Day/week/month averages use complete Central calendar periods in a bounded 93-day review window.
+The opening partial ledger day and current partial periods are excluded; covered zero-call days
+count. Insufficient complete periods show unavailable. Query truncation above 50,000 calls is
+explicit and suppresses completed-period averages. These blend historical rosters, not forecasts.
+Unknown costs make known totals lower bounds. The legacy daily receipt audit is disabled by owner
+decision, separate from the rolling Codex audit.
 
 ## Technical contract
 
 nbn/desk.py explicitly opens SQLite mode=ro and query_only; it never calls migration-bearing
 store.connect(). One short read transaction gives a coherent snapshot, with a three-second
-query deadline and bounded field projections. No credentials, raw dossiers, evidence bodies
-or mutation ownership tokens are projected. HTML is escaped; external links allow only HTTP(S)
+query deadline and bounded field projections. Selected business dossiers/evidence are shown safely;
+credentials, provider reasoning and mutation ownership tokens are excluded. Text is escaped;
+external links allow only HTTP(S)
 without embedded credentials. Assets are fixed routes, not arbitrary filesystem access.
 
 Responses are no-store/no-referrer, with a same-origin content policy. Snapshot JSON contains
-only the server-rendered safe fragment, generated_at and worker state. /report remains a
-separate legacy action surface and is not automatically refreshed. The new views do not add
-a frontend framework, websocket server, database schema, event bus, or model calls.
+the versioned `/desk/api/workspace` contract. `/desk/api/snapshot` keeps the prior fragment
+contract for compatibility. `/report` remains server-rendered and is not automatically refreshed.
+The approved React UI compiles to one static bundle; Python remains the sole Railway runtime.
+Sources/lockfile/build live in `desk_ui/`. Run `npm ci && npm run build`; committed assets and
+their SHA-256 manifest ship with the Python archive. No second service, websocket, tracing vendor
+or model/provider call was added.
+
+`run_observations` retains the safe final writer packet, dossier, research/tools, editor inputs,
+returns and applied decisions. Rows are capped at 384 KiB; each run reserves 80 ordinary rows /
+1 MiB plus 40 critical rows / 2 MiB (122 including limit markers). Truncation is labeled. Worker
+maintenance expires rich payloads after 14 days, including abandoned runs; small headers remain.
+Savepoint failures are nonfatal and never commit/rollback caller work. Publisher finalization
+merges delivery details without destroying editor provenance. `source_poll_health` records the
+latest ordinary poll per source. All GET routes remain read-only.
 
 The PDF is a dated explanatory artifact, not a live settings dump. Its fixed authenticated
 route is /desk/system-guide.pdf. Rebuild with scripts/build_system_guide.py in a documentation

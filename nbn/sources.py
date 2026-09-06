@@ -104,16 +104,20 @@ def _parse_feed(source: str, body: str) -> list:
     return items
 
 
-def fetch_feeds() -> list:
+def fetch_feeds(con=None) -> list:
     """Fetch all feeds; per-feed failures are logged and skipped."""
+    from . import observations
     out = []
     with httpx.Client(timeout=15, headers={"User-Agent": UA}, follow_redirects=True) as client:
         for source, url in FEEDS.items():
             try:
                 resp = client.get(url)
                 resp.raise_for_status()
-                out.extend(_parse_feed(source, resp.text))
+                rows = _parse_feed(source, resp.text)
+                out.extend(rows)
+                observations.source_poll(con, "rss:" + source, source, "rss", count=len(rows))
             except Exception as exc:  # noqa: BLE001 - one bad feed must not kill the cycle
+                observations.source_poll(con, "rss:" + source, source, "rss", error=type(exc).__name__)
                 log.warning("feed %s failed: %s", source, exc)
     return out
 
@@ -122,9 +126,10 @@ def fetch_feeds() -> list:
 _last_perception_poll = 0.0
 
 
-def fetch_perception() -> list:
+def fetch_perception(con=None) -> list:
     """Poll Perception /feed for fresh Bitcoin articles, throttled to respect rate budget."""
     global _last_perception_poll
+    from . import observations
     import datetime
     import time as _time
     if not config.PERCEPTION_DIRECT_ENABLED or not config.PERCEPTION_API_KEY:
@@ -160,7 +165,9 @@ def fetch_perception() -> list:
                     "published": get("Date", "date", "published_at"),
                     "summary": get("Content", "content", "summary")[:600],
                 })
+        observations.source_poll(con, "perception", "Perception", "perception", count=len(out))
     except Exception as exc:  # noqa: BLE001
+        observations.source_poll(con, "perception", "Perception", "perception", error=type(exc).__name__)
         log.warning("perception feed failed: %s", exc)
     return out
 
@@ -170,8 +177,9 @@ def fetch_perception() -> list:
 EDGAR_URL = "https://efts.sec.gov/LATEST/search-index"
 
 
-def fetch_edgar() -> list:
+def fetch_edgar(con=None) -> list:
     import datetime
+    from . import observations
     today = datetime.datetime.now(datetime.timezone.utc).date()
     out = []
     try:
@@ -200,7 +208,9 @@ def fetch_edgar() -> list:
                 "published": "",
                 "summary": f"Form {src.get('file_type', '8-K')} filed {src.get('file_date', '')} by {name}. Items: {src.get('items', '')}",
             })
+        observations.source_poll(con, "edgar", "SEC EDGAR", "edgar", count=len(out))
     except Exception as exc:  # noqa: BLE001
+        observations.source_poll(con, "edgar", "SEC EDGAR", "edgar", error=type(exc).__name__)
         log.warning("edgar fetch failed: %s", exc)
     return out
 
@@ -288,7 +298,7 @@ def fetch_x(con=None) -> list:
     if _time.time() - _last_x_poll < config.X_POLL_SECONDS:
         return []
     _last_x_poll = _time.time()
-    from . import store
+    from . import store, observations
     out = []
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
@@ -380,7 +390,12 @@ def fetch_x(con=None) -> list:
                             "guide_signal": signal,
                         }, separators=(",", ":"))
                     out.append(item)
+                group = ("Bitcoin news guides" if q in X_GUIDE_QUERIES else
+                         "Research accounts" if q in X_RESEARCH_QUERIES else
+                         "Detectors" if q in X_DETECTOR_QUERIES else "Watched accounts")
+                observations.source_poll(con, "x:" + qkey, group + " · " + qkey, "x", count=len(data.get("data", [])))
             except Exception as exc:  # noqa: BLE001
+                observations.source_poll(con, "x:" + qkey, "X query · " + qkey, "x", error=type(exc).__name__)
                 log.warning("x query failed: %s", exc)
                 break  # a 429 would fail the rest too
     return out
