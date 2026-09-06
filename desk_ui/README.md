@@ -20,12 +20,15 @@ Offline browser acceptance:
 PYTHONPATH=. python3.12 scripts/preview_workspace.py
 # separate terminal, repo/desk_ui:
 node qa.mjs
+node reconsider-qa.mjs
 ```
 
 The fixture server binds only loopback, owns a disposable SQLite database, and never starts
 the worker or calls providers. `qa.mjs` uses Playwright from the configured Codex runtime
 (override `NBN_QA_RUNTIME` with an installed package.json path). Screenshots and results are
 under ignored `outputs/qa/`. These fixtures are not production editorial examples.
+The reconsideration QA script is hardwired to loopback: it tests a real queue POST only
+against the disposable fixture, including double-clicks, reload and conflict feedback.
 
 `app/globals.css` preserves the approved visual system; `app/production.css` handles live-data
 states and adaptations. Base UI primitives retain keyboard behavior. `main.tsx` owns a single

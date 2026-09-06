@@ -392,6 +392,15 @@ read-only JSON every 15 seconds without model/provider calls. Current worker/int
 separate from historical runs. `/report` is a focused owner queue with collapsed old diagnostics;
 guarded handlers and anchors are unchanged. A saved researching checkpoint is not proof of activity.
 
+Intake also exposes explicit **Send to newsdesk** for skipped leads. Authenticated POST records
+a reconsider intent in operator_actions; it leaves the item untouched until the leased worker's
+inventory boundary. Queued owner leads are prioritized and survive pre-writer filters, without
+changing actual dates, cadence, model/editor judgment or duplicate/publication checks. Normal and
+compact writer cards contain Brady's override and the prior skip reason. A validated writer
+protocol response completes delivery of the intent; transport failure/truncation leaves it queued.
+Stale held/drafted/delivered states are not rewound, and repeated POSTs are guarded by the latest
+owner-action id. This is separate from legacy Stage draft overrides and does not force publication.
+
 `run_observations` records safe final writer input, dossier, research returns and editor handoffs,
 excluding raw provider envelopes/reasoning and credentials. Per row: 384 KiB. Per run: 80 ordinary
 rows/1 MiB plus 40 critical handoffs/2 MiB. Limit markers and 14-day payload expiration are visible;

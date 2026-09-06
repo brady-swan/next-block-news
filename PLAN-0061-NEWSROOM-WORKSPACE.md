@@ -1,10 +1,9 @@
 # Plan 0061 - NBN newsroom workspace
 
 Date: 2026-09-06.
-Status: owner approved build and disabling the legacy daily receipt audit, September 6.
-Independent lead approved integration, then the code subject to focused attribution corrections.
-Those corrections are implemented. Verification/release is in progress; rolling audit stays paused
-until deployment and smoke complete.
+Status: independent lead approved; production release d8bfe9e deployed September 6. HTTP/API,
+responsive browser, authentication and exact-asset smoke passed. Natural-session confirmation
+and rolling-audit restoration are the final acceptance steps.
 
 ## Brief and acceptance
 
@@ -226,3 +225,47 @@ research/prefetch/copy, responsive inspector, padding, Escape, no-overflow, auth
 preservation, disabled audit, legacy review and error retry. Browser exceptions: zero.
 Screenshots were visually inspected; changed PDF pages 6-8 were rendered and inspected.
 Backup `/data/backups/pre-0061-20260906T183606Z.db`: 23,498,752 bytes, quick_check=ok.
+
+## Production release evidence
+
+### Owner follow-up: reconsider skipped leads
+
+Approved scope: keep external arrows beside Intake titles, separate Review actions from
+decision metadata, and add an inline Send to newsdesk control for skipped items. It requests
+a fresh look next scheduled run, not publication. The writer must explicitly see that Brady
+overrode the skip, the original skip reason and request time. Preserve real event dates and
+all writer/editor, duplicate and delivery checks. Keep the rolling audit paused through this
+addition. Independent lead review covers durable one-time queueing, in-flight races,
+preparation protection and the final compact writer packet before shipping.
+
+Follow-up implementation approved by the independent lead. Reuses operator_actions without a
+schema migration. POST leaves the item skipped until the leased worker activates it; it does
+not advance cadence. `_owner_reconsider` is separate from all legacy gate/draft-only flags.
+Completion requires an accepted writer protocol response, including in the compact path.
+Latest owner-action id guards delayed retries; state changes to held/drafted/delivered are
+blocked rather than rewound. Nine focused tests cover queueing, restart, stale transitions,
+deferral, prep, both payload forms, handoff failures, cadence and authenticated POST. Full
+working-tree suite: 449 passed. Independent focused review: 14 passed with idempotency tests.
+Browser acceptance passed: base 49 assertions plus arrow/link layout at 390/768/1728/2560,
+inline conflict handling, one request on double click, queued state after reload and owner
+notice. Screenshots and the changed PDF page were visually inspected. Real queue POSTs ran
+only against the disposable loopback fixture; no production items were overridden for testing.
+
+- Implementation `250a6e7`, final state-label/test follow-up `d8bfe9e`, pushed to origin/main.
+- Final clean archive `/tmp/nbn-0061-final.h6odUq`: 438 released offline tests passed. The 440-test
+  working tree includes two preexisting uncommitted evaluator tests, deliberately excluded.
+- Clean npm install, TypeScript and build passed; rebuild reproduced exact committed asset hashes.
+- Final Railway deployment `402f3895-b2a2-4336-af55-aaf8ed20be65`: SUCCESS. Previous first UI
+  deployment `998e01a8-8082-4e5a-b82d-06181ca4855b` was superseded by the final state labels.
+- Live `/desk`, intake/runs/outputs/system, `/report`, PDF and both bundle assets returned 200;
+  unauthenticated workspace API returned 403. All four JSON views returned version 1 and contained
+  no access token. Measured end-to-end reads were 128-145 ms on the final smoke.
+- Live browser at 390/1024/1728/2560: no horizontal overflow or JavaScript errors. Current roster
+  correctly shows Haiku intake, Luna low preparation, Grok 4.3 medium research/writer and Grok
+  4.5 medium editor. Receipt audit disabled; autopost OFF; worker healthy.
+- Additional loopback checks covered actual timestamp-picker selection, mobile navigation,
+  selection across wide-to-drawer resize, focus return, and a zoom-equivalent narrow viewport.
+- QA and production screenshots/results remain in `desk_ui/outputs/qa/` and `outputs/production/`
+  (ignored local artifacts). The prototype Site was not repurposed as a production backend.
+- No provider calls, forced model runs, Typefully mutations, publication toggles or historical
+  backfills were used as smoke tests. Unrelated evaluator/tuning changes remain untouched.

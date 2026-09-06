@@ -36,6 +36,7 @@ def populate(con):
             store.save_desk_preparations(con,[{"run_id":rid,"item_hash":"lead3","effective_route":"background","event_summary":"Broad product announcement, no Bitcoin change."}],mode="enforce")
         con.execute("INSERT INTO newsroom_story_commits(run_id,story_id,state,dossier_digest,details_json,updated_at) VALUES (?,'story-bpi','delivered','fixture','{}',?)",(rid,at+15));con.commit()
         seed_usage(con,rid,at+10,.06);seed_usage(con,rid,at+11,.014,"editor")
+    store.set_status(con, "lead3", "skipped", "fixture-product", "Broad product announcement, no Bitcoin change.", stage="desk_prep", category="background")
     con.execute("INSERT INTO posts(created,story_key,item_hash,class,body,receipt_url,mode,nuelink_id,publisher_backend,publisher_status,publisher_synced_at) VALUES (?,?,?,?,?,?,'DRAFT','12345','typefully','draft',?)",(now-850,"policy-research","lead0","secondary",POST,"https://example.org/report",now));con.commit()
     observations.source_poll(con,"rss:fixture","Fixture feed","rss",count=0)
     store.kv_set(con,"publisher:last_success",str(now-50))
@@ -44,7 +45,7 @@ def populate(con):
 
 
 if __name__=="__main__":
-    with temporary_store() as con, patch.object(config,"REPORT_TOKEN","local-preview"),patch.object(config,"AUTOPOST_ENABLED",False),patch.object(config,"AUDIT_UTC",""):
+    with temporary_store() as con, patch.object(config,"REPORT_TOKEN","local-preview"),patch.object(config,"AUTOPOST_ENABLED",False),patch.object(config,"AUDIT_UTC",""),patch.object(config,"RUN_NEWSROOM_MODE","live"),patch.object(config,"EDITORIAL_ENGINE","v2"):
         populate(con)
         print("Offline UI fixture at http://127.0.0.1:8766/desk?k=local-preview",flush=True)
         ThreadingHTTPServer(("127.0.0.1",8766),main.Health).serve_forever()

@@ -129,7 +129,7 @@ function External({ url, children }: { url: any; children: React.ReactNode }) {
   const u = href(url);
   return u ? (
     <a href={u} target="_blank" rel="noreferrer noopener">
-      {children} <ArrowUpRight size={14} />
+      <span>{children}</span> <ArrowUpRight size={14} />
     </a>
   ) : (
     <span>{children}</span>
@@ -140,6 +140,85 @@ function Note({ children }: { children: React.ReactNode }) {
     <div className="evidence-note">
       <CircleHelp size={16} />
       <span>{children}</span>
+    </div>
+  );
+}
+
+function Reconsider({ item, refresh }: { item: Row; refresh: () => void }) {
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState<Row | null>(null);
+  const inFlight = useRef(false);
+  const control = item.reconsider || {};
+  const request = submitted || control.request;
+  useEffect(() => {
+    if (submitted && control.latest_action_id >= submitted.id)
+      setSubmitted(null);
+  }, [control.latest_action_id, submitted]);
+  const queued = request && ["queued", "processing"].includes(request.state);
+  async function send() {
+    if (inFlight.current || queued) return;
+    inFlight.current = true;
+    setSending(true);
+    setError("");
+    try {
+      const response = await fetch("/desk/api/item-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          k: token,
+          id: item.url_hash,
+          action: "reconsider",
+          expected_action_id: String(control.latest_action_id || 0),
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (response.status === 403)
+        throw Error("Your Desk access link is missing or expired.");
+      const outcome = await response.json();
+      if (!response.ok || !outcome.ok)
+        throw Error(outcome.reason || "Request was not accepted.");
+      setSubmitted(outcome);
+    } catch (e: any) {
+      setError(
+        e.name === "TimeoutError" || e.name === "TypeError"
+          ? "Could not confirm queueing. Refresh the card; retrying will not duplicate a pending request."
+          : e.message,
+      );
+    } finally {
+      inFlight.current = false;
+      setSending(false);
+      refresh();
+    }
+  }
+  if (!control.eligible && !request && !sending && !error) return null;
+  return (
+    <div className="reconsider-control">
+      {(control.eligible || sending || queued) && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={sending || !!queued}
+          onClick={send}
+        >
+          <Send size={14} />{" "}
+          {sending
+            ? "Queueing…"
+            : queued
+              ? "Queued for newsdesk"
+              : "Send to newsdesk"}
+        </Button>
+      )}
+      <span role="status">
+        {queued
+          ? "Next scheduled run · Brady’s skip override and original reason will accompany this lead."
+          : request?.state === "completed"
+            ? "Delivered to the writer for reconsideration; not approval to publish."
+            : request?.state === "blocked"
+              ? request.result
+              : "Override this skip for a fresh look. The writer still makes the editorial call."}
+      </span>
+      {error && <span role="alert">{error}</span>}
     </div>
   );
 }
@@ -1327,7 +1406,12 @@ function App() {
             </>
           )}
           {data && data.view === state.view && state.view !== "newsroom" && (
-            <Support state={state} data={data} navigate={navigate} />
+            <Support
+              state={state}
+              data={data}
+              navigate={navigate}
+              refresh={() => setRefresh((n) => n + 1)}
+            />
           )}
         </main>
       </div>
@@ -1368,10 +1452,12 @@ function Support({
   state,
   data,
   navigate,
+  refresh,
 }: {
   state: State;
   data: Row;
   navigate: (p: Partial<State>, replace?: boolean) => void;
+  refresh: () => void;
 }) {
   const [period, setPeriod] = useState("today"),
     [showSources, setShowSources] = useState(false);
@@ -1456,10 +1542,20 @@ function Support({
                         r.mailroom_reason ||
                         "Awaiting a recorded decision."}
                     </p>
-                    <small>
-                      {r.decision_stage || "Intake"} ·{" "}
-                      {r.decision_category || r.mailroom_route || r.status}
-                    </small>
+                    <div className="intake-actions">
+                      <small>
+                        {r.decision_stage || "Intake"} ·{" "}
+                        {r.decision_category || r.mailroom_route || r.status}
+                      </small>
+                      <a
+                        href={
+                          authUrl("/report", { d: data.day }) +
+                          (r.status === "skipped" ? "#skipped" : "#held")
+                        }
+                      >
+                        Review actions ↗
+                      </a>
+                    </div>
                     {r.preparation && (
                       <p>
                         <button
@@ -1479,14 +1575,13 @@ function Support({
                         </button>
                       </p>
                     )}
-                    <a href={authUrl("/report", { d: data.day }) + "#held"}>
-                      Review actions ↗
-                    </a>
+                    <Reconsider item={r} refresh={refresh} />
                     <Json
                       value={{
                         mailroom: r.mailroom_route,
                         reason: r.mailroom_reason,
                         preparation: r.preparation,
+                        owner_override: r.reconsider?.request,
                       }}
                       label="Routing detail"
                     />

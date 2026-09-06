@@ -185,11 +185,15 @@ Desk is available at `/desk?k=<token>` when `NBN_REPORT_TOKEN` is configured. Th
 snapshot every 15 seconds in visible tabs, never a model or provider. The worker
 reconciles recent Typefully publication receipts every five minutes, so drafts published
 manually are counted by their confirmed X publication time and leave the action queue.
+On Intake, **Send to newsdesk** explicitly reconsiders a skipped lead next scheduled run.
+The writer receives Brady's override and original skip reason, without changing dates,
+editorial judgment, duplicate checks or autopost. Queued intents survive restart; repeated
+clicks are idempotent. Viewing the page never submits an action.
 For held items, the Desk can queue a guarded **Stage draft** retry (freshness,
 corroboration, style, and Editor holds only) or record **Dismiss**. Operator retries run
 the complete source/Writer/lint/Editor stack with a fresh web source search, override only the displayed gate, and are
 always delivered as Typefully drafts—not autonomous posts.
-The Desk exposes both RSS-mailroom and assignment-desk Background decisions; **Send to desk**
+The legacy Review page exposes RSS-mailroom and assignment-desk Background decisions; **Send to desk**
 atomically restores one item to the newsroom queue and advances the next desk deadline. It also
 shows per-seat model spend, the daily cost target, initial packet size, newsroom attempts,
 prepared receipts, delegated research, native search counts, and billing provenance.

@@ -568,8 +568,35 @@
   font-weight: 500;
 }
 .live-intake h3 a {
-  display: inline;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   color: #e0e6d6;
+}
+.live-intake h3 a svg {
+  flex: 0 0 auto;
+}
+.intake-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin: 14px 0;
+}
+.reconsider-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 14px 0;
+}
+.reconsider-control > span {
+  font-size: 12px;
+  color: #b9c1ad;
+}
+.reconsider-control > [role="alert"] {
+  color: #f3b886;
+  flex-basis: 100%;
 }
 .live-intake > div > span,
 .live-intake small {

@@ -175,7 +175,7 @@ def build():
     card(c, 360, 165, 280, 300, "Remote delivery", "Read it back", "Clean news lead first.<br/><br/><b>Source: receipt URL</b> in the immediate first reply.<br/><br/>Verify ordered content. Scheduling and confirmed publication are different outcomes.", ORANGE, 14)
     card(c, 672, 165, 280, 300, "After the attempt", "Reconcile safely", "Ambiguous response? Do not blindly POST again.<br/><br/>Known Typefully records reconcile normally every five minutes. Manual publication updates confirmation time and coverage.", GREEN, 14)
     arrow(c, 332, 310, 355, 310); arrow(c, 644, 310, 667, 310)
-    note(c, 493, "Owner-only actions", "The live views are read-only. Existing Review tools hold guarded stage/dismiss/promotion and mutation-resolution controls. The audit never enables autopost or mutates Typefully content on its own.", ORANGE, 85)
+    note(c, 493, "Owner-only actions", "Viewing is read-only. Intake's Send to newsdesk queues a skipped lead for reconsideration next run, with Brady's override and prior skip reason. It is not approval to publish. Review retains guarded stage/dismiss and mutation controls.", ORANGE, 85)
     text(c, 48, 601, 904, "The internal daily receipt audit is disabled by owner decision. Corrections remain human-reviewed. The rolling audit may turn autopost OFF for an evidenced systemic failure, never ON.", 12, MUTED)
 
     page(c, "07 / Reading the Desk", "See the work. Know what the numbers mean.",

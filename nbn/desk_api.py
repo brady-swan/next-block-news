@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from urllib.parse import urlencode
 
-from . import config, desk, observations
+from . import config, desk, observations, store
 
 LIVE_RUN = "mode='live' AND run_id LIKE 'cycle:%'"
 HEADER = "run_id,status,mode,model,prompt_version,created_at,updated_at,completed_at,error_kind"
@@ -229,6 +229,19 @@ def intake(con, opt, now):
     for r in result[:40]:
         prep = con.execute("SELECT run_id,effective_route,event_summary,research_objective,model FROM desk_preparations WHERE item_hash=? ORDER BY prepared_at DESC LIMIT 1", (r["url_hash"],)).fetchone()
         r["preparation"] = dict(prep) if prep else None
+        latest = store.latest_operator_action(con, r["url_hash"])
+        active = con.execute(
+            "SELECT 1 FROM operator_actions WHERE item_hash=? AND state IN ('queued','processing') LIMIT 1",
+            (r["url_hash"],),
+        ).fetchone()
+        r["reconsider"] = {
+            "eligible": r["status"] == "skipped" and not active
+                        and config.EDITORIAL_ENGINE == "v2" and config.RUN_NEWSROOM_MODE == "live",
+            "latest_action_id": latest["id"] if latest else 0,
+            "request": ({k: latest[k] for k in
+                         ("id", "state", "requested_at", "completed_at", "original_note", "result")}
+                        if latest and latest["action"] == "reconsider" else None),
+        }
     counts = rows(con, "SELECT status,COUNT(*) n FROM items WHERE first_seen>=? AND first_seen<? GROUP BY status", (opt["start"],opt["end"]))
     return {"day": opt["day"], "page": opt["page"], "more": len(result)>40, "items": result[:40], "counts": counts, "sources": source_health(con, now)}
 

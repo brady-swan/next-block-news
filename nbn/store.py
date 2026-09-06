@@ -1432,9 +1432,10 @@ def hold_gate(note: str) -> str:
     return ""
 
 
-def request_operator_action(con, item_hash: str, action: str) -> dict:
+def request_operator_action(con, item_hash: str, action: str, *,
+                            expected_action_id: int | None = None) -> dict:
     """Apply a Desk disposition or queue one guarded, draft-only pipeline retry."""
-    if action not in ("stage", "retry", "dismiss", "promote"):
+    if action not in ("stage", "retry", "dismiss", "promote", "reconsider"):
         return {"ok": False, "reason": "unknown action"}
     try:
         con.execute("BEGIN IMMEDIATE")
@@ -1445,6 +1446,37 @@ def request_operator_action(con, item_hash: str, action: str) -> dict:
         if not item:
             con.rollback()
             return {"ok": False, "reason": "item not found"}
+        if action == "reconsider":
+            if config.EDITORIAL_ENGINE != "v2" or config.RUN_NEWSROOM_MODE != "live":
+                con.rollback()
+                return {"ok": False, "reason": "live newsdesk is not enabled"}
+            active = con.execute(
+                "SELECT id,action,state FROM operator_actions WHERE item_hash=?"
+                " AND state IN ('queued','processing') ORDER BY id DESC LIMIT 1",
+                (item_hash,),
+            ).fetchone()
+            if active:
+                con.rollback()
+                return ({"ok": True, "id": active["id"], "state": active["state"]}
+                        if active["action"] == "reconsider" else
+                        {"ok": False, "reason": "another owner action is pending"})
+            latest = latest_operator_action(con, item_hash)
+            if expected_action_id != (latest["id"] if latest else 0):
+                con.rollback()
+                return {"ok": False, "reason": "owner action changed; refresh this card"}
+            if item["status"] != "skipped":
+                con.rollback()
+                return {"ok": False, "reason": "item is no longer skipped; refresh this card"}
+            cur = con.execute(
+                "INSERT INTO operator_actions(item_hash,story_key,action,gate,requested_at,"
+                "state,original_status,original_note) VALUES (?,?,'reconsider',?,?,'queued',?,?)",
+                (item_hash, item["story_key"], item["decision_stage"], time.time(),
+                 item["status"], item["note"]),
+            )
+            # Do not race an in-flight run or accelerate the editorial cadence.
+            # The leased worker activates the intent at its next inventory boundary.
+            con.commit()
+            return {"ok": True, "id": cur.lastrowid, "state": "queued"}
         if action == "promote":
             triage = con.execute(
                 "SELECT route,promoted_at FROM intake_triage WHERE item_hash=?", (item_hash,)
@@ -1572,6 +1604,63 @@ def latest_operator_action(con, item_hash: str):
     return con.execute(
         "SELECT * FROM operator_actions WHERE item_hash=? ORDER BY id DESC LIMIT 1", (item_hash,)
     ).fetchone()
+
+
+def activate_reconsiderations(con) -> None:
+    """Called only by the leased live-v2 worker before taking its inventory snapshot."""
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        pending = con.execute(
+            "SELECT a.id,a.item_hash,i.status FROM operator_actions a"
+            " LEFT JOIN items i ON i.url_hash=a.item_hash"
+            " WHERE a.action='reconsider' AND a.state='queued'",
+        ).fetchall()
+        for row in pending:
+            if row["status"] == "skipped":
+                con.execute(
+                    "UPDATE items SET status='new',defer_until=NULL,decision_stage='operator',"
+                    "decision_category='reconsider',note='Brady overrode the skip; queued for newsdesk'"
+                    " WHERE url_hash=? AND status='skipped'", (row["item_hash"],),
+                )
+            elif row["status"] != "new":
+                con.execute(
+                    "UPDATE operator_actions SET state='blocked',completed_at=?,result=? WHERE id=?",
+                    (time.time(), f"Item changed to {row['status'] or 'missing'} before handoff; not rewound",
+                     row["id"]),
+                )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+
+
+def reconsider_note(action) -> dict:
+    """Trusted owner intent, separate from source text and legacy publication overrides."""
+    return {
+        "action_id": action["id"], "requested_by": "Brady",
+        "requested_at": action["requested_at"],
+        "prior_skip_reason": str(action["original_note"] or "")[:600],
+        "prior_decision_stage": action["gate"],
+        "instruction": "Brady overrode the prior skip and asked you to reconsider this lead. "
+                       "This is not approval to publish. Apply normal editorial and duplicate "
+                       "checks, and assess freshness from the real event dates.",
+    }
+
+
+def complete_reconsiderations(con, inventory: list[dict], run_id: str) -> None:
+    """A validated writer protocol response proves delivery; not publication or approval."""
+    if not any(item.get("_owner_reconsider") for item in inventory):
+        return
+    for item in inventory:
+        request = item.get("_owner_reconsider") or {}
+        if request.get("action_id"):
+            con.execute(
+                "UPDATE operator_actions SET state='completed',completed_at=?,result=?"
+                " WHERE id=? AND item_hash=? AND action='reconsider' AND state='queued'",
+                (time.time(), f"Delivered to newsdesk in {run_id}"[:300],
+                 request["action_id"], item["url_hash"]),
+            )
+    con.commit()
 
 
 def start_operator_action(con, action_id: int) -> None:
@@ -3371,6 +3460,13 @@ def pending_items(con, limit: int) -> list:
         (time.time(),),
     ).fetchall()
     values = [dict(row) for row in rows]
+    requests = {r["item_hash"]: r for r in con.execute(
+        "SELECT * FROM operator_actions WHERE action='reconsider' AND state='queued'"
+        " ORDER BY id",
+    )}
+    for row in values:
+        if row["url_hash"] in requests:
+            row["_owner_reconsider"] = reconsider_note(requests[row["url_hash"]])
     if config.INTAKE_TRIAGE_MODE == "enforce":
         def rank(row):
             if row.get("intake_route") == "priority":
@@ -3384,7 +3480,8 @@ def pending_items(con, limit: int) -> list:
         def rank(row):
             return 0 if guide_context.signal_from_context(row.get("discovery_context")) else 1
     values = [row for _, row in sorted(
-        enumerate(values), key=lambda pair: (rank(pair[1]), pair[0])
+        enumerate(values), key=lambda pair: (
+            0 if pair[1].get("_owner_reconsider") else 1, rank(pair[1]), pair[0])
     )]
     return values[:max(0, int(limit))]
 

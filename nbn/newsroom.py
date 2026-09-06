@@ -1140,7 +1140,7 @@ class NewsroomSession:
                 attention.append("marketing_node_discovery")
             if ref.official:
                 attention.append("official_direct")
-            if item.get("_operator_gate"):
+            if item.get("_operator_gate") or item.get("_owner_reconsider"):
                 attention.append("operator_requested")
             if item.get("_research_retry"):
                 attention.append("research_retry")
@@ -1274,6 +1274,7 @@ class NewsroomSession:
                 "reference_ids": [row["pointer_id"] for row in pointers],
                 "guide_tip": guide_tip,
                 "operator_gate": _clean_text(item.get("_operator_gate"), 80) or None,
+                "owner_override": item.get("_owner_reconsider") or None,
                 "research_retry": bool(item.get("_research_retry")),
                 "haiku_preparation": ({
                     key: self.preparations[candidate_id].get(key)
@@ -1483,6 +1484,7 @@ class NewsroomSession:
                             "protection_reason": preparation.get("protection_reason"),
                         } if preparation else None),
                         "operator_gate": row.get("operator_gate"),
+                        "owner_override": row.get("owner_override"),
                         "research_retry": row.get("research_retry"),
                     })
                 packet["intake_board"] = compact_cards
@@ -2332,6 +2334,7 @@ class NewsroomSession:
                 tools=[V2_DOSSIER_TOOL] if must_submit else research_tools,
             )
             blocks = self._append_assistant(response)
+            store.complete_reconsiderations(self.con, self.inventory, self.run_id)
             dossier_blocks = [b for b in blocks if b.name == "submit_editorial_dossier"]
             if dossier_blocks:
                 if len(blocks) != 1:

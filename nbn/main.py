@@ -1032,6 +1032,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     mailroom = intake_triage.route_cycle(con, inserted, run_id=pipeline_run_id)
     mailroom_reservation = mailroom.pop("reservation", None)
     summaries = {store.url_hash(i["url"]): i.get("summary", "") for i in items}
+    if config.EDITORIAL_ENGINE == "v2" and config.RUN_NEWSROOM_MODE == "live":
+        store.activate_reconsiderations(con)
     pending = store.pending_items(con, config.MAX_ITEMS_PER_TRIAGE)
     overrides = {}
     for it in pending:
@@ -1045,7 +1047,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
         intake_age = (config.DESK_CANDIDATE_MAX_AGE_HOURS
                       if config.EDITORIAL_ENGINE == "v2" else None)
         if store.is_stale(it.get("published", ""), max_age_hours=intake_age) \
-                and not _override_allows(it, "freshness"):
+                and not _override_allows(it, "freshness") and not it.get("_owner_reconsider"):
             note = "stale at intake"
             if _action_ids(it):
                 store.set_status(con, it["url_hash"], "held", None, note)
@@ -1053,7 +1055,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             else:
                 store.set_status(con, it["url_hash"], "skipped", None, note)
             continue
-        if store.is_non_english(it.get("title", "")):
+        if store.is_non_english(it.get("title", "")) and not it.get("_owner_reconsider"):
             store.set_status(con, it["url_hash"], "skipped", None, "non-English source")
             continue
         it["summary"] = summaries.get(it["url_hash"], it.get("summary", ""))
@@ -1856,7 +1858,8 @@ class Health(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
-        if parsed.path not in {"/item-action", "/mutation-action"}:
+        workspace_action = parsed.path == "/desk/api/item-action"
+        if parsed.path not in {"/item-action", "/mutation-action", "/desk/api/item-action"}:
             self.send_response(404)
             self.end_headers()
             return
@@ -1886,9 +1889,24 @@ class Health(BaseHTTPRequestHandler):
                 )
             else:
                 item_hash = (q.get("id") or [""])[0]
-                outcome = store.request_operator_action(con, item_hash, action)
+                try:
+                    expected = int((q.get("expected_action_id") or ["-1"])[0])
+                except ValueError:
+                    expected = -1
+                if workspace_action and action != "reconsider":
+                    outcome = {"ok": False, "reason": "only skip reconsideration is available here"}
+                else:
+                    outcome = store.request_operator_action(
+                        con, item_hash, action, expected_action_id=expected)
         finally:
             con.close()
+        if workspace_action:
+            self.send_response(200 if outcome["ok"] else 409)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(json.dumps(outcome).encode())
+            return
         if not outcome["ok"]:
             self.send_response(409)
             self.send_header("Content-Type", "text/plain; charset=utf-8")

@@ -97,6 +97,15 @@ and costs are not zero. Delivery-now has its own clock. All GETs are read-only, 
 Build `desk_ui` before committing its static assets; no Node server runs in production. No newsroom
 model, prompt, cadence or publishing rule changed. See DESK-GUIDE.md and Plan 0061 release evidence.
 
+Owner follow-up: Intake **Send to newsdesk** queues skipped-lead reconsideration. The worker
+activates it under its cycle lease at the next inventory boundary; it waits for the normal
+desk slot. `_owner_reconsider` survives prep Background filtering and both writer packet shapes,
+with Brady attribution, prior skip reason, request time and a reminder this is not publication
+approval. Keep it separate from legacy operator gates/action IDs. Consume only after a valid
+writer protocol response, not transport success. Repeated POSTs check the latest action id;
+state changes to held/drafted/delivered are blocked, never rewound. No schema or provider call
+was added to the dashboard action.
+
 ## Release playbook
 
 1. Read current docs and git status; preserve uncommitted owner/evaluation work.

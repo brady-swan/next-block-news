@@ -9,15 +9,25 @@ NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documen
 | View | Use it for |
 | --- | --- |
 | Newsroom (/desk) | Latest run; page older/newer across dates, inspect input, research, decisions and copy |
-| Intake (/desk/intake) | First-seen-day pool; filter status/title/source/event; inspect mailroom/prep reasons for one item |
+| Intake (/desk/intake) | First-seen-day pool; inspect decisions and request reconsideration of skipped leads |
 | Newsroom (/desk/runs or /desk/live) | Compatible entry points for the same run-first workspace |
 | Outputs (/desk/outputs) | Locally tracked copy, receipt, observed timing, Typefully link, confirmation and weak engagement context |
 | System & costs (/desk/system) | Current roster/effort, spend and averages by stage/run/period, source/search health and PDF |
 | Review tools (/report) | Existing guarded Stage draft, Dismiss, Send to desk, mutation-resolution controls and loaded orientation |
 
-No new view changes editorial settings or calls a model, source API or Typefully. Navigating
-to an external source/Typefully opens that site normally. Existing actions remain explicit
-on Review; no automatic publishing, dismissing, draft editing or retry is triggered by viewing.
+Viewing or refreshing does not change editorial settings or call a model, source API or Typefully.
+Navigating to an external source/Typefully opens that site normally. Review retains the existing
+guarded actions. Intake adds one explicit owner action: **Send to newsdesk** on skipped leads.
+
+This overrides the skip for reconsideration on the next scheduled newsdesk run, not publication.
+The writer receives a labeled Brady override, original skip reason and request time, with actual
+source/event dates preserved. Mailroom/preparation cannot discard the request before the writer
+sees it; normal writer/editor, duplicate and delivery checks still apply. It does not accelerate
+the 15-minute cadence or enable autopost. Queued requests survive restarts and pre-handoff failures.
+“Delivered to the writer” means a valid writer response, not editorial acceptance. If another run
+has already moved the item to held/drafted/delivered, the request is blocked rather than rewinding it.
+The page shows queued/delivered/blocked status; a newly skipped item can be reconsidered again
+only with a fresh explicit request. Repeat clicks or delayed retries do not create duplicate intent.
 
 ## What “live” means
 
@@ -140,6 +150,9 @@ without embedded credentials. Assets are fixed routes, not arbitrary filesystem 
 Responses are no-store/no-referrer, with a same-origin content policy. Snapshot JSON contains
 the versioned `/desk/api/workspace` contract. `/desk/api/snapshot` keeps the prior fragment
 contract for compatibility. `/report` remains server-rendered and is not automatically refreshed.
+`POST /desk/api/item-action` accepts only authenticated reconsideration, reusing operator_actions
+and checking the latest owner-action version. The worker activates it at its leased inventory
+boundary; the HTTP handler never invokes a model or publisher. No new table is required.
 The approved React UI compiles to one static bundle; Python remains the sole Railway runtime.
 Sources/lockfile/build live in `desk_ui/`. Run `npm ci && npm run build`; committed assets and
 their SHA-256 manifest ship with the Python archive. No second service, websocket, tracing vendor
@@ -151,7 +164,7 @@ returns and applied decisions. Rows are capped at 384 KiB; each run reserves 80 
 maintenance expires rich payloads after 14 days, including abandoned runs; small headers remain.
 Savepoint failures are nonfatal and never commit/rollback caller work. Publisher finalization
 merges delivery details without destroying editor provenance. `source_poll_health` records the
-latest ordinary poll per source. All GET routes remain read-only.
+latest ordinary poll per source. All Desk and Review GET routes remain read-only.
 
 The PDF is a dated explanatory artifact, not a live settings dump. Its fixed authenticated
 route is /desk/system-guide.pdf. Rebuild with scripts/build_system_guide.py in a documentation

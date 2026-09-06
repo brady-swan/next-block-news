@@ -102,7 +102,8 @@ def _event_group(value, fallback: str) -> str:
 
 def protection_reason(item: dict, continuity_ids: set[str]) -> str:
     item_hash = str(item.get("url_hash") or "")
-    if item.get("_operator_gate") or item.get("decision_category") == "promoted":
+    if (item.get("_operator_gate") or item.get("_owner_reconsider")
+            or item.get("decision_category") == "promoted"):
         return "operator_requested"
     if item.get("_research_retry"):
         return "research_retry"
@@ -138,7 +139,7 @@ def _card(item: dict) -> dict:
             "official": source_policy.classify(
                 item.get("url", ""), item.get("source", "")
             ).official,
-            "operator": bool(item.get("_operator_gate")
+            "operator": bool(item.get("_operator_gate") or item.get("_owner_reconsider")
                              or item.get("decision_category") == "promoted"),
             "research_retry": bool(item.get("_research_retry")),
         },
