@@ -24,3 +24,26 @@ and leave the current run; neither had updated the run-scoped story lifecycle.
 The regression test reproduces both erroneous pending states before the patch. After the patch
 it asserts held state and reason, retained item retry eligibility, no fabricated editor outcome,
 and zero editor/publisher calls. Release verification is recorded below when complete.
+
+## Verification and release
+
+- Before repair: both regression subcases failed because actual state was `pending`, not `held`.
+- After repair: focused editorial/Desk suite passed 51 tests; working-tree suite passed
+  428 tests (including two pre-existing unreleased evaluator tests). Clean Python 3.12 archive
+  `/tmp/nbn-lifecycle-release.meK6d6` passed **426 tests**, with 50 subtests.
+- Runtime commit `4ba3f3d` was pushed to main and deployed from that clean archive.
+- Online SQLite backup, integrity checked:
+  `/data/backups/nbn-pre-source-policy-20260906T161746Z.db`.
+- Railway deployment `995a195e-9ae9-4458-8ef3-6d2096791b18`: **SUCCESS**.
+- Production `nbn/main.py` SHA-256 exactly matches the tested archive:
+  `a4d8cbe6471b4341a689301c4662799de4c8293813fbe533da79df6e606663ed`.
+- Authenticated Desk, selected-run page/snapshot, intake and legacy report returned 200;
+  the unauthenticated snapshot returned 403. Snapshot time was current and worker healthy.
+  SQLite quick_check returned `ok`.
+- Public health verified process start `1788711520.9644423`, two natural completed cycles
+  (latest `1788711586.9762738`), no worker error and autopost OFF.
+
+This release did not force a model run or exercise publisher actions to smoke the edge case.
+Its two deferral paths are covered offline; live smoke verifies deployment, reads and normal
+worker operation. No historical data was rewritten. The existing rolling audit remained ACTIVE;
+the Desk redesign is still a separate unshipped plan. Rollback runtime is `c581510`.

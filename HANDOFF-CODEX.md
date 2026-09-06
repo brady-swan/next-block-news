@@ -130,3 +130,10 @@ Subsequent audit repair `c581510` corrected @BitcoinNewsCom's source identity to
 separate from Bitcoin.com News, without changing tiers, prompts or discovery. Deployment
 `7e3b8a34-b3e8-492e-ad60-adb1f207ad22` succeeded; 425 clean-release tests and production smoke
 passed. Existing Typefully copy was not edited. See AUDIT-FIX-2026-09-06-SOURCE-IDENTITY.md.
+
+Audit repair `4ba3f3d` closes two missing pre-editor story-state writes: update/base and
+update-label deferrals now record held with the exact reason instead of leaving pending after
+run completion. No editorial, retry or publishing behavior changed. Deployment
+`995a195e-9ae9-4458-8ef3-6d2096791b18` succeeded; 426 clean-release tests, authenticated
+route checks and natural worker cycles passed. Historical rows were not rewritten. See
+AUDIT-FIX-2026-09-06-PRE-EDITOR-LIFECYCLE.md. The separate Plan 0061 redesign remains unshipped.
