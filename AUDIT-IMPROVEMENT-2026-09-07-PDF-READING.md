@@ -1,6 +1,6 @@
 # Bounded PDF reading
 
-September 7, 2026. Authorized by the owner's expanded audit autonomy. Status: independently approved implementation; release verification underway.
+September 7, 2026. Authorized by the owner's expanded audit autonomy. Status: deployed and smoke-tested; rolling audit restored.
 
 ## Why this, now
 
@@ -71,3 +71,31 @@ File creation metadata is not a verified first-publication time.
   partway through page 3. Original PDF bytes and invented metadata dates never enter the receipt.
 - Temporary extraction files are removed on success and all tested failure paths. Poppler runs
   without a shell, with stderr/stdout suppressed, and timeout cleanup kills/reaps the subprocess.
+
+## Production release
+
+- Runtime `d299365` pushed to origin/main. Clean archive `/tmp/nbn-pdf-reading-release.z7uDZU`
+  passed **516 tests**; the two unrelated evaluator tests and all uncommitted work were excluded.
+- Online SQLite backup `/data/backups/nbn-pre-source-policy-20260907T174915Z.db` passed its
+  integrity check. No schema/data migration and no manual Typefully action.
+- Railway deployment `98c56c66-d43c-4013-98a0-895b5e05ba9f` reached SUCCESS on the existing
+  service/environment, one replica and `/data` volume. Deployed reader/source/newsroom/store/
+  Dockerfile hashes match the clean release. Runtime Poppler is 25.03.0.
+- At 17:51:53 UTC, the actual BSP URL returned 8,000 readable characters, correct final URL,
+  no inferred byline/publication date and explicit clipping/scan/chart limits in **0.554 seconds**
+  including HTTP fetch. Normal Bitcoin Core HTML also returned usable text; malformed PDF
+  returned empty `pdf_extraction_failed`. These were direct read-only source smokes, not model
+  reporting, claim verification or a forced draft.
+- **12 PDF tests passed inside the deployed Linux container**, covering actual Poppler output,
+  limits, failures/cleanup and the newsroom receipt/memory path against isolated temporary data.
+- Public health/status, all four Desk pages and all four authenticated workspace views returned
+  200. A natural intake cycle completed after restart with no worker error. Roster, effort,
+  six-response/360-second writer allowance and retrieval budgets are unchanged. Autopost OFF.
+  The next newsroom session was still pending; no live writer PDF-use claim is made.
+- Restored the existing 15-minute rolling audit with its expanded authority intact and added
+  PDF outcome/limitation checks. It must backfill from the last complete editorial snapshot,
+  17:32:07.843 UTC, including the in-progress 17:31 desk and the build interval.
+
+Rollback remains the preceding runtime `c7887fd`; no database restore is required. Current
+system/handoff/prompt/dependency docs are updated. Historical PDF-repair records remain dated
+history. The visual system guide was not regenerated for this small source-adapter addition.
