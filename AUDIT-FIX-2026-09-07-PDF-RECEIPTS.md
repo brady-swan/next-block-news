@@ -32,6 +32,27 @@ historical data rewrite or Typefully mutation is included.
 - Full working-tree offline suite: 491 tests passed (including unrelated evaluator tests).
 - New cases cover MIME/signature detection, malformed declared PDFs, safe redirects, HTML
   at a PDF-looking URL, and the actual newsroom path excluding unread data from evidence/memory.
-- Clean-release test, deployment, backup and production smoke evidence will be recorded below.
+- Clean archive `/tmp/nbn-pdf-receipt-release.S0Tpc1`: **489 tests passed**; the two unrelated
+  evaluator tests were excluded along with all other uncommitted evaluation/tuning work.
 
 Rollback is the prior runtime. No schema/configuration change or database rollback is needed.
+
+## Production release
+
+- Runtime `fdfdd6e` pushed to origin/main and deployed from that clean archive.
+- Online backup `/data/backups/nbn-pre-source-policy-20260907T115838Z.db` passed the full
+  SQLite integrity check before deployment. Read-only inspection found zero saved receipt
+  artifacts containing the raw PDF signature; no historical records were changed.
+- Railway deployment `3e85396e-aef0-4e22-b932-1afc1c54604d` reached SUCCESS, on the existing
+  service/environment, one replica and `/data` volume.
+- Production source-file SHA-256 matches the release. The actual BSP PDF now returns
+  `evidence_failed` / `unsupported_document` with zero text. A normal HTML source still
+  returns readable text with `outcome=ok`. These checks ran directly against the adapter,
+  not through a paid newsroom or publisher operation.
+- All four authenticated Desk JSON views returned 200. Public health showed a completed
+  natural worker cycle after restart (12:00:33.697 UTC), no error, autopost OFF, and no pending
+  delivery. Node polling was healthy; Node and Perception configuration remained unchanged.
+- The existing rolling audit was not paused or replaced. No Typefully content was changed.
+
+The limitation remains deliberate and visible: this fix prevents false evidence. It does not
+add production PDF reading. A bounded PDF extractor can be considered as a separate improvement.
