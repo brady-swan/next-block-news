@@ -3769,6 +3769,7 @@ def story_cluster_context(con, days: float = 2.0, limit: int = 50,
         return clusters.setdefault(canonical, {
             "canonical_key": canonical, "aliases": set(), "titles": [], "sources": [],
             "statuses": set(), "post_leads": [], "reader_covered": False,
+            "reader_post_leads": [], "draft_post_leads": [],
             "draft_open": False, "updated_at": 0.0,
         })
 
@@ -3798,6 +3799,14 @@ def story_cluster_context(con, days: float = 2.0, limit: int = 50,
         lead = str(row["body"] or "").split("\n")[0][:260]
         if lead and lead not in entry["post_leads"] and len(entry["post_leads"]) < 2:
             entry["post_leads"].append(lead)
+        # A canonical event may have both published coverage and an unpublished update.
+        # Keep its copy partitioned by the same lifecycle modes as the board flags;
+        # a newer draft/failed output must not displace what readers saw (or may have).
+        lead_bucket = ("reader_post_leads" if row["mode"] in ("IMMEDIATE", "UNCERTAIN")
+                       else "draft_post_leads" if row["mode"] == "DRAFT" else None)
+        if (lead_bucket and lead and lead not in entry[lead_bucket]
+                and len(entry[lead_bucket]) < 2):
+            entry[lead_bucket].append(lead)
         entry["reader_covered"] |= row["mode"] in ("IMMEDIATE", "UNCERTAIN")
         entry["draft_open"] |= row["mode"] == "DRAFT"
         entry["updated_at"] = max(entry["updated_at"], float(row["created"] or 0))

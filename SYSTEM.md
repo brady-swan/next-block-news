@@ -27,6 +27,11 @@ Each desk receives the exact reader-visible post copy from the preceding 48 hour
 first, with publication time, event key, class, and receipt. This is distinct from the compact
 event catalog and the open-draft board: the feed supplies voice and continuity context, while
 the other boards support event identity and prevent duplicate drafting.
+Within the exact-event coverage board, reader-covered and open-draft cards use separate
+post-lede lists. A newer unpublished update cannot replace the summary of earlier reader
+coverage merely because both share a canonical key. Existing IMMEDIATE/UNCERTAIN reservation
+semantics and publisher duplicate guards are unchanged; uncertain delivery is not confirmed
+publication. See AUDIT-FIX-2026-09-07-COVERAGE-COPY.md.
 Typefully's batched analytics endpoint adds impressions, likes, reposts, comments, post age,
 and snapshot time when available. These are explicitly weak, age-dependent craft signals—not
 evidence, importance scores, or a mandate to chase popular subject matter.

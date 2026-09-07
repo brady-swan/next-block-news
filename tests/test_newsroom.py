@@ -70,6 +70,40 @@ class NewsroomContractTests(unittest.TestCase):
         session.fetches[record.fetch_id] = record
         return record
 
+    def test_coverage_cards_keep_draft_and_reader_copy_separate_within_one_event(self):
+        with temporary_store() as con:
+            now = time.time()
+            store.register_story_alias(con, "recovery-alias", "incident")
+            for index, (key, mode, body) in enumerate([
+                ("incident", "IMMEDIATE", "Published: funds withdrawn, return promised."),
+                ("recovery-alias", "DRAFT", "Draft only: all funds returned."),
+                ("incident", "DRAFT", "Another draft awaiting owner review."),
+                ("incident", "FAILED", "Failed output must not become coverage."),
+                ("incident", "TAPE", "Tape copy must not become coverage."),
+                ("uncertain-event", "UNCERTAIN", "Possibly delivered: keep duplicate protection."),
+            ]):
+                store.log_post(con, key, None, "secondary", body,
+                               "https://example.com/receipt", mode)
+                con.execute("UPDATE posts SET created=? WHERE id=(SELECT MAX(id) FROM posts)",
+                            (now - 10 + index,))
+            con.commit()
+            session = self.session(con, [candidate()])
+            session.recent_clusters = store.story_cluster_context(con)
+            for compact in (False, True):
+                session.compact_enabled = compact
+                board = session._initial_packet()["coverage_board"]
+                covered = {r["event_key"]: r for r in board["reader_covered_exact_events"]}
+                drafts = {r["event_key"]: r for r in board["open_drafts"]}
+                self.assertEqual(covered["incident"]["post_leads"],
+                                 ["Published: funds withdrawn, return promised."])
+                self.assertEqual(drafts["incident"]["post_leads"],
+                                 ["Another draft awaiting owner review.", "Draft only: all funds returned."])
+                self.assertTrue(store.story_reader_covered(con, "recovery-alias"))
+                self.assertEqual(covered["uncertain-event"]["post_leads"],
+                                 ["Possibly delivered: keep duplicate protection."])
+                self.assertTrue(store.story_reader_covered(con, "uncertain-event"))
+                self.assertNotIn("uncertain-event", drafts)
+
     def test_initial_packet_is_a_clean_editorial_desk_not_raw_node_records(self):
         context = json.dumps({
             "untrusted_discovery_context": True,

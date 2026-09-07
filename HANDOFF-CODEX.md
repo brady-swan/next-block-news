@@ -78,6 +78,12 @@ AUDIT-FIX-2026-09-07-ARTICLE-BODIES.md for the AP/Fox regression and release ver
 
 ## Delivery
 
+Coverage-card repair: one canonical event can have published copy plus a later open draft.
+Its reader-covered card and open-draft card now receive separately bounded ledes from their
+respective lifecycle modes, not the same combined latest-copy list. No identity, uncertain-
+delivery reservation, publication or replacement rule changed. See
+AUDIT-FIX-2026-09-07-COVERAGE-COPY.md.
+
 New one-offs are a clean lead plus immediate first reply, "Source: <receipt URL>".
 Typefully is the production rail. Scheduling, publication and read-back confirmation are
 different states. Durable mutation intents prevent blind retries of ambiguous writes.

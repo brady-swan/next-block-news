@@ -679,7 +679,7 @@ def _context_id(kind: str, value: str) -> str:
     return "ctx_" + hashlib.sha256(f"{kind}\n{value}".encode()).hexdigest()[:18]
 
 
-def _coverage_card(row: dict) -> dict:
+def _coverage_card(row: dict, post_leads_key: str = "post_leads") -> dict:
     return {
         "event_key": _clean_text(row.get("canonical_key"), 160),
         "known_aliases": [_clean_text(value, 160) for value in
@@ -687,7 +687,7 @@ def _coverage_card(row: dict) -> dict:
         "headlines": [_clean_text(value, 240) for value in
                       list(row.get("titles") or [])[:3]],
         "post_leads": [_clean_text(value, 260) for value in
-                       list(row.get("post_leads") or [])[:2]],
+                       list(row.get(post_leads_key, row.get("post_leads")) or [])[:2]],
         "sources": [_clean_text(value, 100) for value in
                     list(row.get("sources") or [])[:3]],
         "updated_at_epoch": round(float(row.get("updated_at") or 0), 3),
@@ -1349,13 +1349,12 @@ class NewsroomSession:
 
         reader_covered, open_drafts, other_recent = [], [], []
         for row in self.recent_clusters[:50]:
-            card = _coverage_card(row)
             if row.get("reader_covered"):
-                reader_covered.append(card)
+                reader_covered.append(_coverage_card(row, "reader_post_leads"))
             if row.get("draft_open"):
-                open_drafts.append(card)
+                open_drafts.append(_coverage_card(row, "draft_post_leads"))
             if not row.get("reader_covered") and not row.get("draft_open"):
-                other_recent.append(card)
+                other_recent.append(_coverage_card(row))
 
         handle_directory = [
             {"handle": _clean_text(handle, 40), "identity": _clean_text(identity, 160)}
