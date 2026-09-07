@@ -38,6 +38,11 @@ recent-intake search and reporting memory. Keep the whole developing story in th
 Follow promising tips toward their origin: read useful article links, find the quoted person's
 own statement, filing, dataset or research. A source tier is useful guidance, not a research ritual.
 If a credible source already supports a useful routine story, stop researching and write it.
+When a tip quotes a named person, search_intake can find their earlier original, including
+one previously skipped as commentary. A consequential statement or concrete proposal can be
+the news; distinguish what was said from a policy actually enacted. Prefer that original or
+the article behind a repost as the reader's receipt when it supports the story. This is a
+useful path, not a mandatory lookup for every lead or a primary-only publication requirement.
 If an article is blocked or is only a loading shell, try native web/X retrieval or another source.
 Do not repeatedly hit the same failed route. Narrow and attribute a supported story when appropriate.
 
@@ -49,6 +54,13 @@ and makes them available to the independent editor. For native_sources submitted
 dossier, use the exact source URL in selected_fetch_id/evidence_fetch_ids; code resolves it to a
 receipt ID. Otherwise use returned receipt IDs. Search snippets alone remain pointers, not proof.
 Supply at most eight native sources per submission; use record_sources earlier if more are needed.
+Before submission, gather the inspected receipts that support OR qualify each story into its
+evidence_fetch_ids (up to eight). The editor sees those receipts, not your entire search history.
+Do not leave a useful original or contradictory source out merely because you selected a
+different link for readers. Do not attach unrelated receipts from another story in the run.
+Use reporting_note for a short handoff about origin/freshness checked, source disagreements or
+remaining limitations, or null if unnecessary. It is writer context, never additional evidence.
+Do not describe an original as checked unless you actually inspected it. A URL alone is a pointer.
 Record useful findings and remaining questions before continuing a complex investigation, so work
 can survive interruption; do not add a reporting-note call to a simple finished story as a ritual.
 
@@ -62,6 +74,14 @@ An old filing can support historical facts; refresh a live price, balance, or po
 old evidence never makes the event new. fetch_source refreshes archival URLs rather than returning
 an old memory capture. Current confirmed output state outranks a notebook's earlier delivery note;
 pending/uncertain delivery still presents duplicate risk, but is not confirmed publication.
+For a suspected repeat or a new development that conflicts with an old draft, open the relevant
+notebook or search_memory before assuming what readers saw. The catalog's confirmed_output is
+distinct from a newer open draft; neither draft copy nor a prior model decision proves a fact.
+Use original event/disclosure dates and reporting periods to catch stale repackaging, even when
+the earlier post falls outside the 48-hour feed. No memory match by itself proves redundancy.
+Compare like with like: a weekly total may span two months; a month-to-date subtotal is not that
+week. On-chain outputs back to the sender may be change, not repayment; identify the destination
+and distinguish observed movement from claims about ownership or intent.
 Research should help you choose the story; final copy should not contain every detail you learned.
 
 OPTIONAL WRITER SELF-REPORT (HUMAN REVIEW ONLY)
@@ -72,6 +92,15 @@ No feedback is a valid answer: use desk_feedback=null. Do not manufacture a comp
 yourself. You have not seen the independent editor's decision. This optional self-report is just
 one input for the human operator; it does not change editorial policy or future model instructions.
 """
+
+
+def native_activity(response) -> bool:
+    """Progress is observed work, distinct from accounting and citation novelty."""
+    from . import models
+    observed = models.native_counts({"output": getattr(response, "raw_output", None) or []})
+    usage = getattr(response, "usage", None)
+    reported = [getattr(usage, k, 0) for k in ("native_web_calls", "native_x_calls")]
+    return any(observed) or any(isinstance(n, (int, float)) and n > 0 for n in reported)
 
 
 def take_feedback(con, run_id, dossier, *, model, effort, prompt_version):

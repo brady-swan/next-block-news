@@ -9,7 +9,7 @@ story desk every 15 minutes when prepared candidates exist, sends the resulting 
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
 
-## Model roster — Plan 0063
+## Model roster — unchanged in Plan 0064
 
 | Role | Model | Effort |
 | --- | --- | --- |
@@ -41,6 +41,9 @@ workbench carries canonical exact-event identity, the prior proposed post, the p
 unresolved research objective, revalidated inspected evidence, and independent-editor
 feedback into later sessions. The workbench is informational: it never marks a story covered,
 suppresses a new candidate, or publishes anything by itself.
+The paginated catalog explicitly includes canonical event keys and a short confirmed-output
+lede/date where known, distinct from newer open-draft status. Account-only notebook titles do
+not hide the event key. Catalog and initial-packet byte limits are unchanged.
 
 The product stance is practical: publish useful, well-supported Bitcoin coverage and learn
 from production. This is an early, low-visibility account, not the New York Times. The
@@ -173,6 +176,11 @@ output state, including encrypted reasoning, in bounded run history only—not e
 Native-only research turns may continue in the same conversation; they do not require fake
 client-tool results. A plain-text response is not a final editorial decision. The last allowed
 response forces the dossier specifically.
+Plan 0064 also requests a dossier immediately after a text-only response with no native work,
+instead of repeatedly offering research tools. Current-response native operations or positive
+usage count as progress even when no new URL appears. The complete provider history remains.
+Early completion still permits one dossier-only receipt-reference repair within existing
+time/round bounds; it does not reopen research. `writer_finalization` records the reason.
 
 Candidate cards, storyline summaries, and search snippets are leads. The writer may submit
 immediately or research selectively with native web/X, existing SerpAPI and safe fetch tools.
@@ -190,6 +198,11 @@ PDF responses return `unsupported_document`, not raw bytes registered as inspect
 The writer can use another existing retrieval route; no primary-only requirement is added.
 Native source manifests cite exact observed URLs;
 code registers source-specific receipts before validating even a same-response dossier.
+The writer is prompted to include useful supporting and qualifying receipts for each story,
+not merely the selected reader link. A nullable 800-character `reporting_note` carries origin,
+freshness checks and limitations into the editor and event notebook as untrusted context, never
+evidence or instructions. Equal text at different URLs/authorship/dates is not deduplicated into
+one source identity in the editor's evidence catalog. No extra model turn is added for this note.
 
 Plan 0059 tested stronger selective research-routing prompts but did not demonstrate reliable
 native assignment. Those experimental instructions and turn-budget fields were not shipped.
@@ -210,6 +223,12 @@ the entire batch and owns research, clustering, judgment, and writing together.
 It returns independent story rows. One malformed story defers only its members; it cannot
 invalidate the rest of the batch. A candidate omitted from model output becomes
 `defer:model_output_missing` and returns on a later desk instead of silently skipping.
+
+When an explicit `material_update` has a resolved reader-visible base, code repairs a missing
+or mistaken NEW prefix to `UPDATE:` before independent editing and again on non-drop final copy.
+Empty copy remains invalid. Final delivery rails still run; same-event duplicates, missing base,
+protected mutations and multiple drafts still stop delivery. This is presentation repair, not
+code deciding materiality. Ordinary unpublished-draft replacements are not relabeled.
 
 One transport retry is allowed with the exact same newsroom session state. A billed session is never
 replayed from scratch after a protocol or validation error. If the attempt fails, advanced items

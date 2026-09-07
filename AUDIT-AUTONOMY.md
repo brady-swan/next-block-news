@@ -109,6 +109,16 @@ tools and outputs, accumulate useful suggestions, and do not turn it into automa
 policy updates. Retention and null feedback are not operational errors. Existing autonomy limits
 still apply; broader research/memory design changes require approval.
 
+Plan 0064 checks: distinguish promised and completed actions within the same event; inspect
+original-statement lookup and stale-event dates beyond the 48-hour feed. Compare each story's
+reporting_note with the actual inspected evidence sent to the editor; it is untrusted context,
+not a new factual authority. Watch missing supporting/qualifying receipts and equal-text sources
+retaining their own URL/attribution. Review text-only finalization and its one reference-repair
+path, matching weekly/monthly periods, transaction direction, UPDATE-label corrections, and
+unnecessarily narrow legislative/monetary scope. Keep throughput/speed/cost comparisons honest:
+one-step diagnostic choices are not evidence that full reporting or a source upgrade succeeded.
+The sprint changes no standing audit authority, model budget, cadence or Typefully permissions.
+
 Typefully drafts whose titles begin `REPLAY` are owner-requested historical review copies,
 not normal wire deliveries. Exclude them from production throughput, freshness/latency,
 duplicate-delivery incidents, and evidence that a current lead was covered. Their writing may

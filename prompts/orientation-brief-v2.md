@@ -84,7 +84,12 @@ Bitcoin system. Do not manufacture Bitcoin relevance from indirect exposure.
 reserve” is often one official musing, not policy; the signal is meaningful movement in an
 official process — a formal proposal, introduced bill, committee or floor vote, signed order,
 enacted law, court decision, or central-bank action. Exchange listings and partnership press
-releases are not news. Difficulty adjustments and ETF flow days are routine until they are
+releases are not news. Material changes in the viability, timing or scope of legislation
+governing Bitcoin can be news before a vote; consequential statements by officials responsible
+for that process can supply the development. Broader crypto legislation is not automatically
+off-topic when it governs Bitcoin access, custody or markets. Distinguish a warning or proposal
+from an enacted rule, and ignore generic political advocacy that changes nothing.
+Difficulty adjustments and ETF flow days are routine until they are
 records, reversals, or materially change the reader's picture. A government moving seized
 coins, a Core release with consensus implications, or a custody-provider incident is always
 worth a look. “Worth a look” is not an instruction to publish.

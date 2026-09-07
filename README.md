@@ -24,6 +24,11 @@ native web/X research in its writing context, with six responses / six minutes a
 reporting memory. Optional writer self-reports appear in Desk, for human review only. These are explicit per-seat
 production overrides; conservative Anthropic defaults remain available for rollback.
 
+Plan 0064 adds concise story-specific reporting notes for the editor, clearer confirmed-coverage
+memory, source-preserving receipt deduplication and fewer empty completion loops. It repairs
+UPDATE prefixes only after existing output/identity checks. See [SPRINT-0064-FINDINGS.md](SPRINT-0064-FINDINGS.md)
+for the bounded diagnostics and live verification; models, budgets and cadence are unchanged.
+
 | Module | Responsibility |
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |

@@ -2,6 +2,7 @@
 import datetime
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -324,6 +325,20 @@ def _retry_inventory(con, jobs: list[dict], pipeline_run_id: str,
     return retry_verdicts
 
 
+def _normalize_update_label(con, run_id: str, story_id: str, post, *, phase: str):
+    """Presentation only; caller must already resolve an explicit update's visible base."""
+    if not isinstance(post, str) or not post.strip():
+        return post
+    body = re.sub(r"^(?:NEW|UPDATE)\s*:\s*", "", post.strip(), count=1, flags=re.I)
+    normalized = "UPDATE: " + body if body else ""
+    if normalized != post:
+        from . import observations
+        observations.record(con, run_id, "update_label_normalized", {
+            "before": post, "after": normalized, "reason": "explicit_material_update_with_visible_base",
+        }, ref=story_id, phase=phase)
+    return normalized
+
+
 def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                       inventory: list[dict], pending: list[dict], result: dict,
                       theme_snapshot: list[dict], overrides: dict,
@@ -613,20 +628,6 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 suppress_existing(story_id, members, resolution.story_key,
                                   "incoherent distinct relation to reader-visible event")
                 continue
-            if not post.lstrip().startswith("UPDATE:"):
-                reason = "defer:material_update_requires_update_label"
-                for member in members:
-                    store.defer_item(
-                        con, member["url_hash"], reason,
-                        story_key=resolution.story_key, stage="hard_rail",
-                        category="technical_defer",
-                    )
-                result["held"] += len(members)
-                store.set_newsroom_story_state(
-                    con, pipeline_run_id, story_id, "held",
-                    details={"validation": "held", "reason": reason},
-                )
-                continue
             if output_state["drafts"]:
                 pending = output_state["drafts"][0]
                 if pending.get("coverage_relation") != "material_update" \
@@ -661,9 +662,14 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 details={"validation": "held", "reason": reason},
             )
             continue
+        if relation == "material_update" and base_post_id is not None:
+            post = _normalize_update_label(con, pipeline_run_id, story_id, post, phase="before_editor")
+            draft["post"] = post  # The unavailable/omitted-editor fallback must use the same copy.
+            hard_errors = lint.hard_rails_v2(post, {"_source_text": source_text}, anchor)
         row = {
             "story_id": story_id, "post": post,
             "reader_value": draft.get("reader_value", ""),
+            "reporting_note": draft.get("reporting_note"),
             "selected_receipt": {"fetch_id": selected.fetch_id,
                                  "url": selected.final_url,
                                  "source": selected.source.display_name,
@@ -682,6 +688,8 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                     "retrieval_kind": record.retrieval_kind,
                                     "inspected_at": record.inspected_at,
                                     "published_at": record.published_at,
+                                    "byline": record.byline,
+                                    "adapter_provenance": record.adapter_provenance,
                                     "limitations": record.limitations,
                                     "url": record.final_url,
                                     "text": record.text[:8000]} for record in fetches],
@@ -750,6 +758,9 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
+        if (verdict != "drop" and candidate["coverage_relation"] == "material_update"
+                and candidate["base_post_id"] is not None):
+            post = _normalize_update_label(con, pipeline_run_id, story_id, post, phase="after_editor")
         from . import observations
         editor_origin = ("capacity_defer" if payload_deferred else
                          "unavailable_fallback" if not editorial["ok"] else

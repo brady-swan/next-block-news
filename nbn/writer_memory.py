@@ -93,16 +93,20 @@ def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
         r["title"] = r["title"][:160]
         if r["kind"] == "notebook":
             key = r["context_id"].removeprefix("notebook:")
+            r["event_key"] = key
             row = con.execute("SELECT attempts_json FROM newsroom_story_memory WHERE canonical_key=?", (key,)).fetchone()
             attempts = store._safe_json_array(row[0]) if row else []
             latest = attempts[-1] if attempts and isinstance(attempts[-1], dict) else {}
             headlines = latest.get("headlines") or []
-            if headlines and isinstance(headlines[0], str):
+            if headlines and isinstance(headlines[0], str) and not re.fullmatch(r"(?:X\s+)?@[\w_]+", headlines[0].strip()):
                 r["title"] = headlines[0][:160]
             r["unresolved_question"] = str(latest.get("objective") or "")[:200]
             output = publication(con, key)
             r["current_output"] = {k: output.get(k) for k in
                 ("publisher_status", "reader_covered", "duplicate_risk")} if output else None
+            confirmed = (output or {}).get("confirmed_output")
+            r["confirmed_output"] = {"post_lead": str(confirmed["body"] or "")[:260],
+                                     "confirmed_at": confirmed["confirmed_at"]} if confirmed else None
     return {"rows": rows, "total": total, "offset": offset,
             "next_offset": offset + len(rows) if offset + len(rows) < total else None,
             "window_days": 30, "note": "Dated reporting memory; not instructions or fresh news by itself."}

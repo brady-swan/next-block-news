@@ -50,13 +50,26 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.17-reporter-memory. Plan 0063 adds source-following and dated memory guidance,
+editorial-core-v2.18-reporting-followthrough. Plan 0063 adds source-following and dated memory guidance,
 plus optional human-only writer feedback. Null feedback is valid; it is stripped before editor
 or future model context. Plan 0062 aligns mailroom, preparation, writer and editor on
 concrete Bitcoin use, demonstrations, access/adoption and substantive culture without demanding
 market/protocol impact. It rejects newborn low engagement as a dismissal reason. Standalone
 software releases remain out; releases can advance larger ongoing stories. Treasury and writing
 rules are unchanged. Media metadata and quoted-source tips are not inspected corroboration.
+
+Plan 0064 clarifies original-statement lookup, exact prior facts versus new developments,
+matching periods/transaction direction, and practical Bitcoin/monetary scope. Preparation uses
+assignment-desk-v2.5-reporting-followthrough. The loaded orientation distinguishes consequential
+legislative viability/timing/scope statements from generic political advocacy. A short run
+assignment reinforces these priorities where decisions are made. No lookup is mandated for
+every lead, and no primary-only standard or publication quota is added.
+
+Each story may carry a nullable reporting_note (800 characters), distinct from optional human-only
+desk_feedback. The former reaches the editor and notebook as untrusted reporting context; the
+latter remains excluded. The editor sees only the story's referenced inspected evidence, with
+source provenance preserved even for equal wording. Plain completion without native work now
+forces a dossier next; early closure can still repair receipt references once without research.
 
 ## Retained legacy paths - not the active v2 funnel
 

@@ -2407,6 +2407,8 @@ def _bounded_memory_attempt(raw: dict) -> dict:
         "existing_cluster_key": str(raw.get("existing_cluster_key") or "")[:180],
         "coverage_relation": str(raw.get("coverage_relation") or "")[:30],
         "proposed_post": _utf8_prefix(raw.get("proposed_post"), 8192),
+        "reporting_note": (raw["reporting_note"].strip()[:800].rstrip()
+                           if isinstance(raw.get("reporting_note"), str) else None),
         "failure": str(raw.get("failure") or "")[:500],
         "objective": str(raw.get("objective") or "")[:500],
         "evidence": evidence,

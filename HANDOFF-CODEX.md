@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-07 for Plan 0063. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-07 for Plan 0064. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -61,6 +61,16 @@ four calls / 48 KiB. A complete paginated memory catalog and 72h-to-7d intake se
 earlier originals and research. Current confirmed output outranks stale notebook delivery notes.
 Writer self-reports are optional 14-day run observations shown in Desk; never feed them into
 reporting memory or future models. They are one input for the owner, not verified diagnoses.
+
+Plan 0064 keeps that architecture and budget. It adds a bounded optional per-story reporting
+note for the editor/notebook (untrusted context, not evidence), preserves full source identity
+in editor receipt deduplication, and makes event keys/confirmed copy visible in the memory index.
+Text-only completion without native activity requests a dossier next, preserving one reference
+repair and the same provider history. Explicit updates with resolved visible bases get mechanical
+UPDATE-prefix repair before/after editing; all final rails and mutation protections remain.
+The orientation clarifies consequential legislative timing/scope statements versus generic
+advocacy. See PLAN-0064-REPORTING-FOLLOW-THROUGH.md and SPRINT-0064-FINDINGS.md for diagnostics
+and release evidence; prompt quality still needs live observation.
 
 Packet-pressure repair: optional full storyline cards become retrievable index entries before
 an oversized compact desk is refused. The 64 KiB limit, candidate identity, source receipts,

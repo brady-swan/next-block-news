@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-07 for Plan 0063. This index separates how NBN works now from how earlier
+Updated 2026-09-07 for Plan 0064. This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -24,6 +24,8 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | PLAN-0062-LEAD-FIDELITY.md | Focused lead-context, durable X pagination and upstream-feed pilot release |
 | PLAN-0063-REPORTER-WRITER-AND-MEMORY.md | Combined research/writing, searchable reporting memory and human-only writer feedback |
 | SPRINT-0063-FINDINGS.md | Bounded live replays, limitations, verification and release proof |
+| PLAN-0064-REPORTING-FOLLOW-THROUGH.md | Reporting handoff, usable coverage memory, finalization and UPDATE presentation repairs |
+| SPRINT-0064-FINDINGS.md | Isolated prompt probes, verification, release evidence and unresolved judgments |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.
 Plan 0060 updates documentation metadata, not loaded editorial text. The charter
@@ -73,3 +75,7 @@ adds a 30-day notebook/artifact catalog and recent-intake lookup, and projects c
 publication into memory. Optional writer feedback is visible in the Desk but isolated from
 editorial/model memory. The visual guide includes this architecture. Source selection,
 editorial standards, cadence, the model roster and publishing authority are unchanged.
+
+Plan 0064 improves execution of that design; it does not replace the architecture in the dated
+visual guide. SYSTEM.md/PROMPTS.md carry its exact updated prompt/protocol behavior. The PDF
+was not regenerated for this focused reporting/handoff repair.

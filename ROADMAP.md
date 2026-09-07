@@ -1,6 +1,6 @@
 # Next Block News - current roadmap
 
-Updated 2026-09-06. Historical launch/weekend plans are preserved at
+Updated 2026-09-07 for Plan 0064. Historical launch/weekend plans are preserved at
 docs/history/ROADMAP-PRE-0060.md, not treated as an active work queue.
 Current implementation: SYSTEM.md. Release evidence: the numbered plan and findings files.
 
@@ -24,8 +24,9 @@ readable copy, timely receipts, few duplicate drafts, and sustainable cost matte
   excessively cautious editor. Check actual existing copy before calling a miss.
 - Freshness/speed: source time -> first seen -> local output -> confirmed publication.
   Peer timestamps are a separate comparison; missing times stay unknown.
-- Research: native web/X is available, but useful autonomous assignment remains unproven.
-  Investigate small evidence-backed routing improvements, not more compulsory phases.
+- Research: native web/X runs inside the writer; inspect whether useful originals and conflicting
+  evidence reach the story's editor packet. Plan 0064's short reporting note is context, not proof
+  the claimed work happened. Watch actual lookup and supported output, not self-reported success.
 - Memory and identity: preserve distinct developments while suppressing exact repeats;
   update only safe open drafts, never blindly duplicate already-visible coverage.
 - Cost: calls, packet/cache shape, retries, native tool charges and unknown billing.
@@ -35,10 +36,12 @@ readable copy, timely receipts, few duplicate drafts, and sustainable cost matte
 
 ## Proposals, not commitments
 
-1. A bounded native-research routing test with current qualifying cases and clear stop rules.
+1. Measure Plan 0064's original-source follow-through and empty-finalization reduction on natural
+   runs, especially whether promised versus completed actions remain distinct and prior drafts
+   are not mistaken for published truth.
 2. Targeted primary-data discovery improvements only after measured latency shows a useful gap.
-3. Complete cost observability for the retained internal daily audit if its unmetered spend is
-   material. No model switch is implied.
+3. Consider direct PDF-text support only if repeated worthwhile blocked sources justify it;
+   the current adapter reports that limitation honestly. The internal daily audit stays disabled.
 4. Later removal of legacy v1/Block code after the owner is comfortable losing that rollback.
 
 No new publishing quotas, automated data filler, new social channel, paid API tier, source
