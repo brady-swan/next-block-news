@@ -38,4 +38,24 @@ Existing receipts remain dated historical captures; no database rewrite or cache
   metadata, canonical/redirect provenance, original links, entities, script removal,
   unchanged text limit, ambiguous-page fallback, PDF rejection and URL safety.
 
-Production release and smoke results are recorded below after completion.
+## Production release
+
+- Clean commit archive `/tmp/nbn-article-body-release.fDJcza`: **492 tests passed**.
+  Runtime `a9e1bb2` was pushed and deployed to the existing service/environment as Railway
+  `4c1aad2f-b82b-4499-99f0-8a75fc0cea49`, which reached SUCCESS September 7 at about 16:05 UTC.
+- Backup `/data/backups/nbn-pre-source-policy-20260907T153931Z.db` passed SQLite integrity
+  verification. The service retains one replica and the `/data` volume.
+- Production source SHA-256 is
+  `2578a97a2cb054d5679acea2ccbe0e1179bedc8d5da6a8d881fe49d56e9ad6b4`, matching the release;
+  Beautiful Soup 4.15.0 loads successfully.
+- Actual Railway adapter fetches now return readable AP and Fox hearing reports. The Tuesday
+  hearing reference appears within the first 1,000 characters of each, rather than behind
+  navigation. AP's author/publication metadata and links to court documents survive. Related
+  inserts inside article bodies may remain; this is not perfect boilerplate removal.
+- Authenticated `newsroom`, `intake`, `outputs`, and `system` JSON views returned 200. The
+  initial smoke mistakenly requested unsupported `view=runs` (correctly 400); the actual
+  `view=newsroom` endpoint was then verified. Public health is 200, two natural cycles completed
+  by 16:05:06 UTC, autopost OFF, and no pending delivery. Node's 16:00 pulse is fresh.
+- No forced newsroom call, article retry, historical receipt rewrite or Typefully mutation.
+  No post-deploy newsroom use of AP/Fox is claimed; these were direct read-only adapter checks.
+  The existing rolling audit remains ACTIVE. Rollback requires code only, not a DB restore.
