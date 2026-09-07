@@ -1,7 +1,7 @@
 # Explain evidence handoff at the dossier fields
 
 September 7, 2026. Bounded prompt/tool-description tuning under AUDIT-AUTONOMY.md.
-Status: implementation independently approved; releasing.
+Status: deployed, smoked, audit resumed. Behavioral effect still under observation.
 
 ## Observed need
 
@@ -58,3 +58,33 @@ shared reporter.SOURCE_SCHEMA used by record_sources. No additional attachment l
 Implementation review approved deployment without blockers; reviewer independently passed 76
 focused tests. Main-agent full working-tree suite passed **521 tests**. Two unrelated evaluator
 tests and other owner work remain outside the clean release. Version is v2.21-evidence-handoff.
+
+## Release preparation
+
+- Commit `01966fb`, pushed to main. Deploy only its clean git archive.
+- Clean-archive suite: **519 tests passed**. Unrelated evaluator changes excluded.
+- Pre-deploy read-only check: latest 18:49 v2.20 newsroom run completed, autopost OFF.
+- No database migration; previous verified backup remains
+  `/data/backups/nbn-pre-source-policy-20260907T182146Z.db`. Rollback retains current production data.
+- Cost impact is the short schema descriptions in existing requests, not extra research or
+  editor calls. No measured provider-billing delta or claim of improved model decisions yet.
+
+## Production smoke
+
+Railway deployment `c2f16b3e-68fc-42bf-b24a-a7332377d8c3`, runtime commit `01966fb`.
+At **18:55:17 UTC**, read-only smoke verified v2.21-evidence-handoff, all four descriptions,
+the unchanged shared source schema, and exact release hashes for writer/main/editor/orientation.
+Public health, local health/status, all four Desk pages and all four workspace APIs returned 200.
+Grok 4.3 medium writer, Grok 4.5 medium editor, Luna low prep, six-response/360-second writer
+limits and four optional context reads remain unchanged. Autopost is OFF. V2.20's metric-scope
+instruction and practical-rounding allowance remain intact.
+
+No paid replay, forced newsroom run, Typefully mutation or database migration was performed.
+These checks prove the instruction is available, not that the writer will follow it or that
+the gold story should be published. Rollback is a clean redeploy of `1d49c2a`, retaining the
+current database and keeping autopost OFF.
+
+Deployment is SUCCESS. By **18:56:59 UTC**, two natural intake cycles had completed, with no
+recorded worker error and autopost OFF. No v2.21 writing session was forced. The same 15-minute
+audit is ACTIVE again with existing authority preserved and a specific per-story evidence
+handoff watch. Full editorial cutoff remains 18:42:17.098 UTC; later work is for the next pass.
