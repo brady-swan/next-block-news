@@ -1,7 +1,7 @@
 # Preserve the scope of a reported statistic
 
 September 7, 2026. Bounded reporting/writing execution tuning under AUDIT-AUTONOMY.md.
-Status: implementation independently approved; releasing. No editorial-policy or publication-state change.
+Status: deployed and smoked; audit resumed. No editorial-policy or publication-state change.
 
 ## Evidence
 
@@ -47,3 +47,37 @@ tests confirm delivery of guidance; natural subsequent output must establish beh
 The implementation review approved deployment without blockers and independently ran the 40
 editorial-v2 tests. Main-agent full working-tree suite passed **519 tests**; unrelated evaluator
 changes remain outside this release. Active version: `editorial-core-v2.20-metric-scope`.
+
+## Release preparation
+
+- Code commit `1d49c2a`, pushed to main; deployment uses its clean git archive, not the dirty workspace.
+- Clean-archive full suite: **517 tests passed**. The two additional working-tree tests belong
+  to unrelated evaluator work and were not shipped.
+- Online backup integrity check passed: `/data/backups/nbn-pre-source-policy-20260907T182146Z.db`.
+- Last pre-deploy newsroom run was completed and autopost was OFF; no forced model replay.
+- Expected cost change is only the short added instruction within existing writer/editor
+  calls. No new calls, tools, model settings, budgets or cadence. Exact token/billing delta is
+  not separately measured. No claim of improved future decisions from static tests alone.
+
+## Production verification
+
+Railway deployment `d68c5293-72e8-4d2b-8560-91951690b4af` is SUCCESS, running code `1d49c2a`.
+Read-only smoke at **18:25:10 UTC** verified:
+
+- Active `editorial-core-v2.20-metric-scope`; writer and editor both contain the reviewed guidance.
+- The editor's practical-rounding allowance remains present.
+- Writer/editor/main/orientation file hashes exactly match the clean release archive.
+- Public health, local health/status, all four Desk pages and all four workspace APIs return 200.
+- Natural worker cycles continue without a recorded error; autopost is OFF.
+- Grok 4.3 medium writer, Grok 4.5 medium editor, Luna low preparation, six-response/360-second
+  writer bounds and four optional retrieval calls are unchanged.
+
+No v2.20 writing session was forced or yet observed; the latest completed desk was v2.19.
+The same 15-minute audit is ACTIVE again with its existing authority and a scope-preservation
+watch. Full editorial cutoff remains 18:09:34.063 UTC for later backfill. Draft 10668646 was
+not mutated, published or dismissed, and this prompt change does not correct its existing text.
+Reader-visible improvement remains to be established from subsequent natural output.
+
+Rollback: redeploy previous runtime `d299365` from its clean archive, retain the current database
+and keep autopost OFF. The backup is a verified recovery artifact, not permission to restore
+over newer production state. Reverting these two prompt additions requires no data migration.
