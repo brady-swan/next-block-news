@@ -1,6 +1,6 @@
 # Next Block News prompt inventory
 
-Current 2026-09-06. This is an index, not a duplicated prompt snapshot.
+Current 2026-09-07. This is an index, not a duplicated prompt snapshot.
 Live editorial orientation: prompts/orientation-brief-v2.md, body after its separator.
 The draft v3 brief and tuning examples are not loaded. The wire_voice charter is retained
 for legacy paths; its old "source of truth" heading does not make it current v2 authority.

@@ -2,7 +2,8 @@
 
 Status: owner approved implementation, independent review, deployment, and smoke checks,
 including optional writer feedback visible in the Desk. Independent lead approved the plan
-and implementation; clean release and deployment validation in progress.
+and implementation. Runtime `68a7b36` is deployed; clean-release tests and HTTP/runtime
+smokes pass. Release evidence and replay limitations: `SPRINT-0063-FINDINGS.md`.
 
 Prepared September 6, 2026 Central / September 7 UTC. This gathers the owner's discussion
 of research/writing integration, working budgets, source following, research retention,

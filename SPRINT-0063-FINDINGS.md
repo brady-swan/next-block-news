@@ -1,7 +1,7 @@
 # Sprint 0063 — reporter-writer, memory and operator feedback
 
-September 7, 2026. Implementation and independent review complete; deployment proof is
-recorded below when verified. No replay was sent to Typefully or published.
+September 7, 2026. Deployed after independent review, isolated replays and clean-release
+tests. No replay was sent to Typefully or published.
 
 ## What changed
 
@@ -82,4 +82,35 @@ There is no automatic prompt, policy or memory update from that feedback.
 
 ## Production release
 
-Pending clean-archive test, online backup, Railway deploy, HTTP/runtime smoke and audit restart.
+- Runtime commit `68a7b36`, pushed to origin/main; clean archive
+  `/tmp/nbn-0063-release.w9VbaA` passed **485 tests**. The working tree's two additional
+  evaluator tests and unrelated evaluator/tuning/planning changes were excluded.
+- Online backup `/data/backups/nbn-pre-source-policy-20260907T051030Z.db` passed its full
+  integrity check. The new artifact table is additive. Rollback means the prior runtime,
+  old 3-response/240-second settings and combined-reporter flag off, not rewinding live data.
+- Railway deployment `29213e94-0bcc-4716-8d28-b6c568877e83` succeeded on the existing service,
+  one replica and `/data` volume. No keys or publication-mode settings changed.
+- Public/internal health and all four authenticated Desk JSON views returned 200. HTML,
+  JS/CSS and the PDF returned 200; missing authorization returned 403. Runtime newsroom and
+  PDF hashes matched the release exactly. New artifact table and read-only catalog work.
+- Runtime confirmed v2.17, combined reporter enabled, six responses / 360 seconds, native
+  cap 12, autopost OFF and the legacy daily receipt audit disabled. The first ordinary
+  worker cycle completed without error. Historical runs correctly say feedback not recorded;
+  feedback is not manufactured or backfilled for old runs.
+- The live catalog exposes 84 currently eligible notebook/storyline entries; read-only
+  intake search finds eight Lummis items. This is broader than the prior 12-card subset.
+- Rolling audit `audit-nbn-production` restored ACTIVE on its existing 15-minute schedule,
+  preserving autonomy and quiet-notification rules. New watches cover source follow-through,
+  notebook use, native costs/limits, polling delay and self-reports versus observed work.
+
+The first natural v2.17 run, `cycle:1788758319:c62553d5`, completed at 05:19:05 UTC without
+error. Preparation advanced one of three items. The writer completed in one response using
+the prefetched source, with no discretionary research or new output. The actual 44,769-byte
+packet included 46 catalog entries and an explicit continuation into the 85-entry catalog.
+Its fetched source is retained in the artifact table. The optional feedback value was null;
+both the run view and System correctly show **no feedback**, not a missing-record error.
+All Desk endpoints were rechecked after this run. No production model run was forced.
+
+The preexisting Node by-date endpoint returned 404 overnight; the last Node pulse was stale.
+This did not prevent direct intake or the newsroom session. Node/Perception are outside this
+sprint; no settings were changed to mask that condition.

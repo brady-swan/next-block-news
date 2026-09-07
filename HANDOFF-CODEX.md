@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-06 for Plan 0062. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-07 for Plan 0063. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 

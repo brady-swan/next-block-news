@@ -199,7 +199,7 @@ always delivered as Typefully drafts—not autonomous posts.
 The legacy Review page exposes RSS-mailroom and assignment-desk Background decisions; **Send to desk**
 atomically restores one item to the newsroom queue and advances the next desk deadline. It also
 shows per-seat model spend, the daily cost target, initial packet size, newsroom attempts,
-prepared receipts, delegated research, native search counts, and billing provenance.
+prepared receipts, same-session native research, legacy delegation, and billing provenance.
 Recorded seat costs exclude historical daily receipt-audit calls, external source APIs,
 hosting and the Codex audit; they are not a complete bill. New Desk publication counts require
 both a published status and confirmation timestamp, not just local IMMEDIATE mode.

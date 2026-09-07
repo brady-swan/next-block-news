@@ -1,7 +1,7 @@
 # Next Block News - inbound news flow
 
 Current NBN consumer contract, verified against code and selected production settings on
-2026-09-06. SYSTEM.md explains the editorial/publisher lifecycle; DESK-GUIDE.md defines metrics.
+2026-09-07. SYSTEM.md explains the editorial/publisher lifecycle; DESK-GUIDE.md defines metrics.
 The pre-refresh flow, including historical Node implementation details, is archived at
 docs/history/INBOUND-PRE-0060.md.
 
