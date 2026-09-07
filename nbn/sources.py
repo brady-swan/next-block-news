@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+from bs4 import BeautifulSoup
 
 from . import config, guide_context, lead_material
 
@@ -482,6 +483,26 @@ def _fred_csv(url: str, timeout: float = 20) -> str:
         return ""
 
 
+def _article_markup(body: str) -> str:
+    """Prefer an explicitly marked story body before applying text/link limits.
+
+    AP and Fox use div-based menus, so removing <nav> alone can consume the whole
+    receipt budget before the article starts. Keep the existing fallback for pages
+    without a single identifiable body (including X and multi-article indexes).
+    """
+    if not re.search(r"articleBody|RichTextStoryBody|article-body", body):
+        return body
+    try:
+        soup = BeautifulSoup(body, "html.parser")
+        for selector in ('[itemprop~="articleBody"]', '.RichTextStoryBody', '.article-body'):
+            matches = soup.select(selector)
+            if len(matches) == 1 and matches[0].get_text(strip=True):
+                return str(soup.title or "") + "\n" + str(matches[0])
+    except Exception as exc:  # Extraction remains best-effort; never invent body text.
+        log.warning("article body selection failed: %s", type(exc).__name__)
+    return body
+
+
 def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None) -> dict:
     """Best-effort article fetch with redirect/canonical/byline metadata."""
     try:
@@ -550,6 +571,7 @@ def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None)
         published_at = ""
         if m := re.search(r'(?is)<meta[^>]+(?:property|name)=["\'](?:article:published_time|datePublished|date)["\'][^>]+content=["\']([^"\']+)', body):
             published_at = html.unescape(m.group(1)).strip()[:160]
+        body = _article_markup(body)
         body = re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", body)
         links = []
         for match in re.finditer(r'(?is)<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', body):

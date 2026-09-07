@@ -71,6 +71,11 @@ The ordinary article adapter reads HTML/text, not PDFs. PDF MIME/signature detec
 redirect trail. Native retrieval and other existing sources remain available. This is an honest
 format limitation, not a publication gate or a newly added PDF-reading capability.
 
+Article-body selection repair: explicitly marked HTML story bodies take precedence over long
+navigation menus before the existing text and link caps. Unmarked/ambiguous pages keep the
+whole-page fallback. Metadata and URL safety are unchanged. See
+AUDIT-FIX-2026-09-07-ARTICLE-BODIES.md for the AP/Fox regression and release verification.
+
 ## Delivery
 
 New one-offs are a clean lead plus immediate first reply, "Source: <receipt URL>".

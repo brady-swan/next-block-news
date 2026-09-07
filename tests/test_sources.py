@@ -147,6 +147,54 @@ class SourceFetchSafetyTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "ok")
         self.assertEqual(result["text"], "Readable public consultation notice.")
 
+    def test_article_body_precedes_navigation_before_text_and_link_caps(self):
+        for marker in ('class="RichTextStoryBody RichTextBody"',
+                       'class="article-body"', 'itemprop="articleBody"'):
+            with self.subTest(marker=marker):
+                url = "https://example.com/news/hearing"
+                # Real AP/Fox pages put long div-based menus before their story body.
+                menu = '<div>' + ('Menu and unrelated headline ' * 400) + ''.join(
+                    f'<a href="/menu/{i}">Menu {i}</a>' for i in range(30)) + '</div>'
+                body = ('<title>Hearing report</title>'
+                        '<link rel="canonical" href="https://example.com/hearing">'
+                        '<meta name="author" content="Reporter">'
+                        '<meta property="article:published_time" content="2026-09-07">'
+                        + menu + f'<div {marker}><p>A hearing is scheduled Tuesday.</p>'
+                        '<div><p>Nested article paragraph &amp; context.</p></div>'
+                        '<a href="/original?x=1&amp;y=2">Original record</a>'
+                        '<script>not source text</script></div><div>Related headlines</div>')
+                response = httpx.Response(200, text=body,
+                    request=httpx.Request("GET", url))
+                with patch.object(sources, "_assert_public_http_url"), \
+                        patch.object(sources.httpx, "Client") as client:
+                    client.return_value.__enter__.return_value.get.return_value = response
+                    result = sources.fetch_article(url, limit=220)
+                self.assertIn("A hearing is scheduled Tuesday.", result["text"])
+                self.assertIn("Nested article paragraph & context.", result["text"])
+                self.assertIn("Hearing report", result["text"])
+                self.assertNotIn("Menu", result["text"])
+                self.assertNotIn("Related headlines", result["text"])
+                self.assertNotIn("not source text", result["text"])
+                self.assertLessEqual(len(result["text"]), 220)
+                self.assertEqual(result["links"], [{"text": "Original record",
+                    "url": "https://example.com/original?x=1&y=2"}])
+                self.assertEqual(result["byline"], "Reporter")
+                self.assertEqual(result["published_at"], "2026-09-07")
+                self.assertEqual(result["canonical_url"], "https://example.com/hearing")
+                self.assertEqual(result["redirect_chain"], [url])
+
+    def test_ambiguous_article_bodies_keep_whole_page_fallback(self):
+        url = "https://example.com/collection"
+        body = ('<p>Collection introduction.</p>'
+                '<div class="article-body">First article.</div>'
+                '<div class="article-body">Second article.</div>')
+        response = httpx.Response(200, text=body, request=httpx.Request("GET", url))
+        with patch.object(sources, "_assert_public_http_url"), \
+                patch.object(sources.httpx, "Client") as client:
+            client.return_value.__enter__.return_value.get.return_value = response
+            result = sources.fetch_article(url)
+        self.assertEqual(result["text"], "Collection introduction. First article. Second article.")
+
 
 if __name__ == "__main__":
     unittest.main()
