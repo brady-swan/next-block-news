@@ -247,6 +247,46 @@ class EditorialV2Tests(unittest.TestCase):
             self.assertGreaterEqual(200000 - session.fetch_chars,
                                     config.DESK_PREFETCH_RESERVE_CHARS)
 
+    def test_compaction_offloads_storylines_without_losing_sources_or_candidates(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            row = candidate()
+            row["_owner_reconsider"] = {"requested_by": "Brady", "prior_skip": "Already covered"}
+            session = newsroom.NewsroomSession(
+                run_id="compact-storylines", inventory=[row], recent_clusters=[],
+                theme_snapshot=[], handles={}, con=con, reservation="r",
+                prep_mode="off", research_mode="off", compact_enabled=True,
+            )
+            cards = [{"storyline_key": f"line-{i}", "title": f"Bitcoin story {i}",
+                      "lifecycle": "open", "revision": 1, "state_summary": "Context. " * 400}
+                     for i in range(3)]
+            session.storyline_cards = list(cards)
+            session.storyline_selected_keys = {c["storyline_key"] for c in cards}
+            session.storyline_read_keys = set(session.storyline_selected_keys)
+            from dataclasses import replace
+            receipt = replace(inspected("prepared-1", row["url"], row["source"],
+                                        "Original source text. " * 80),
+                              adapter_provenance="desk_prefetch",
+                              links=({"text": "Original statement", "url": row["url"]},))
+            session.fetches[receipt.fetch_id] = receipt
+            with patch.object(config, "COMPACT_DESK_INITIAL_BYTES", 10 * 1024):
+                packet = session._initial_packet()
+            self.assertLessEqual(newsroom._json_bytes(packet), 10 * 1024)
+            self.assertEqual([c["candidate_id"] for c in packet["intake_board"]], [row["url_hash"]])
+            self.assertEqual(packet["intake_board"][0]["owner_override"], row["_owner_reconsider"])
+            self.assertEqual(packet["prepared_evidence"][0]["text"], receipt.text)
+            self.assertEqual(packet["prepared_evidence"][0]["links"], list(receipt.links))
+            supplied = {c["storyline_key"] for c in packet["storyline_board"]}
+            deferred = packet["retrievable_context_index"]["storylines"]
+            self.assertTrue(deferred)
+            self.assertEqual(supplied | {c["storyline_key"] for c in deferred}, session.storyline_selected_keys)
+            self.assertEqual(session.storyline_read_keys, supplied)
+            self.assertEqual(session.counters()["storylines"]["initially_supplied"], len(supplied))
+            opened = session._read_desk_context([deferred[0]["context_id"]])
+            self.assertTrue(opened["ok"])
+            original = next(c for c in cards if c["storyline_key"] == deferred[0]["storyline_key"])
+            self.assertEqual(opened["rows"][0]["state_summary"], original["state_summary"])
+            self.assertIn(original["storyline_key"], session.storyline_read_keys)
+
     def test_compact_initial_packet_stays_bounded_with_long_recent_feed(self):
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
             rows = []
@@ -295,6 +335,12 @@ class EditorialV2Tests(unittest.TestCase):
             )
             self.assertTrue(packet["recent_reader_feed_48h"]["index"])
             self.assertTrue(session.context_rows)
+            indexed = packet["retrievable_context_index"]["storylines"]
+            self.assertEqual(
+                {r["storyline_key"] for r in packet["storyline_board"] + indexed},
+                {f"storyline-{index}" for index in range(8)},
+            )
+            self.assertTrue(all(r["context_id"] in session.context_rows for r in indexed))
 
     def test_sonnet_can_delegate_bounded_haiku_reporting_with_code_owned_receipt(self):
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):

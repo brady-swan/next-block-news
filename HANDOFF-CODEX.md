@@ -62,6 +62,10 @@ earlier originals and research. Current confirmed output outranks stale notebook
 Writer self-reports are optional 14-day run observations shown in Desk; never feed them into
 reporting memory or future models. They are one input for the owner, not verified diagnoses.
 
+Packet-pressure repair: optional full storyline cards become retrievable index entries before
+an oversized compact desk is refused. The 64 KiB limit, candidate identity, source receipts,
+owner overrides and lookup budgets are unchanged. See AUDIT-FIX-2026-09-07-DESK-COMPACTION.md.
+
 The ordinary article adapter reads HTML/text, not PDFs. PDF MIME/signature detection returns
 `unsupported_document` with no receipt or stored evidence, while preserving the final URL and
 redirect trail. Native retrieval and other existing sources remain available. This is an honest

@@ -159,7 +159,10 @@ drafts, Luna-selected NBN storyline cards, guide attention signals, and verified
 spellings. Raw provider payloads and internal plumbing do not reach the model. Large recent-feed,
 continuity, storyline, and handle context is sent as compact indexes with code-issued IDs; the writer can
 retrieve bounded full records on demand: at most four calls, 16 KiB per call and 48 KiB total,
-with the initial desk still capped at 64 KiB. These are ceilings, not required consumption. The
+with the initial desk still capped at 64 KiB. Under severe packet pressure, full storyline
+cards move behind that same lookup with explicit index entries; prepared receipts and every
+candidate remain intact. Only inline cards count as initially supplied/read. These are
+ceilings, not required consumption. The
 stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
 output state, including encrypted reasoning, in bounded run history only—not editorial memory.
 Native-only research turns may continue in the same conversation; they do not require fake

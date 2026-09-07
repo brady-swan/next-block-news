@@ -1556,15 +1556,32 @@ class NewsroomSession:
                 packet["recent_reader_feed_48h"]["index"] = recent_index[:8]
                 packet["recent_reader_feed_48h"]["related_full_posts"] = []
                 packet["continuity_board"]["matching_full"] = []
-                packet["storyline_board"] = self.storyline_cards[:4]
+                packet["storyline_board"] = list(self.storyline_cards)
                 packet["verified_handle_directory"] = relevant_handles[:4]
                 packet["retrievable_context_index"]["handles"] = handle_index[:6]
+                # Full storyline prose is optional context, not a reason to abandon
+                # every candidate. Keep its existing retrieval path before removing
+                # the notebook catalog or refusing an otherwise usable desk.
+                while (packet["storyline_board"] and
+                       (len(packet["storyline_board"]) > 4 or
+                        _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES)):
+                    card = packet["storyline_board"].pop()
+                    context_id = _context_id("storyline", card["storyline_key"])
+                    self.context_rows[context_id] = {"kind": "storyline", **card}
+                    storyline_index.append({
+                        "context_id": context_id, "storyline_key": card["storyline_key"],
+                        "title": card["title"], "lifecycle": card["lifecycle"],
+                        "revision": card["revision"],
+                    })
                 if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                     packet["memory_catalog"] = {**catalog, "rows": [], "next_offset": 0,
                         "note": "Open search_memory(query='',offset=0) to see the complete catalog."}
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 raise NewsroomError("initial_context_overflow",
                                     "compact clean desk exceeds 64 KiB bound")
+            supplied_keys = {c["storyline_key"] for c in packet["storyline_board"]}
+            self.storyline_read_keys.difference_update(initial_storyline_keys - supplied_keys)
+            self.storyline_cards = list(packet["storyline_board"])
             return packet
         if _json_bytes(packet) <= config.RUN_NEWSROOM_MAX_INITIAL_BYTES:
             return packet
