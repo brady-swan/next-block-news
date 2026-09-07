@@ -33,7 +33,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.19-pdf-text"
+PROMPT_VERSION = "editorial-core-v2.20-metric-scope"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -302,6 +302,9 @@ FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
   If one sentence needs to be long, make the next one short.
 - Cut every researched detail that does not change the reader's understanding of what happened,
   why it matters, or the event's scale. The receipt can carry the rest.
+- Keep each statistic's scope, unit and reporting period intact when focusing a story on Bitcoin.
+  An all-digital-asset product-flow total is not a Bitcoin-only total. Use the source's category
+  or an explicitly reported Bitcoin subtotal; correct the wording rather than discard useful news.
 - Use single sentences or two-sentence short paragraphs with blank lines between each. Do not
   mistake whitespace for clarity. Split or cut the underlying ideas when a paragraph remains
   dense.

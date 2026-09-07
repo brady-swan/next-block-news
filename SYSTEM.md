@@ -345,6 +345,12 @@ Numerical agreement is judged for meaning. `2.99%` may be written as “roughly 
 `159.95` versus `160.1` does not fail merely because the strings differ. Verbatim quotations
 still must appear in inspected evidence.
 
+Both active prompts also preserve a statistic's category, unit and reporting period: a total
+across digital-asset investment products must not become a Bitcoin-only total in the copy.
+Correct the scope in wording or use an explicitly reported Bitcoin subtotal. This adds no
+research call, evidence gate or change to the practical-rounding allowance. See
+AUDIT-TUNING-2026-09-07-METRIC-SCOPE.md for the observed draft and release record.
+
 ## Hard code rails
 
 V2 code blocks only what it can determine reliably:

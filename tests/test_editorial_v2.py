@@ -101,7 +101,7 @@ class EditorialV2Tests(unittest.TestCase):
                 "uncertain": 0, "failed": 0, "taped": 0}
 
     def test_v212_prompts_teach_writer_craft_without_style_gates(self):
-        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.19-pdf-text")
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.20-metric-scope")
         self.assertIn("FINAL WRITING PASS", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("still be publication-ready", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("Do not define a familiar Bitcoin-native", newsroom.NEWSROOM_V2_SYSTEM)
@@ -121,6 +121,17 @@ class EditorialV2Tests(unittest.TestCase):
         self.assertIn("MUST repeat the complete final post", editor.BATCH_EDITOR_PROMPT)
         self.assertNotIn("Research deeply", newsroom.ORIENTATION_BRIEF)
         self.assertNotIn("24 words", newsroom.ORIENTATION_BRIEF)
+
+    def test_active_prompts_preserve_metric_scope_without_exact_number_gate(self):
+        for prompt in (newsroom.NEWSROOM_V2_SYSTEM, editor.BATCH_EDITOR_PROMPT):
+            with self.subTest(seat="writer" if prompt == newsroom.NEWSROOM_V2_SYSTEM else "editor"):
+                self.assertIn("scope, unit and reporting period intact", prompt)
+                self.assertIn("all-digital-asset product-flow total is not a Bitcoin-only total", prompt)
+                self.assertIn("explicitly reported Bitcoin subtotal", prompt)
+                self.assertIn("correct the wording rather than discard useful news", prompt)
+        self.assertIn("Judge semantic novelty and numerical materiality like a practical editor", newsroom.NEWSROOM_V2_SYSTEM)
+        self.assertIn("Roughly 3% may describe 2.99%", editor.BATCH_EDITOR_PROMPT)
+        self.assertIn("Do not reject 159.95 versus 160.1 unless it changes the actual claim", editor.BATCH_EDITOR_PROMPT)
 
     def test_craft_examples_are_illustrations_not_a_routing_change(self):
         self.assertIn("Craft illustrations, not current facts", newsroom.ORIENTATION_BRIEF)

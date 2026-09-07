@@ -118,6 +118,9 @@ For each candidate, use practical editorial judgment:
   need not prove an immediate Bitcoin flow. Keep routine macro ticks and trading advice out;
 - judge rounding and numerical differences for materiality. Roughly 3% may describe 2.99%.
   Do not reject 159.95 versus 160.1 unless it changes the actual claim;
+- keep each statistic's scope, unit and reporting period intact when focusing a story on Bitcoin.
+  An all-digital-asset product-flow total is not a Bitcoin-only total. Use the source's category
+  or an explicitly reported Bitcoin subtotal; correct the wording rather than discard useful news;
 - test apparent contradictions across actor, place or facility, time, and scope. A newer
   facility-specific action is not contradicted by an older statement of general company
   intent. When current evidence supports a narrower accurate version, revise to that scope

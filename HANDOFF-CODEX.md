@@ -72,6 +72,11 @@ The orientation clarifies consequential legislative timing/scope statements vers
 advocacy. See PLAN-0064-REPORTING-FOLLOW-THROUGH.md and SPRINT-0064-FINDINGS.md for diagnostics
 and release evidence; prompt quality still needs live observation.
 
+Bounded metric-scope tuning (v2.20) reminds both writer and editor that all-digital-asset flow
+totals are not Bitcoin-only totals. Preserve the source's scope, unit and period; correct the
+wording rather than discard useful news. Practical rounding remains allowed. No new research
+requirement or gate; see AUDIT-TUNING-2026-09-07-METRIC-SCOPE.md.
+
 Packet-pressure repair: optional full storyline cards become retrievable index entries before
 an oversized compact desk is refused. The 64 KiB limit, candidate identity, source receipts,
 owner overrides and lookup budgets are unchanged. See AUDIT-FIX-2026-09-07-DESK-COMPACTION.md.

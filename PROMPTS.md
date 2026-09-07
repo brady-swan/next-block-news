@@ -50,8 +50,10 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.19-pdf-text. This version advertises bounded text-based PDF reading in the
-existing fetch tool; it adds no research mandate or editorial-policy change. Page/text caps,
+editorial-core-v2.20-metric-scope. Writer and editor preserve each statistic's category, unit
+and reporting period when focusing a story on Bitcoin; all-digital-asset totals are not
+Bitcoin-only totals. This is a wording/accuracy clarification, not an extra search requirement
+or exact-number gate. The existing fetch tool supports bounded text-based PDF reading. Page/text caps,
 no OCR and incomplete-extraction warnings remain explicit in receipts and reused memory.
 Plan 0063 adds source-following and dated memory guidance,
 plus optional human-only writer feedback. Null feedback is valid; it is stripped before editor
