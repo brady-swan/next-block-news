@@ -9,14 +9,13 @@ story desk every 15 minutes when prepared candidates exist, sends the resulting 
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
 
-## Model roster — Plan 0058
+## Model roster — Plan 0063
 
 | Role | Model | Effort |
 | --- | --- | --- |
 | RSS/EDGAR intake | Haiku 4.5 | unchanged |
 | Assignment preparation + storyline selection | GPT-5.6 Luna | low |
-| Run-scoped newsroom and writing | Grok 4.3 | medium |
-| Focused native web/X research | Grok 4.3 | medium |
+| Run-scoped reporting, native web/X research and writing | Grok 4.3 | medium |
 | Separate batch editor | Grok 4.5 | medium |
 | Internal daily receipt audit | Disabled (`NBN_AUDIT_UTC` empty) | historical Anthropic path retained |
 
@@ -32,7 +31,7 @@ Typefully's batched analytics endpoint adds impressions, likes, reposts, comment
 and snapshot time when available. These are explicitly weak, age-dependent craft signals—not
 evidence, importance scores, or a mandate to chase popular subject matter.
 
-Fresh model context no longer means discarded reporting work. A bounded 72-hour editorial
+Fresh model context no longer means discarded reporting work. A bounded 30-day editorial
 workbench carries canonical exact-event identity, the prior proposed post, the precise
 unresolved research objective, revalidated inspected evidence, and independent-editor
 feedback into later sessions. The workbench is informational: it never marks a story covered,
@@ -60,7 +59,7 @@ every 60 seconds
               distill all leads → advance / background; protected work always advances
               bounded deterministic prefetch prepares likely receipts
             fresh run-scoped Grok 4.3 medium story desk
-              read compact clean desk → retrieve/delegate/search/fetch → write dossier
+              read clean desk + memory catalog → native web/X / fetch / recall → write dossier
             small consequential code rails
             one independent batch Grok 4.5 medium editor
               publish | revise | draft | drop
@@ -163,20 +162,26 @@ retrieve bounded full records on demand: at most four calls, 16 KiB per call and
 with the initial desk still capped at 64 KiB. These are ceilings, not required consumption. The
 stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
 output state, including encrypted reasoning, in bounded run history only—not editorial memory.
-Responses newsroom turns require a tool call (research or dossier); plain-text-only completion
-is not a valid protocol result. The last allowed round still forces the dossier specifically.
+Native-only research turns may continue in the same conversation; they do not require fake
+client-tool results. A plain-text response is not a final editorial decision. The last allowed
+response forces the dossier specifically.
 
 Candidate cards, storyline summaries, and search snippets are leads. The writer may submit
-immediately or research selectively with existing SerpAPI and safe fetch tools. It may assign one
-focused verification job to Grok 4.3 medium with native web and X search. That request has a
-90-second ceiling (also bounded by remaining run time), eight native tool calls requested, and
-at most five source findings. The provider's native limit is not represented as a hard dollar cap;
-actual search counts and charges are recorded. There is no recursive research or automatic
-second research request.
+immediately or research selectively with native web/X, existing SerpAPI and safe fetch tools.
+Reporting and writing use the same Grok context. Six successful responses and a 360-second
+lifecycle replace the separate research handoff; the lifecycle includes preparation/prefetch.
+Native allowance starts at 12 and is reduced by observed usage across requests; all tools share
+24 calls. Provider-side batching means this is not a strict billable-call or dollar ceiling.
+Actual counts and reported charges remain authoritative. Direct fetch bounds remain 16 sources,
+8,000 characters each, 160,000 total. Research requests reserve time for finalization.
+Article links, byline, publication metadata and limitations survive extraction. Loading shells
+are failed material, not useful source text. Native source manifests cite exact observed URLs;
+code registers source-specific receipts before validating even a same-response dossier.
 
 Plan 0059 tested stronger selective research-routing prompts but did not demonstrate reliable
 native assignment. Those experimental instructions and turn-budget fields were not shipped.
-The existing research behavior and limits remain unchanged; see `SPRINT-0059-FINDINGS.md`.
+That dated experiment remains in `SPRINT-0059-FINDINGS.md`; Plan 0063 now replaces delegation
+with the reporter-writer's own native tools rather than another routing-prompt experiment.
 
 Research returns a bounded memo plus source-specific findings. Only provider-observed citation
 URLs can supply native extracts. Existing/directly fetched text is preferred; blocked pages and
@@ -208,7 +213,8 @@ merge, and Node theme IDs remain too broad to serve as event keys.
 
 NBN's durable storyline ledger sits one level above exact events. A storyline is an ongoing named
 subject such as CLARITY Act progress or the Coldcard vulnerability, not a generic beat and never
-evidence. Luna retrieves only relevant lines in its existing pass. The writer may create at most three
+evidence. Luna highlights relevant lines; the writer can discover all active lines in the memory
+catalog independently. The writer may create at most three
 new lines per run or update a line whose full revisioned card it actually read. Optimistic revision
 checks prevent a stale run from overwriting newer memory. Storyline writes happen independently
 before publisher materialization; any failure drops the optional link and delivery continues.
@@ -217,11 +223,31 @@ Exact-event keys, receipts, output lifecycle, and Typefully reconciliation remai
 When research is incomplete, v2 retains the canonical key, proposed post, inspected evidence,
 and a code-mapped objective such as “find one independent second report.” The next fresh desk
 sees this on `continuity_board` and can continue rather than rediscovering the story. Stored
-evidence is citable for at most 24 hours and only after its fingerprint, public URL, and current
-source classification are recomputed. It receives a fresh
-run-owned `memory_*` fetch ID; stale or corrupt evidence cannot satisfy a gate.
+evidence retains its original inspection date and requires fingerprint/public-URL checks.
+An old filing may support historical facts; live balances, prices and current status need
+fresh retrieval. Memory never makes old news new. Archival receipts do not populate the fresh
+URL cache. Only intact records receive citable `memory_*` IDs.
 If final lint defers a story, the exact verbatim-quote/URL/length issue and inspected evidence
 also become the next workbench objective rather than being reduced to a transient item note.
+
+Completed reporting operations also persist incrementally in `writer_artifacts`, before the
+next network/model call—even when no final story or canonical key exists. Initial associations
+are to run/candidates; canonical linkage follows validated identity only. Records last 30 days,
+with actual observation times and bounded contents. Reads and identical retries do not renew
+their reporting freshness. Current confirmed post state is projected into notebooks; an older
+delivery note or resolved failure is not today's publication state or research objective.
+
+The compact active catalog lists notebooks, storylines and reporting artifacts, with explicit
+pagination when it cannot all fit. `search_memory` finds names, topics and source text;
+`read_desk_context` opens records or bounded sections. `search_intake` searches the previous
+72 hours, including skips, and can widen to seven days. Searching never reopens or publishes
+an item. These operations share four retrieval calls / 16 KiB per call / 48 KiB total.
+
+The final dossier may include a short optional writer self-report: what helped, what hindered,
+and one suggested improvement. Null is valid; malformed feedback does not invalidate stories.
+It is stored separately as `writer_feedback` in run observations, shown per run and in System,
+and retained for 14 days. It is unverified human-review input, never injected into future writer,
+preparation or editor prompts, never reporting evidence, and never an automatic policy change.
 
 ## Editorial doctrine
 
@@ -369,8 +395,8 @@ the fallback estimate includes tokens plus observed tools. Other providers use r
 Unknown billing (such as a transport timeout) is explicitly labeled unknown, not free. The rate
 version is `multiprovider-public-2026-09-05-v1`; per-model cache-read rates are separate. Anthropic
 five-minute cache writes cost 1.25× input and one-hour writes 2×. The intended ceiling for a
-productive due window is one preparation call, zero to three Grok newsroom calls, zero or one
-native research call, one editor call, and at most one omitted-only editor recovery—not a quota
+productive due window is one preparation call, up to six combined Grok reporter-writer responses,
+one editor call, and at most one omitted-only editor recovery—not a quota
 on stories.
 
 ## EIC discovery, legacy Blocks, and audit
@@ -432,7 +458,7 @@ guide is `output/pdf/nbn-system-guide.pdf`, also available through the authentic
 ### Worker and release details
 
 - Database: `/data/nbn.db`; tape: `/data/tapes/`.
-- Cross-run story workbench: `newsroom_story_memory`, 72-hour row TTL, 24-hour evidence
+- Cross-run story workbench: `newsroom_story_memory`, 30-day meaningful-activity window; dated evidence
   eligibility, eight pooled receipts, 12 attempts, and a 96 KiB maximum serialized row size
   per event. A later empty retry cannot erase earlier valid inspected evidence.
 - Every dossier story has a `newsroom_story_commits` lifecycle row with bounded validation,

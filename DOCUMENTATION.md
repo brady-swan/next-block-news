@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-06 for Plan 0062. This index separates how NBN works now from how earlier
+Updated 2026-09-07 for Plan 0063. This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -22,6 +22,8 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | railway.toml, Dockerfile, requirements.txt | Actual deployment/build contract |
 | config/source_tiers.toml | Actual source registry; rank is not an automatic publish verdict |
 | PLAN-0062-LEAD-FIDELITY.md | Focused lead-context, durable X pagination and upstream-feed pilot release |
+| PLAN-0063-REPORTER-WRITER-AND-MEMORY.md | Combined research/writing, searchable reporting memory and human-only writer feedback |
+| SPRINT-0063-FINDINGS.md | Bounded live replays, limitations, verification and release proof |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.
 Plan 0060 updates documentation metadata, not loaded editorial text. The charter
@@ -64,5 +66,10 @@ It does not change provider keys, editorial policy or enable autopost.
 
 Plan 0062 adds bounded X material, post-commit collector checkpoints, three pilot feeds and
 owner-approved Bitcoin-native story-selection clarifications. Models, clocks, Perception and
-publishing rails are unchanged. The dated visual PDF predates these incremental intake details;
-SYSTEM.md and INBOUND-NEWS-FLOW.md contain the current contract.
+publishing rails are unchanged.
+
+Plan 0063 combines native research and writing in one Grok session, preserves article links,
+adds a 30-day notebook/artifact catalog and recent-intake lookup, and projects confirmed
+publication into memory. Optional writer feedback is visible in the Desk but isolated from
+editorial/model memory. The visual guide includes this architecture. Source selection,
+editorial standards, cadence, the model roster and publishing authority are unchanged.

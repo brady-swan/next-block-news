@@ -23,7 +23,7 @@ over dated descriptions.
 | RSS/EDGAR mailroom | claude-haiku-4-5 | default |
 | Assignment preparation and relevant storyline selection | gpt-5.6-luna | low |
 | Run-scoped newsroom / writing | grok-4.3 | medium |
-| Optional native web/X research | grok-4.3 | medium |
+| Native web/X research | same grok-4.3 writer context | medium |
 | Independent batch editor | grok-4.5 | medium |
 
 The legacy daily receipt audit is disabled (NBN_AUDIT_UTC empty); its retained path uses NBN_MODEL.
@@ -51,9 +51,16 @@ verbatim support. Safe URLs, structural IDs, exact output idempotency, publisher
 mentions, investment-instruction and kill-switch rails remain code-owned.
 
 Continuity consists of exact-event keys/aliases, output state, 48-hour recent-reader coverage,
-open drafts, a 72-hour event workbench with evidence eligible up to 24 hours, and NBN-native
+open drafts, a 30-day event workbench and incremental reporting artifacts with dated reusable evidence, and NBN-native
 storylines. Node themes do not reach the live models. The Node is a separate API-only
 supplemental discovery source; do not conflate its cluster keys with NBN coverage.
+
+Plan 0063: native web/X now belongs to the writer, not a separate assignment. Six responses /
+360 seconds, native allowance 12 across requests, shared tool budget 24; retrieval remains
+four calls / 48 KiB. A complete paginated memory catalog and 72h-to-7d intake search expose
+earlier originals and research. Current confirmed output outranks stale notebook delivery notes.
+Writer self-reports are optional 14-day run observations shown in Desk; never feed them into
+reporting memory or future models. They are one input for the owner, not verified diagnoses.
 
 ## Delivery
 

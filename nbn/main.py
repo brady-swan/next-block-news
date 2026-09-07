@@ -458,6 +458,11 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             "research_pending" if attempt.get("failure") else "editor_feedback",
             attempt,
         )
+        from . import writer_memory
+        writer_memory.link(con, pipeline_run_id, attempt.get("members") or [], canonical_key,
+                           [record.fetch_id for record in outcome.fetches.values()
+                            if any(e.get("content_fingerprint") == record.content_fingerprint
+                                   for e in attempt.get("evidence") or [])])
 
     committed_storyline_keys: set[str] = set()
     storyline_result = {
@@ -674,6 +679,10 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                     "evidence_capability": record.evidence_capability,
                                     "independent_report": record.independent_report,
                                     "content_fingerprint": record.content_fingerprint,
+                                    "retrieval_kind": record.retrieval_kind,
+                                    "inspected_at": record.inspected_at,
+                                    "published_at": record.published_at,
+                                    "limitations": record.limitations,
                                     "url": record.final_url,
                                     "text": record.text[:8000]} for record in fetches],
             "elevated_claim": bool(draft.get("needs_second_source")),
@@ -1016,6 +1025,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     node_result = node_discovery.ingest(con)
     from . import observations
     observations.prune(con)
+    from . import writer_memory
+    writer_memory.prune(con)
     rss_items = sources.fetch_feeds(con)
     edgar_items = sources.fetch_edgar(con)
     perception_items = sources.fetch_perception(con)

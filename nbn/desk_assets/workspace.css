@@ -6263,6 +6263,26 @@ svg {
     animation: none !important;
   }
 }
+.writer-feedback {
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+.writer-feedback .finding {
+  margin-block: .8rem;
+}
+.feedback-panel {
+  margin-block: 2rem;
+}
+.feedback-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 1400px) {
+  .feedback-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
 @property --tw-translate-x {
   syntax: "*";
   inherits: false;

@@ -156,7 +156,7 @@ class ResponsesClient:
         if native_tools:
             if self.provider != "xai":
                 raise ValueError("Native research is configured for xAI only")
-            payload["tools"] = [{"type": "web_search"}, {"type": "x_search"}]
+            payload.setdefault("tools", []).extend([{"type": "web_search"}, {"type": "x_search"}])
             payload["max_tool_calls"] = max_tool_calls
             payload["include"].extend(["web_search_call.action.sources", "no_inline_citations"])
         # No SDK retries: the owning seat reserves and accounts for each attempt explicitly.

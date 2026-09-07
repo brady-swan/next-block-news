@@ -19,8 +19,9 @@ See [DESK-GUIDE.md](DESK-GUIDE.md) and the visual guide in `output/pdf/nbn-syste
 poll -> RSS/EDGAR Haiku mailroom -> Luna assignment desk -> Grok 4.3 newsroom -> Grok 4.5 editor -> Typefully
 ```
 
-Production uses Luna at low effort and both Grok seats at medium effort. The newsroom can
-delegate bounded native web/X research to Grok 4.3 medium. These are explicit per-seat
+Production uses Luna at low effort and both Grok seats at medium effort. The newsroom owns
+native web/X research in its writing context, with six responses / six minutes and searchable
+reporting memory. Optional writer self-reports appear in Desk, for human review only. These are explicit per-seat
 production overrides; conservative Anthropic defaults remain available for rollback.
 
 | Module | Responsibility |
@@ -30,7 +31,8 @@ production overrides; conservative Anthropic defaults remain available for rollb
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
 | `nbn/desk_prep.py` | Run-scoped Luna distillation/routing; protected work and every failure advance |
 | `nbn/store.py` | SQLite deduplication, bounded exact-event workbenches and storyline memory, commit lifecycle, post log |
-| `nbn/newsroom.py` | Run-scoped Grok newsroom, compact/retrievable desk context, bounded research delegation, and atomic dossier |
+| `nbn/newsroom.py` | Run-scoped Grok reporter-writer, native research, compact/retrievable context and atomic dossier |
+| `nbn/reporter.py`, `nbn/writer_memory.py` | Native source protocol, isolated human feedback, dated reporting artifacts and archive lookup |
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
 | `nbn/models.py` | Small OpenAI/xAI Responses adapter, tool history, and normalized provider usage |
 | `nbn/research.py` | Bounded native web/X research and citation-bound, source-specific findings |

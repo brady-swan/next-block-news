@@ -371,9 +371,32 @@ function CopyPanel({ story }: { story: Row }) {
     </div>
   );
 }
+function WriterFeedback({ record }: { record?: Row }) {
+  const status = record?.status || "not_recorded";
+  const labels: Row = {
+    not_recorded: "No writer self-report was recorded for this run.",
+    no_feedback: "The writer had no feedback to add.",
+    invalid_ignored: "Optional feedback could not be read; editorial work was unaffected.",
+    expired: "This self-report’s 14-day detail retention has expired.",
+  };
+  return <div className="writer-feedback">
+    <p className="meta-copy">Writer self-report · one input for your review, not a verified diagnosis.
+      {record?.model ? ` ${record.model} · ${record.effort} effort · ${clock(record.at, true)}` : ""}</p>
+    {status !== "provided" ? <p>{labels[status] || "Not recorded"}</p> : <>
+      {[["what_helped", "What helped"], ["what_hindered", "What got in the way"],
+        ["suggested_improvement", "Suggested improvement"]].map(([key, label]) =>
+        record?.feedback?.[key] ? <div className="finding" key={key}><div>
+          <strong>{label}</strong><p>{record.feedback[key]}</p>
+        </div></div> : null)}
+      {!!record?.feedback?.references?.length && <p className="meta-copy">
+        References: {record.feedback.references.join(" · ")}</p>}
+    </>}
+  </div>;
+}
+
 function researchRows(run: Row, story?: Row) {
   return (run.artifacts || []).filter((a: Row) => {
-    if (!["tool", "research_return"].includes(a.kind)) return false;
+    if (!["tool", "research_return", "native_research", "native_receipts"].includes(a.kind)) return false;
     if (!story) return true;
     const p = a.payload || {},
       args = p.arguments || p.assignment || {},
@@ -455,7 +478,7 @@ function Research({ run, story }: { run: Row; story?: Row }) {
           <article className="research-record" key={a.id}>
             <div className="section-heading">
               <h3>
-                {p.tool?.replaceAll("_", " ") || "Research reporter return"}
+                {p.tool?.replaceAll("_", " ") || (a.kind === "native_research" ? "Writer native research" : "Research reporter return")}
               </h3>
               <Pill text={a.phase} />
             </div>
@@ -470,6 +493,10 @@ function Research({ run, story }: { run: Row; story?: Row }) {
               </p>
             )}
             {p.arguments?.objective && <p>{p.arguments.objective}</p>}
+            {p.observed_urls?.length > 0 && <>
+              <p className="meta-copy">{p.calls} native calls · {p.run_calls} in this run. Observed URLs are pointers; they are not source extracts.</p>
+              {p.observed_urls.map((url: string) => <p key={url}><External url={url}>{url}</External></p>)}
+            </>}
             {p.arguments?.url && (
               <External url={p.arguments.url}>Requested source</External>
             )}
@@ -504,7 +531,7 @@ function Research({ run, story }: { run: Row; story?: Row }) {
                 <External url={r.final_url}>Open source</External>
               </div>
             )}
-            {(r.inspected_evidence || p.retained_sources || r.results || [])
+            {(r.inspected_evidence || p.receipts || r.receipts || p.retained_sources || r.results || [])
               .slice(0, 12)
               .map((e: Row, i: number) => (
                 <div className="source-receipt" key={i}>
@@ -1110,6 +1137,11 @@ function App() {
                           "Follow the leads through writing, editing and delivery."}
                       </p>
                     </div>
+                    <details className="payload">
+                      <summary>Writer feedback{run.writer_feedback?.status === "provided" ? " · available" : ""}</summary>
+                      <WriterFeedback record={run.writer_feedback} />
+                    </details>
+                    <Json label="Memory catalog delivered to this run" value={run.packet?.memory_catalog || { status: "Not recorded for this run" }} />
                     <div className="journey">
                       {[
                         [
@@ -1732,6 +1764,27 @@ function Support({
               calls. Publishing and reconciliation run in code. Historical runs
               retain their recorded models.
             </p>
+          </section>
+          <section className="feedback-panel">
+            <div className="section-heading"><div>
+              <div className="eyebrow">FROM THE WRITER’S DESK</div>
+              <h2>Writer feedback</h2>
+            </div></div>
+            <p className="meta-copy">Optional observations, not verified diagnoses. Nothing here changes prompts, policy, memory, or publication automatically. Details retained for 14 days.</p>
+            <div className="feedback-grid">
+              {(data.writer_feedback?.rows || []).map((r: Row, i: number) =>
+                <article className="research-record" key={r.run_id + i}>
+                  <WriterFeedback record={r} />
+                  <Button variant="outline" onClick={() => navigate({ view: "newsroom", run: r.run_id,
+                    follow: false, lead: "", open: false, page: 1 })}>Inspect run <ArrowRight size={14} /></Button>
+                </article>)}
+            </div>
+            {!data.writer_feedback?.rows?.length && <Empty title="No writer feedback recorded yet" />}
+            <div className="support-pagination">
+              <Button variant="outline" disabled={state.page <= 1} onClick={() => navigate({ page: state.page - 1 })}>Newer feedback</Button>
+              <span>Page {data.writer_feedback?.page || 1}</span>
+              <Button variant="outline" disabled={!data.writer_feedback?.more} onClick={() => navigate({ page: state.page + 1 })}>Older feedback</Button>
+            </div>
           </section>
           <section className="cost-panel">
             <div className="section-heading">

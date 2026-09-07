@@ -139,10 +139,11 @@ The legacy multi-post Block builder is disabled by default and in production.
 
 Grok gets a new context for each prepared run, not an immortal conversation. It can judge
 immediately from usable prepared receipts, search SerpAPI, fetch safe public pages, retrieve
-full indexed continuity, or assign one bounded Grok native web/X research job. There is no
-mandatory research turn count. Research route selection is still under observation: the
-latest nine-run experiment did not prove that stronger prompt wording made native delegation
-reliable, and those experimental changes did not ship.
+full indexed continuity, or use native web/X directly in the same conversation. There is no
+mandatory research turn count. Plan 0063 gives the writer six responses / six minutes, source
+links from fetched articles, a complete paginated memory catalog, and searchable earlier intake
+(72 hours by default, up to seven days, including skips). This is recall, not a second ingestion
+lane: reading a skipped item does not automatically reopen it. Source collection cadence is unchanged.
 
 Search snippets and cached URLs are pointers, never evidence. SerpAPI queries cache for one
 hour; exact-candidate/event pointers can persist six hours. Shared quota/rate-limit circuits

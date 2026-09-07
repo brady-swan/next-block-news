@@ -97,6 +97,18 @@ do not broaden authority or authorize publication/Typefully actions.
 Add strong examples, misses, weak drafts, owner comments, peer comparisons, and suggested
 rewrites to the tuning record.
 
+Plan 0063 checks: follow guide-to-original-source journeys, especially links within reporting
+and original statements already captured but skipped. Count native web/X work inside the writer,
+not only delegated assignments. Inspect source-specific extract provenance and attribution;
+native paraphrases are not direct page captures. Watch six-response/six-minute utilization,
+finalization, cost per useful draft, and delay to the next single-worker intake poll. Check that
+30-day notebooks preserve dates, unresolved work and current confirmed output, that the catalog
+exposes records beyond Luna's selections, and that archived evidence is refreshed when appropriate.
+Treat optional writer feedback as unverified human-facing observations: compare it with actual
+tools and outputs, accumulate useful suggestions, and do not turn it into automatic prompt or
+policy updates. Retention and null feedback are not operational errors. Existing autonomy limits
+still apply; broader research/memory design changes require approval.
+
 Typefully drafts whose titles begin `REPLAY` are owner-requested historical review copies,
 not normal wire deliveries. Exclude them from production throughput, freshness/latency,
 duplicate-delivery incidents, and evidence that a current lead was covered. Their writing may

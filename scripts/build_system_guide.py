@@ -72,7 +72,7 @@ def page(c, chapter, title, subtitle, source):
     text(c, 48, 61, 904, title, 31, INK, True)
     text(c, 48, 110, 900, subtitle, 13, MUTED)
     c.setStrokeColor(LINE); c.line(48, 48, W - 48, 48)
-    text(c, 48, 659, 830, f"Snapshot 2026-09-06  |  {escape(chapter)}  |  {escape(source)}", 9, MUTED)
+    text(c, 48, 659, 830, f"Snapshot 2026-09-07  |  {escape(chapter)}  |  {escape(source)}", 9, MUTED)
     text(c, 925, 657, 28, f"{PAGE:02d}", 11, INK, True)
 
 
@@ -87,7 +87,7 @@ def build():
     c = canvas.Canvas(str(OUTPUT), pagesize=(W, H), pageCompression=1)
     c.setTitle("Next Block News - System Field Guide")
     c.setAuthor("Next Block News")
-    c.setSubject("Production architecture, timing, evidence, delivery and Desk observability; 2026-09-06")
+    c.setSubject("Production architecture, timing, evidence, delivery and Desk observability; 2026-09-07")
 
     page(c, "01 / The whole machine", "One wire. A fresh newsroom each run.",
          "Useful, timely Bitcoin news - with accountable sources and an independent edit. Autopost is OFF in this snapshot.", "SYSTEM.md + live runtime settings")
@@ -109,7 +109,7 @@ def build():
     page(c, "02 / Discovery", "Many inputs. Different clocks.",
          "The single worker sleeps 60 seconds after each cycle. Long network or model work can delay the next poll.", "INBOUND-NEWS-FLOW.md + sources.py + config.py")
     rows = [
-        ("RSS + EDGAR", "Each worker cycle", "12 RSS outlets; Bitcoin-bearing 8-K filings. Haiku mailroom first."),
+        ("RSS + EDGAR", "Each worker cycle", "Reporting + upstream pilot feeds; Bitcoin-bearing 8-K filings. Haiku first."),
         ("X watches + guide accounts", "180-second throttle", "since_id recent search. Public list membership refreshes hourly."),
         ("Direct Perception", "15-minute throttle", "Broad Bitcoin discovery. Separate from the Node's provider usage."),
         ("Node wire API", "5-minute consumer throttle", "Supplemental versioned candidates. Valid pulse age: at most 3 hours."),
@@ -129,9 +129,9 @@ def build():
          "No permanent conversation. One prepared batch, stable IDs, retrievable context and selective research.", "newsroom.py + desk_prep.py + PROMPTS.md")
     card(c, 48, 167, 276, 340, "Before the writer", "Prepare, don't pre-decide", "<b>Haiku mailroom</b><br/>RSS/EDGAR: priority, candidate or background.<br/><br/><b>Luna low assignment</b><br/>Distill the event, relevance, freshness question and research objective. Select relevant NBN storylines.<br/><br/>Protected work and failures advance. Background remains reviewable.", BLUE, 13)
     card(c, 362, 167, 276, 340, "Writer payload", "A well-organized desk", "Orientation and audience brief.<br/><br/>Stable candidate cards + likely receipts.<br/><br/>Separate pointers, inspected evidence, recent coverage and open drafts.<br/><br/>Compact 48-hour feed and continuity indexes; retrieve fuller context when useful.", ORANGE, 13)
-    card(c, 676, 167, 276, 340, "Grok 4.3 / medium", "Choose the next move", "Write from usable receipts.<br/><br/>Search SerpAPI and fetch public pages.<br/><br/>Retrieve saved context.<br/><br/>Assign one bounded native web/X research job.<br/><br/>Submit dispositions and story copy.", GREEN, 13)
+    card(c, 676, 167, 276, 340, "Grok 4.3 / medium", "Choose the next move", "Write from usable receipts.<br/><br/>Native web/X research in this same session.<br/><br/>Fetch articles and follow source links.<br/><br/>Search earlier intake and reporting memory.<br/><br/>Submit decisions, copy and optional feedback.", GREEN, 13)
     arrow(c, 328, 326, 357, 326); arrow(c, 642, 326, 671, 326)
-    note(c, 535, "Do not overread the tools", "Native web/X research is available, not guaranteed to be selected. The latest nine-run routing experiment did not establish reliable delegation, and its experimental prompt did not ship.", ORANGE, 99)
+    note(c, 535, "Room to report and finish", "Up to six responses / six minutes, with finalization time reserved. Native tools share a 12-call ceiling inside the 24-tool run budget. These are ceilings: when evidence is sufficient, finish without extra research.", ORANGE, 99)
 
     page(c, "04 / Event journey", "From guide tip to reader-visible post.",
          "Illustrative lifecycle, not a claim that any specific current story was published.", "main.py + store.py + publisher.py")
@@ -159,8 +159,8 @@ def build():
     card(c, 514, 164, 438, 265, "Context", "Useful, but not proof", "Guide posts, snippets, Node summaries, Luna prep and storylines direct attention.<br/><br/>A captured social post proves what its author said, not the underlying allegation.<br/><br/>The registry is guidance, not a closed universe. Syndicated copies do not become independent reports.", ORANGE, 13)
     memory = [
         ("Exact event", "Aliases + output lifecycle. Prevent a blind second create; preserve distinct developments."),
-        ("Workbench", "72-hour context; reusable evidence up to 24 hours after revalidation. Precise unresolved objectives."),
-        ("Storyline", "Broader ongoing subject, selected by Luna. NBN owns it; Node themes are not live model context."),
+        ("Notebook + artifacts", "30-day dated reporting memory. Partial work survives interruption; current publication wins."),
+        ("Discoverable catalog", "Notebooks, storylines and run artifacts. Search beyond Luna's suggestions; intake lookup covers 72h, up to 7d."),
     ]
     for i, (title, body) in enumerate(memory):
         x = 48 + 306 * i
@@ -184,13 +184,13 @@ def build():
              ("Intake", "Unique first-seen-day items, current status and preparation reasons. Search to drill down."),
              ("Research inspector", "Assignments, returned findings, prepared captures and cited evidence. Missing is unknown."),
              ("Outputs", "Locally tracked copy, receipt, timestamps and confirmation. Not every remote draft."),
-             ("System & costs", "Current roster/effort, stage and period costs, averages, source/search health and PDF.")]
+             ("System & costs", "Roster, stage/period costs, source health, PDF and paginated writer feedback.")]
     for i, (title, body) in enumerate(views):
         y = 165 + i * 65
         rect(c, 48, y, 904, 57, colors.white, LINE, 5)
         text(c, 63, y + 12, 190, title, 15, BLUE, True)
         text(c, 272, y + 11, 659, body, 13, max_height=39)
-    note(c, 509, "Do not collapse the clocks", "Source time != first seen != local output recorded != confirmed publication. Peer timing needs a separate audit comparison. Missing timestamps or costs remain unknown.", BLUE, 82)
+    note(c, 509, "Writer feedback", "Optional self-report on each run and in System: what helped, what hindered, one suggestion. Unverified input for human discussion only; never injected into future writers or the editor.", BLUE, 82)
     text(c, 48, 609, 904, "History stays pinned until Back to latest. Rich observations expire after 14 days; gaps are not zero work. Editor fallbacks are not rewrites. Current publisher state has its own clock. Review tools retain guarded actions.", 12, MUTED)
 
     page(c, "08 / Operating discipline", "Observe, learn, make the smallest useful change.",

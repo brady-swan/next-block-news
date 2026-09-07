@@ -88,7 +88,7 @@ class SourceFetchSafetyTests(unittest.TestCase):
                 patch.object(sources.httpx, "Client", client):
             result = sources.fetch_article("https://public.example/start")
         self.assertEqual(result["text"], "")
-        http.get.assert_called_once_with("https://public.example/start")
+        http.get.assert_called_once_with("https://public.example/start", timeout=20)
 
     def test_non_http_scheme_is_rejected(self):
         with self.assertRaises(sources.UnsafeSourceURL):

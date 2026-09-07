@@ -39,11 +39,12 @@ def roster(now):
         seat("Assignment & storyline recall", config.DESK_PREP_MODEL,
              config.DESK_PREP_EFFORT if not config.DESK_PREP_MODEL.startswith("claude-") else "",
              config.DESK_PREP_MODE, "Prepares the writer’s desk"),
-        seat("Delegated research", config.RESEARCH_MODEL,
+        seat("Delegated research (legacy)", config.RESEARCH_MODEL,
              config.RESEARCH_EFFORT if not config.RESEARCH_MODEL.startswith("claude-") else "",
-             config.HAIKU_RESEARCH_MODE, "On demand, not on every run"),
-        seat("Newsroom / writer", config.NEWSROOM_MODEL, config.NEWSROOM_EFFORT, config.RUN_NEWSROOM_MODE,
-             "Research, news judgment and writing"),
+             "disabled" if config.REPORTER_WRITER_ENABLED and config.NEWSROOM_MODEL.startswith("grok-") else config.HAIKU_RESEARCH_MODE,
+             "Replaced by the reporter-writer in the same session"),
+        seat("Reporter / writer", config.NEWSROOM_MODEL, config.NEWSROOM_EFFORT, config.RUN_NEWSROOM_MODE,
+             "Native web/X, memory, news judgment and writing · shared token cost"),
         seat("Independent editor", config.EDITOR_MODEL, config.EDITOR_EFFORT, config.EDITORIAL_ENGINE,
              "Reviews surviving proposals"),
         seat("Daily receipt audit", config.ANTHROPIC_MODEL, "", "enabled" if config.AUDIT_UTC else "disabled",
@@ -186,7 +187,9 @@ def run_detail(con, row):
                             "reason": d.get("reason") or "The run did not retain a writer decision for this lead.",
                             "writer": None, "editor": None, "delivery": None, "evidence_fetch_ids": []})
     usage = rows(con, "SELECT seat,model,effort,outcome,latency_ms,estimated_cost_usd,cost_source,created_at,native_web_calls,native_x_calls FROM model_usage WHERE run_id=? ORDER BY id LIMIT 100", (rid,))
+    feedback = next((a for a in reversed(artifacts) if a["kind"] == "writer_feedback"), None)
     return {**header(run), "counters": counters, "packet": packet, "packet_recorded": bool(packet_obs),
+            "writer_feedback": feedback_card(feedback),
             "packet_truncated": bool(packet_obs and packet_obs["truncated"]), "artifacts": artifacts,
             "captured": len(inventory) if inventory else None,
             "dossier_recorded": dossier_recorded,
@@ -198,6 +201,23 @@ def run_detail(con, row):
             "stories": stories, "run_note": dossier.get("run_note") or "", "usage": usage,
             "cost": sum(r["estimated_cost_usd"] for r in usage) if usage else None,
             "metered_calls": len(usage), "unknown_cost": sum(r["cost_source"] == "unknown" for r in usage)}
+
+
+def feedback_card(row):
+    if not row:
+        return {"status": "not_recorded"}
+    return {"at": row.get("at"), "run_id": row.get("run_id"),
+            **({"status": "expired"} if row.get("expired") else row.get("payload", {}))}
+
+
+def recent_feedback(con, page):
+    data = rows(con, "SELECT o.run_id,o.at,o.payload_json,o.expired FROM run_observations o"
+        " JOIN newsroom_runs r ON r.run_id=o.run_id WHERE o.kind='writer_feedback'"
+        " AND r.mode='live' AND r.run_id LIKE 'cycle:%' ORDER BY o.at DESC,o.id DESC LIMIT 11 OFFSET ?",
+        ((page - 1) * 10,))
+    return {"page": page, "more": len(data) > 10,
+            "rows": [feedback_card({**r, "payload": decode(r["payload_json"])}) for r in data[:10]],
+            "retention_days": 14}
 
 
 def source_health(con, now):
@@ -354,6 +374,7 @@ def snapshot(con, query, state, now=None):
         result.update(outputs(con,opt))
     else:
         result.update({"roster":roster(now),"costs":costs(con,now),"sources":source_health(con,now),
+                       "writer_feedback": recent_feedback(con,opt["page"]),
                        "cadence_minutes":config.DESK_INTERVAL_SECONDS/60,
                        "recent_calls":rows(con,"SELECT seat,model,effort,outcome,created_at,latency_ms,estimated_cost_usd,cost_source FROM model_usage ORDER BY created_at DESC LIMIT 20"),
                        "search":rows(con,"SELECT provider,state,consecutive_failures,next_search_at,error_kind,total_searches_left,last_status_success_at FROM search_provider_state LIMIT 10")})

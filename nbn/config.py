@@ -42,7 +42,7 @@ RUN_NEWSROOM_MAX_HISTORY_BYTES = int(
     os.environ.get("NBN_RUN_NEWSROOM_MAX_HISTORY_BYTES", "491520")
 )
 RUN_NEWSROOM_TIMEOUT_SECONDS = float(
-    os.environ.get("NBN_RUN_NEWSROOM_TIMEOUT_SECONDS", "240")
+    os.environ.get("NBN_RUN_NEWSROOM_TIMEOUT_SECONDS", "360")
 )
 RUN_NEWSROOM_RETRY_ALLOWANCE = int(
     os.environ.get("NBN_RUN_NEWSROOM_RETRY_ALLOWANCE", "1")
@@ -121,6 +121,8 @@ HAIKU_RESEARCH_MODEL = os.environ.get("NBN_HAIKU_RESEARCH_MODEL", "claude-haiku-
 RESEARCH_MODEL = os.environ.get("NBN_RESEARCH_MODEL", HAIKU_RESEARCH_MODEL)
 RESEARCH_EFFORT = os.environ.get("NBN_RESEARCH_EFFORT", "medium")
 RESEARCH_NATIVE_MAX_TOOL_CALLS = int(os.environ.get("NBN_RESEARCH_NATIVE_MAX_TOOL_CALLS", "8"))
+REPORTER_WRITER_ENABLED = os.environ.get("NBN_REPORTER_WRITER_ENABLED", "true").lower() == "true"
+WRITER_NATIVE_MAX_TOOL_CALLS = int(os.environ.get("NBN_WRITER_NATIVE_MAX_TOOL_CALLS", "12"))
 HAIKU_RESEARCH_MAX_ASSIGNMENTS = int(
     os.environ.get("NBN_HAIKU_RESEARCH_MAX_ASSIGNMENTS", "1")
 )
@@ -155,7 +157,8 @@ def editorial_reservation_calls(*, include_mailroom: bool = False,
     total = max(0, RUN_NEWSROOM_MAX_ROUNDS) + max(0, RUN_NEWSROOM_RETRY_ALLOWANCE) + 2
     if not direct_fallback:
         total += int(DESK_PREP_MODE != "off")
-        if HAIKU_RESEARCH_MODE == "on":
+        if HAIKU_RESEARCH_MODE == "on" and not (
+                REPORTER_WRITER_ENABLED and NEWSROOM_MODEL.startswith("grok-")):
             total += (max(0, HAIKU_RESEARCH_MAX_ASSIGNMENTS)
                       * max(0, HAIKU_RESEARCH_MAX_ROUNDS))
         total += int(include_mailroom)

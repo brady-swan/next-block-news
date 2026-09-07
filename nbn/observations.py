@@ -16,7 +16,7 @@ from . import config
 log = logging.getLogger("nbn.observations")
 ROW_BYTES = 384 * 1024
 CRITICAL = {"writer_input", "writer_result", "editor_input", "editor_recovery_input",
-            "editor_result", "editor_applied"}
+            "editor_result", "editor_applied", "writer_feedback"}
 PRIVATE = re.compile(r"(?:owner_token|probe_token|authorization|api_key|password|credential|encrypted|reasoning|thinking|raw_response|provider_response)", re.I)
 QUERY_SECRET = re.compile(r"([?&](?:k|key|token|api_key|access_token|auth)=)[^\s&#\"']+", re.I)
 

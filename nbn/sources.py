@@ -463,14 +463,14 @@ def chart_image(url: str):
     return None
 
 
-def _fred_csv(url: str) -> str:
+def _fred_csv(url: str, timeout: float = 20) -> str:
     """Recent observations for a fred.stlouisfed.org/graph/?g=... URL, else ''."""
     m = re.search(r"fred\.stlouisfed\.org/graph/\??.*?g=([A-Za-z0-9]+)", url)
     if not m:
         return ""
     try:
         # FRED's WAF resets a browser UA on a non-browser TLS stack; plain curl UA passes.
-        with httpx.Client(timeout=20, headers={"User-Agent": "curl/8.7.1"}) as client:
+        with httpx.Client(timeout=timeout, headers={"User-Agent": "curl/8.7.1"}) as client:
             csv = client.get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?g={m.group(1)}")
         if csv.status_code != 200 or "," not in csv.text:
             return ""
@@ -482,23 +482,28 @@ def _fred_csv(url: str) -> str:
         return ""
 
 
-def fetch_article(url: str, limit: int = 8000) -> dict:
+def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None) -> dict:
     """Best-effort article fetch with redirect/canonical/byline metadata."""
     try:
+        def remaining():
+            left = 20 if deadline is None else min(20, deadline - time.monotonic())
+            if left <= 0:
+                raise httpx.TimeoutException("research deadline reached")
+            return left
         # FRED graph pages are JS shells that reset non-browser connections, but every
         # graph has a CSV twin carrying the full data series — the actual primary source
         # behind Fed stat tweets. Go straight to the CSV, never the page.
-        csv_text = _fred_csv(url)
+        csv_text = _fred_csv(url, timeout=remaining())
         if csv_text:
             return {"text": csv_text[:limit], "final_url": url,
                     "canonical_url": url, "byline": "", "outcome": "ok",
                     "error_kind": "", "error_message": "", "redirect_chain": [url]}
-        with httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=False) as client:
+        with httpx.Client(timeout=remaining(), headers={"User-Agent": UA}, follow_redirects=False) as client:
             current_url = url
             redirect_chain = [url]
             for _ in range(6):
                 _assert_public_http_url(current_url)
-                resp = client.get(current_url)
+                resp = client.get(current_url, timeout=remaining())
                 if not resp.is_redirect:
                     break
                 location = resp.headers.get("location", "")
@@ -511,7 +516,7 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
             resp.raise_for_status()
             body = resp.text
             # Shortlinks (bit.ly) unwrap here — re-check the final URL for a FRED graph.
-            csv_text = _fred_csv(str(resp.url))
+            csv_text = _fred_csv(str(resp.url), timeout=remaining())
             if csv_text:
                 return {"text": csv_text[:limit], "final_url": str(resp.url),
                         "canonical_url": str(resp.url), "byline": "", "outcome": "ok",
@@ -529,11 +534,29 @@ def fetch_article(url: str, limit: int = 8000) -> dict:
             if m := re.search(pattern, body):
                 byline = html.unescape(m.group(1)).strip()
                 break
+        published_at = ""
+        if m := re.search(r'(?is)<meta[^>]+(?:property|name)=["\'](?:article:published_time|datePublished|date)["\'][^>]+content=["\']([^"\']+)', body):
+            published_at = html.unescape(m.group(1)).strip()[:160]
         body = re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", body)
+        links = []
+        for match in re.finditer(r'(?is)<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', body):
+            target = urljoin(str(resp.url), html.unescape(match.group(1)).strip())
+            label = re.sub(r"\s+", " ", html.unescape(_TAG_RE.sub(" ", match.group(2)))).strip()[:160]
+            if target.startswith(("https://", "http://")) and label and len(target) <= 2000:
+                link = {"text": label, "url": target}
+                if link not in links:
+                    links.append(link)
+            if len(links) >= 24:
+                break
         text = html.unescape(_TAG_RE.sub(" ", body))
-        return {"text": re.sub(r"\s+", " ", text).strip()[:limit],
+        text = re.sub(r"\s+", " ", text).strip()[:limit]
+        shell = len(text) < 200 and bool(re.search(
+            r"data loading|enable javascript|just a moment|checking your browser", text, re.I))
+        return {"text": text,
                 "final_url": str(resp.url), "canonical_url": canonical or str(resp.url),
-                "byline": byline, "outcome": "ok", "error_kind": "",
+                "byline": byline, "published_at": published_at, "links": links,
+                "limitations": "Dynamic shell; no usable reporting text" if shell else "",
+                "outcome": "evidence_failed" if shell else "ok", "error_kind": "dynamic_shell" if shell else "",
                 "error_message": "", "redirect_chain": redirect_chain}
     except Exception as exc:  # noqa: BLE001
         log.warning("article fetch failed %s: %s", url, exc)

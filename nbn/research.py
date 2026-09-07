@@ -46,8 +46,23 @@ def retrieve(packet: dict, *, model: str, effort: str, timeout: float, max_tool_
 
 
 def cited_urls(body: dict) -> set[str]:
+    """Observed source locations, including completed native X thread IDs.
+
+Function responses may omit message citations. x_thread_fetch still returns a completed
+provider tool record with the immutable post_id, but no body. This attests the target,
+not its author or claim support; any associated text remains a reported paraphrase.
+"""
     urls = {url for url in body.get("citations", []) if isinstance(url, str)}
     for output in body.get("output") or []:
+        if (output.get("type") == "custom_tool_call" and output.get("name") == "x_thread_fetch"
+                and output.get("status") == "completed"):
+            try:
+                target = json.loads(output.get("input") or "{}")
+                post_id = str(target.get("post_id") or "")
+                if re.fullmatch(r"\d{5,30}", post_id):
+                    urls.add("https://x.com/i/status/" + post_id)
+            except (ValueError, TypeError, AttributeError):
+                pass
         for part in output.get("content") or []:
             for annotation in part.get("annotations") or []:
                 if annotation.get("type") == "url_citation" and annotation.get("url"):
@@ -59,7 +74,7 @@ def cited_urls(body: dict) -> set[str]:
     return urls
 
 
-def _status_id(url: str) -> str:
+def x_post_id(url: str) -> str:
     parsed = urlparse(url)
     if (parsed.hostname or "").lower().removeprefix("www.") not in {"x.com", "twitter.com"}:
         return ""
@@ -73,14 +88,14 @@ def observed_url(claimed: str, citations: set[str]) -> str:
     for url in sorted(citations):
         if source_policy.normalize_url(url) == normalized:
             return url
-    status = _status_id(claimed)
+    status = x_post_id(claimed)
     if status:
-        matches = sorted(url for url in citations if _status_id(url) == status)
+        matches = sorted(url for url in citations if x_post_id(url) == status)
         return matches[0] if matches else ""
     return ""
 
 
-def extract_sources(response) -> tuple[dict, list[dict]]:
+def extract_sources(response, *, limit: int = 5) -> tuple[dict, list[dict]]:
     if response.stop_reason != "end_turn":
         raise ValueError(f"native research incomplete: {response.stop_reason}")
     data = json.loads("".join(b.text for b in response.content if b.type == "text"))
@@ -89,14 +104,14 @@ def extract_sources(response) -> tuple[dict, list[dict]]:
     citations = cited_urls(response.raw)
     accepted = []
     seen = set()
-    for row in data["sources"][:5]:
+    for row in data["sources"][:max(1, min(limit, 8))]:
         if not isinstance(row, dict):
             continue
         url = observed_url(str(row.get("url") or ""), citations)
         if not url or len(url) > 2000 or url in seen:
             continue
         author = ""
-        if _status_id(url):
+        if x_post_id(url):
             handle = urlparse(url).path.split("/")[1]
             if handle.lower() == "grok":
                 continue

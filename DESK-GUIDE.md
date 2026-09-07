@@ -1,6 +1,6 @@
 # The run-first Desk
 
-Current 2026-09-06, Plan 0061. The Desk is part of the existing NBN Railway service, not a separate app
+Current 2026-09-07, Plan 0063. The Desk is part of the existing NBN Railway service, not a separate app
 or public news site. All /desk routes, assets, snapshots and the PDF require the existing
 NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documentation.
 
@@ -58,11 +58,21 @@ proof the writer received it. Missing/pruned dossiers and editor returns display
 not zero work. Intake polls or skipped cadence windows are not fabricated as newsroom runs.
 
 Research displays assignments, prepared source captures, tool returns and reporter findings.
+The combined reporter-writer uses native web/X in its own session. Research shows observed
+source URLs, returned source-specific extracts and native call counts; zero delegated assignments
+does not mean no research. Delivered desk includes the memory catalog with explicit pagination.
 Provider-reported extracts are source-specific paraphrases, not verbatim page text. Evidence IDs
 establish recorded use, not how much a finding influenced judgment. Human quality questions
 guide review without an invented score. Unassigned research remains visible at run level.
 Copy compares writer proposals with actual editor-returned or submitted copy. Omitted/unavailable
 editor fallbacks are not editor rewrites. Activity shows actual timestamped handoffs.
+
+**Writer feedback** is an optional end-of-task self-report: what helped, what hindered, and
+one suggested improvement, with references when provided. Open it on a run or browse the
+paginated recent-feedback panel in System. It is one unverified input for human discussion,
+not a score, verified diagnosis, policy change, or instruction to another model. No feedback,
+missing feedback and expired observations have distinct labels. It is retained with rich run
+observations for 14 days and excluded from the editor, future writer packets and memory tools.
 
 At 1440+ CSS px the inspector is a persistent side pane; intermediate widths use a drawer,
 mobile uses full-width detail. Selection and reading position survive resizing. Escape/close

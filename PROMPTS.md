@@ -12,7 +12,7 @@ for legacy paths; its old "source of truth" heading does not make it current v2 
 | RSS/EDGAR mailroom | nbn/intake_triage.py | Haiku 4.5 / default | NBN_INTAKE_TRIAGE_MODEL, MODE |
 | Assignment preparation and storyline selection | nbn/desk_prep.py | GPT-5.6 Luna / low | NBN_DESK_PREP_MODEL, EFFORT, MODE |
 | Run-scoped newsroom/writer | nbn/newsroom.py: NEWSROOM_V2_SYSTEM plus loaded orientation and strict tools | Grok 4.3 / medium | NBN_NEWSROOM_MODEL, EFFORT; NBN_EDITORIAL_ENGINE=v2 |
-| Optional research assignment | nbn/research.py | Grok 4.3 / medium with native web/X | NBN_RESEARCH_MODEL, EFFORT; compatibility switch NBN_HAIKU_RESEARCH_MODE |
+| Native reporting (same writer context) | nbn/reporter.py plus newsroom tools | Grok 4.3 / medium | NBN_REPORTER_WRITER_ENABLED; compatibility research switch NBN_HAIKU_RESEARCH_MODE |
 | Independent batch editor | nbn/editor.py: BATCH_EDITOR_PROMPT plus evidence and recent coverage | Grok 4.5 / medium | NBN_EDITOR_MODEL, EFFORT |
 | Legacy receipt audit (disabled) | nbn/audit.py: AUDIT_PROMPT, retained only | historical Anthropic NBN_MODEL | NBN_AUDIT_UTC empty |
 
@@ -34,7 +34,9 @@ preparation/writer payload.
 Guide prose, preparation, storyline cards and search snippets are context, not proof.
 Inspected records have code-issued fetch IDs. Direct fetches and citation-bound native
 provider-reported extracts retain different provenance; paraphrases are not verbatim captures.
-The same writer history may search, fetch, retrieve, delegate once, or submit immediately.
+The same writer history may use native web/X, search/fetch, search earlier intake, open the
+active memory catalog, record useful findings, or submit immediately. No separate reporting
+model call is needed. The retained `nbn/research.py` helper validates observed native URLs.
 There is no compulsory survey or minimum research phase. A terminal dossier accounts for
 each candidate; omitted candidates defer, and a malformed story does not veto the entire batch.
 
@@ -48,7 +50,9 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.16-lead-context. Plan 0062 aligns mailroom, preparation, writer and editor on
+editorial-core-v2.17-reporter-memory. Plan 0063 adds source-following and dated memory guidance,
+plus optional human-only writer feedback. Null feedback is valid; it is stripped before editor
+or future model context. Plan 0062 aligns mailroom, preparation, writer and editor on
 concrete Bitcoin use, demonstrations, access/adoption and substantive culture without demanding
 market/protocol impact. It rejects newborn low engagement as a dismissal reason. Standalone
 software releases remain out; releases can advance larger ongoing stories. Treasury and writing
