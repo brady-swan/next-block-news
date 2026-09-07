@@ -5,6 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import httpx
+
 from nbn import config, desk_api, models, newsroom, observations, reporter, research, source_policy, sources, store, writer_memory
 from tests.support import temporary_store
 from tests.test_editorial_v2 import candidate, inspected
@@ -23,6 +25,23 @@ def source(url="https://www.btcpolicy.org/report"):
 
 
 class ReporterWriterTests(unittest.TestCase):
+    def test_unread_pdf_cannot_enter_receipts_or_reporting_memory(self):
+        url = "https://example.com/circular.pdf"
+        response = httpx.Response(200, content=b"%PDF-1.7\n1 0 obj\n<<>>\nendobj",
+            headers={"content-type": "application/pdf"}, request=httpx.Request("GET", url))
+        with temporary_store() as con:
+            desk = session(con)
+            with patch.object(sources, "_assert_public_http_url"), \
+                    patch.object(sources.httpx, "Client") as client:
+                client.return_value.__enter__.return_value.get.return_value = response
+                result = desk._fetch(url, intake={"url_hash": "pdf-test", "title": "BSP proposal"})
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["error_kind"], "unsupported_document")
+            self.assertFalse(result["retry_same_call"])
+            self.assertEqual(desk.fetches, {})
+            self.assertEqual(desk.fetch_chars, 0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM writer_artifacts WHERE kind='receipt'").fetchone()[0], 0)
+
     def test_native_and_custom_tools_are_combined(self):
         response = Mock(is_success=True)
         response.json.return_value = {"status": "completed", "output": [], "usage": {}}

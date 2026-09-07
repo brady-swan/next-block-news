@@ -514,6 +514,19 @@ def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None)
             else:
                 raise UnsafeSourceURL("too many source redirects")
             resp.raise_for_status()
+            content_type = str(resp.headers.get("content-type", "")).split(";", 1)[0].strip().lower()
+            content = resp.content
+            if (content_type == "application/pdf" or
+                    isinstance(content, bytes) and content[:1024].lstrip().startswith(b"%PDF-")):
+                # This adapter extracts HTML/text, not PDF documents. Binary PDF syntax
+                # is not inspected evidence merely because its HTTP request succeeded.
+                return {"text": "", "final_url": str(resp.url),
+                        "canonical_url": str(resp.url), "byline": "", "published_at": "",
+                        "links": [], "outcome": "evidence_failed",
+                        "error_kind": "unsupported_document",
+                        "error_message": "PDF text extraction is not supported by this fetch adapter; no document text was inspected.",
+                        "limitations": "PDF document not read. Use another retrieval route; this response is not evidence.",
+                        "redirect_chain": redirect_chain}
             body = resp.text
             # Shortlinks (bit.ly) unwrap here — re-check the final URL for a FRED graph.
             csv_text = _fred_csv(str(resp.url), timeout=remaining())

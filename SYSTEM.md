@@ -175,7 +175,10 @@ Native allowance starts at 12 and is reduced by observed usage across requests; 
 Actual counts and reported charges remain authoritative. Direct fetch bounds remain 16 sources,
 8,000 characters each, 160,000 total. Research requests reserve time for finalization.
 Article links, byline, publication metadata and limitations survive extraction. Loading shells
-are failed material, not useful source text. Native source manifests cite exact observed URLs;
+are failed material, not useful source text. The HTML/text fetch adapter does not extract PDF
+text: PDF responses return `unsupported_document`, not raw bytes registered as inspected evidence.
+The writer can use another existing retrieval route; no primary-only requirement is added.
+Native source manifests cite exact observed URLs;
 code registers source-specific receipts before validating even a same-response dossier.
 
 Plan 0059 tested stronger selective research-routing prompts but did not demonstrate reliable

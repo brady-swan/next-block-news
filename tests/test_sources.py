@@ -3,6 +3,8 @@ import socket
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+import httpx
+
 from nbn import sources
 
 
@@ -93,6 +95,57 @@ class SourceFetchSafetyTests(unittest.TestCase):
     def test_non_http_scheme_is_rejected(self):
         with self.assertRaises(sources.UnsafeSourceURL):
             sources._assert_public_http_url("file:///etc/passwd")
+
+    def test_pdf_is_not_reported_as_successful_article_text(self):
+        cases = [
+            ("Application/PDF; charset=binary", b"%PDF-1.7\n1 0 obj\n<<>>\nendobj"),
+            ("application/octet-stream", b" \n%PDF-1.7\n1 0 obj\n<<>>\nendobj"),
+            ("text/html", b"%PDF-1.7\nmislabelled document"),
+            ("application/pdf", b"broken PDF content without its signature"),
+        ]
+        for content_type, body in cases:
+            with self.subTest(content_type=content_type, body=body):
+                response = httpx.Response(200, content=body,
+                    headers={"content-type": content_type},
+                    request=httpx.Request("GET", "https://example.com/source"))
+                with patch.object(sources, "_assert_public_http_url"), \
+                        patch.object(sources.httpx, "Client") as client:
+                    client.return_value.__enter__.return_value.get.return_value = response
+                    result = sources.fetch_article("https://example.com/source")
+                self.assertEqual(result["outcome"], "evidence_failed")
+                self.assertEqual(result["error_kind"], "unsupported_document")
+                self.assertEqual(result["text"], "")
+                self.assertEqual(result["published_at"], "")
+                self.assertIn("no document text was inspected", result["error_message"])
+
+    def test_pdf_redirect_keeps_source_provenance_without_a_receipt(self):
+        start = "https://example.com/release"
+        target = "https://example.com/circular.pdf"
+        responses = [httpx.Response(302, headers={"location": target},
+                                   request=httpx.Request("GET", start)),
+                     httpx.Response(200, content=b"%PDF-1.7", headers={"content-type": "application/pdf"},
+                                    request=httpx.Request("GET", target))]
+        with patch.object(sources, "_assert_public_http_url") as safe, \
+                patch.object(sources.httpx, "Client") as client:
+            client.return_value.__enter__.return_value.get.side_effect = responses
+            result = sources.fetch_article(start)
+        self.assertEqual(result["redirect_chain"], [start, target])
+        self.assertEqual(result["final_url"], target)
+        self.assertEqual(result["canonical_url"], target)
+        self.assertEqual(result["outcome"], "evidence_failed")
+        self.assertEqual([c.args[0] for c in safe.call_args_list], [start, target])
+
+    def test_html_is_not_rejected_just_because_url_ends_in_pdf(self):
+        url = "https://example.com/circular.pdf"
+        response = httpx.Response(200, text="<p>Readable public consultation notice.</p>",
+                                  headers={"content-type": "text/html"},
+                                  request=httpx.Request("GET", url))
+        with patch.object(sources, "_assert_public_http_url"), \
+                patch.object(sources.httpx, "Client") as client:
+            client.return_value.__enter__.return_value.get.return_value = response
+            result = sources.fetch_article(url)
+        self.assertEqual(result["outcome"], "ok")
+        self.assertEqual(result["text"], "Readable public consultation notice.")
 
 
 if __name__ == "__main__":
