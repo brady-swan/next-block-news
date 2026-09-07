@@ -77,6 +77,11 @@ totals are not Bitcoin-only totals. Preserve the source's scope, unit and period
 wording rather than discard useful news. Practical rounding remains allowed. No new research
 requirement or gate; see AUDIT-TUNING-2026-09-07-METRIC-SCOPE.md.
 
+V2.21 clarifies the existing evidence handoff at the four dossier fields: a retained native
+source or reporting note is not automatically a story citation. The writer lists relevant
+sources for the editor separately from its reader-facing link. No auto-attachment or extra
+turn; see AUDIT-TUNING-2026-09-07-EVIDENCE-HANDOFF.md.
+
 Packet-pressure repair: optional full storyline cards become retrievable index entries before
 an oversized compact desk is refused. The 64 KiB limit, candidate identity, source receipts,
 owner overrides and lookup budgets are unchanged. See AUDIT-FIX-2026-09-07-DESK-COMPACTION.md.

@@ -4,15 +4,75 @@ import json
 import time
 import unittest
 from contextlib import ExitStack
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from nbn import brain, config, desk_prep, editor, main, models, newsroom, reporter, store, writer_memory
 from tests.support import temporary_store
 from tests.test_editorial_v2 import candidate, inspected, materialization_fixture
-from tests.test_reporter_writer import session
+from tests.test_reporter_writer import session, source
 
 
 class ReportingFollowthroughTests(unittest.TestCase):
+    def test_dossier_field_descriptions_explain_evidence_handoff_without_shared_schema_change(self):
+        schema = newsroom.V2_DOSSIER_TOOL["input_schema"]["properties"]
+        fields = schema["stories"]["items"]["properties"]
+        self.assertIn("Must also appear in evidence_fetch_ids", fields["selected_fetch_id"]["description"])
+        self.assertIn("only these receipts reach its editor", fields["evidence_fetch_ids"]["description"])
+        self.assertIn("exclude unrelated sources", fields["evidence_fetch_ids"]["description"])
+        self.assertIn("not evidence", fields["reporting_note"]["description"])
+        self.assertIn("does not attach evidence to a story", schema["native_sources"]["description"])
+        self.assertNotIn("description", reporter.SOURCE_SCHEMA)
+        self.assertEqual({k: v for k, v in schema["native_sources"].items() if k != "description"}, reporter.SOURCE_SCHEMA)
+
+    def test_same_dossier_native_evidence_reaches_editor_without_attaching_unrelated_source(self):
+        with temporary_store() as con, ExitStack() as stack:
+            row, reader_receipt, _, _ = materialization_fixture(con, "native-handoff")
+            desk = session(con)
+            desk.inventory = [row]
+            desk.by_hash = {row["url_hash"]: row}
+            desk.fetches[reader_receipt.fetch_id] = reader_receipt
+            supporting = source()
+            unrelated = source("https://www.btcpolicy.org/unrelated-report")
+            desk.native_urls = {supporting["url"], unrelated["url"]}
+            data = {"native_sources": [supporting, unrelated], "stories": [{
+                "story_id": "sec", "story_key": "sec-bitcoin-policy", "coverage_relation": "distinct",
+                "member_candidate_ids": [row["url_hash"]], "post": "The SEC announced a Bitcoin policy update.",
+                "selected_fetch_id": reader_receipt.fetch_id,
+                "evidence_fetch_ids": [reader_receipt.fetch_id, supporting["url"]],
+                "reporting_note": "Supporting report supplied with this dossier."}],
+                "decisions": [{"candidate_id": row["url_hash"], "story_id": "sec", "disposition": "publish"}]}
+            mapping = desk._register_native_sources(data)
+            self.assertEqual(len(mapping), 2)
+            with patch.object(store, "validate_newsroom_run"):
+                outcome = desk._validate_and_convert_v2(data)
+            self.assertEqual(outcome.drafts[row["url_hash"]]["selected_fetch_id"], reader_receipt.fetch_id)
+            fake_session = Mock()
+            fake_session.conduct.return_value = outcome
+            stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="test"))
+            stack.enter_context(patch.object(newsroom, "start_session", return_value=fake_session))
+            captured = []
+            def review(cards, *_args, **_kwargs):
+                captured.append(editor._batch_editor_payload(cards, [])[0])
+                return {"ok": True, "decisions": {"sec": {"verdict": "drop", "post": None, "reason": "Offline test."}}}
+            stack.enter_context(patch.object(editor, "review_newsroom_batch", side_effect=review))
+            publish = stack.enter_context(patch.object(main.publisher, "publish"))
+            stack.enter_context(patch.object(config, "RUN_NEWSROOM_MODE", "live"))
+            self.assertTrue(store.acquire_cycle_lease(con, "test-owner"))
+            main._run_editorial_v2(con, lease_owner="test-owner", pipeline_run_id="native-handoff", inventory=[row], pending=[row],
+                result={k: 0 for k in ("held", "skipped", "posted", "drafted", "uncertain", "failed", "taped")},
+                theme_snapshot=[], overrides={}, run_started=time.time())
+            publish.assert_not_called()
+            payload = captured[0]
+            card = payload["candidates"][0]
+            catalog = {r["evidence_ref"]: r for r in payload["evidence_catalog"]}
+            self.assertEqual(catalog[card["selected_evidence_ref"]]["url"], reader_receipt.final_url)
+            self.assertEqual({catalog[ref]["url"] for ref in card["inspected_evidence_refs"]},
+                             {reader_receipt.final_url, supporting["url"]})
+            native = next(r for r in catalog.values() if r["url"] == supporting["url"])
+            self.assertEqual(native["retrieval_kind"], "provider_reported_extract")
+            self.assertEqual(native["limitations"], supporting["limitations"])
+            self.assertNotIn(unrelated["url"], json.dumps(payload))
+
     def test_native_progress_is_current_work_not_citation_novelty_or_billing(self):
         bodies = [
             ({"output": [{"type": "web_search_call", "status": "completed"}],

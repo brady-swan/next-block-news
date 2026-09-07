@@ -50,7 +50,11 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.20-metric-scope. Writer and editor preserve each statistic's category, unit
+editorial-core-v2.21-evidence-handoff. The dossier field descriptions distinguish the selected
+reader link from the complete story-specific evidence sent to the editor. Retaining native
+extracts alone or describing them in a reporting note does not attach them to a story; the
+writer cites their exact URLs in the same dossier. No automatic attachment or extra turn.
+Writer and editor preserve each statistic's category, unit
 and reporting period when focusing a story on Bitcoin; all-digital-asset totals are not
 Bitcoin-only totals. This is a wording/accuracy clarification, not an extra search requirement
 or exact-number gate. The existing fetch tool supports bounded text-based PDF reading. Page/text caps,

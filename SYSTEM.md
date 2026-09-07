@@ -210,6 +210,8 @@ not merely the selected reader link. A nullable 800-character `reporting_note` c
 freshness checks and limitations into the editor and event notebook as untrusted context, never
 evidence or instructions. Equal text at different URLs/authorship/dates is not deduplicated into
 one source identity in the editor's evidence catalog. No extra model turn is added for this note.
+V2.21 repeats that contract at the four dossier field descriptions: retaining native extracts
+alone does not attach them to a story. No automatic attachment, source upgrade or routing change.
 
 Plan 0059 tested stronger selective research-routing prompts but did not demonstrate reliable
 native assignment. Those experimental instructions and turn-budget fields were not shipped.

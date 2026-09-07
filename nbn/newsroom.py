@@ -33,7 +33,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.20-metric-scope"
+PROMPT_VERSION = "editorial-core-v2.21-evidence-handoff"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -387,12 +387,15 @@ V2_DOSSIER_TOOL = {
                     "member_candidate_ids": {"type": "array", "minItems": 1,
                                              "items": {"type": "string"}},
                     "post": {"type": "string", "maxLength": 8000},
-                    "selected_fetch_id": {"type": "string"},
+                    "selected_fetch_id": {"type": "string", "description":
+                        "Best reader-facing receipt, not the whole evidence list. Must also appear in evidence_fetch_ids. Use its returned receipt ID, or exact native source URL when submitted in this dossier."},
                     "evidence_fetch_ids": {"type": "array", "minItems": 1,
+                                           "description": "Inspected sources supporting or qualifying THIS story; only these receipts reach its editor. Include relevant new native sources by exact URL when submitted in this dossier. Include selected_fetch_id; exclude unrelated sources.",
                                            "items": {"type": "string"}},
                     "elevated_claim": {"type": "boolean"},
                     "reader_value": {"type": "string", "maxLength": 800},
-                    "reporting_note": {"type": ["string", "null"], "maxLength": 800},
+                    "reporting_note": {"type": ["string", "null"], "maxLength": 800,
+                        "description": "Short handoff context, not evidence. Sources described as support must also be cited in this story's evidence_fetch_ids."},
                     "reason": {"type": "string", "maxLength": 500},
                     "storyline_key": {"type": ["string", "null"]},
                 },
@@ -424,7 +427,8 @@ V2_DOSSIER_TOOL = {
                              "update_reason"],
             }},
             "run_note": {"type": "string", "maxLength": 1200},
-            "native_sources": reporter.SOURCE_SCHEMA,
+            "native_sources": {**reporter.SOURCE_SCHEMA, "description":
+                "Retain source-specific extracts from observed native URLs. Retention here alone does not attach evidence to a story: cite relevant exact URLs in that story's evidence_fetch_ids, and selected_fetch_id if chosen for readers."},
             "desk_feedback": reporter.FEEDBACK_SCHEMA,
         },
         "required": ["decisions", "stories", "storyline_updates", "run_note", "native_sources", "desk_feedback"],
