@@ -1,6 +1,6 @@
 # Sprint 0064 — reporting follow-through
 
-September 7, 2026. Independently reviewed and deployed; natural-run findings and repair below.
+September 7, 2026. Independently reviewed, deployed and smoke-tested; rolling audit restored.
 Plan: PLAN-0064-REPORTING-FOLLOW-THROUGH.md.
 
 ## What changed
@@ -127,4 +127,23 @@ The independently approved repair only renames that branch-local variable. A rea
 reproduces the failure in both successful replacement and stale-base suppression, then verifies
 the original intake is recorded, the existing post is updated exactly once, and the mutation is
 confirmed. All publication guards and recovery behavior are unchanged. Follow-up deployment and
-audit restoration evidence will be recorded here.
+audit restoration evidence follows.
+
+## Final release verification
+
+- Repair runtime **`c7887fd`**, pushed and deployed from a new clean archive. Independent lead
+  approved the exact rename and independently passed all eleven follow-through tests. Full
+  working-tree suite: **506 passed**; clean archive: **504 passed**.
+- Fresh online backup `/data/backups/nbn-pre-source-policy-20260907T170748Z.db` passed integrity
+  checking. No historical rows, pending mutations or old decision summaries were rewritten.
+- Follow-up Railway deployment **`642a327c-c793-4d14-8b04-a1e7c489a06e`** is **SUCCESS**. The
+  same ten HTTP checks passed again. Main hash
+  `c5fa296aec49e235959d6da41573b68990636f5237a066442478fbe2f8fd8d4d` and the three unchanged
+  newsroom/editor/orientation hashes matched the intended archive.
+- Two natural worker cycles completed after the repair with no worker error; the next normal
+  editorial slot was still pending at sign-off. The successful-replacement edge itself was
+  replayed in isolated regression tests, not forced again against Typefully. A read-only
+  Typefully GET confirmed draft 10663389 has the edited copy and is still unpublished.
+- Existing **15-minute rolling audit ACTIVE**, with its notification/autonomy limits preserved
+  and Plan 0064 checks added, including activity during the pause. Autopost **OFF**; no model,
+  cadence, budget, credential, Node or Perception changes. Unrelated dirty work remains intact.

@@ -1,6 +1,7 @@
 # Plan 0064 — finish the reporting, carry it into editing
 
-Status: independent lead approved implementation on September 7. Owner delegated this sprint's priorities,
+Status: built and deployed September 7; independently reviewed, with smoke-discovered repair.
+Owner delegated this sprint's priorities,
 plan/review/implementation/deployment/smoke cycle on September 7, 2026.
 
 ## Outcome and evidence

@@ -167,6 +167,15 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
+Plan 0064 shipped reporting follow-through as `c5c9096`; production smoke exercised the real
+writer/editor handoff and exposed an older intake-variable shadowing bug after successful draft
+replacement. Independently reviewed repair `c7887fd` preserves the intake list for decision
+recording, with no change to publishing rules. Clean-release suite: 504 tests; working tree: 506
+(two unrelated evaluation tests excluded from release). Runtime deployment is
+`642a327c-c793-4d14-8b04-a1e7c489a06e` (SUCCESS). See SPRINT-0064-FINDINGS.md for verification,
+the $0.14338 natural Liquid run, remaining guide-link/source-date weaknesses and audit state.
+No manual Typefully mutation was made; the ordinary worker updated existing Liquid draft 10663389.
+
 Plan 0058 adopted the measured multiprovider roster. Its replay follow-up fixed Responses
 tool submission and preparation-schema bounds. Plan 0059 shipped craft examples and new-run
 Background provenance preservation; nine historical replay tests did NOT validate automatic
