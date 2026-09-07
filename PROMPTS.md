@@ -90,5 +90,6 @@ read the recorded model/provider fields for actual execution.
 
 Edit runtime sources, not this index. Do not modify runtime prompts merely to modernize
 historical model names. Policy changes require owner approval; the rolling audit may make
-bounded writing-execution improvements under its explicit scope. Test prompt-bound invariants,
+bounded writing/reporting-execution improvements under its explicit scope, including clearer use
+of useful existing or newly added tools without redefining editorial policy. Test prompt-bound invariants,
 bump the version when behavior changes, deploy deliberately and inspect actual output.

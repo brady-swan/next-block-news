@@ -126,8 +126,13 @@ See DESK-GUIDE.md for clock and metric definitions.
 The in-worker daily receipt audit is disabled by owner decision September 6; historical results
 remain. The separate Codex rolling audit continues after the build pause.
 The latter may repair technical regressions and tune execution of the approved writing style,
-but broader editorial/model/source/research/cadence changes need approval. Audit evidence,
-owner comments, rewrites, misses and peer speed comparisons remain part of the review.
+and, under the September 7 owner expansion, proactively ship obvious bounded improvements
+within the existing design, including useful reporting tools such as PDF-text reading. A new
+capability is not automatically a systemic change. Track rationale, tests, cost/behavior impact,
+deployment/smoke and rollback; keep autopost OFF. Systemic design, editorial-policy, model,
+cadence, significant recurring-spend and vendor changes need review. Audit evidence, owner
+comments, rewrites, misses and peer speed comparisons remain part of the review. Read
+AUDIT-AUTONOMY.md for the exact scope; runtime PDF support is still absent until built.
 
 Plan 0061 adds bounded safe run observations and source-health recording. Exact writer packets
 are saved after shaping; research and true editor returns retain provenance. Missing/pruned history

@@ -442,10 +442,13 @@ September 6 (`NBN_AUDIT_UTC` empty). Historical records and implementation remai
 calls a model or stages correction drafts on schedule.
 
 The separate rolling production audit follows `AUDIT-AUTONOMY.md`. It may diagnose and repair
-clear technical regressions, then test, deploy, smoke, or roll back the smallest safe fix. It may
-collect editorial evidence and make bounded prompt improvements to execute the already-approved
-writing style. Source weighting, standards, corroboration, research, model, cadence and design
-changes still require approval. Its emergency publication-safety authority is one-way: it may turn
+clear technical regressions and proactively ship obvious bounded tool, research-execution,
+writing, Desk and efficiency improvements within the existing design (owner expansion September 7).
+PDF-text reading is an explicitly authorized example, not an already implemented capability.
+Record rationale, test/deploy/smoke evidence, cost/behavior impact and rollback. Systemic design,
+editorial-policy, source-weighting, model, cadence and significant recurring-spend changes still
+require approval. Keep autopost OFF during calibration, including correcting unexpected drift.
+Its emergency publication-safety authority is one-way: it may turn
 autopost off when a systemic publishing problem is evidenced, must notify the owner immediately,
 and may never turn autopost on.
 

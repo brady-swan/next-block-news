@@ -1,8 +1,11 @@
 # Rolling Audit Autonomy
 
 The rolling production audit is an operational steward for Next Block News. It may investigate
-and repair the machinery on its own, but it does not independently redefine the publication's
-editorial judgment.
+and improve the machinery on its own, but it does not independently redefine the publication's
+editorial judgment or system design. Owner expanded this scope on September 7, 2026: during
+calibration, proactively ship obvious, bounded improvements that confidently serve the agreed
+product goals. New useful capabilities need not be disguised as regression fixes. Keep autopost
+OFF, track the work, preserve rollback, and reserve systemic changes for owner review.
 
 ## Automatically investigate
 
@@ -24,6 +27,32 @@ API or schema incompatibility, dashboard defects, missing telemetry, retry defec
 delivery defects, or behavior that plainly violates an already-approved invariant. Preserve
 owner changes and the current editorial policy. Roll back when the repair does not pass its
 checks or causes a regression, and report the action and evidence.
+
+## Automatically make bounded, non-systemic improvements
+
+The audit may choose, implement, review, test, deploy and smoke small improvements when the
+benefit is concrete, the change fits the existing design and editorial approach, and there is
+high confidence Brady would agree. Do not wait for repeated failures or another approval merely
+because a useful capability is new. One worthwhile blocked source or clear workflow gap can
+justify a proportionate fix.
+
+Examples include direct PDF-text reading within the existing source-fetch path; better article
+extraction or source-link handling; making existing research/memory easier to find and use;
+small prompt/tool clarifications that improve execution of approved reporting and writing;
+and useful Desk, observability, reliability or efficiency improvements. A bounded PDF reader is
+explicitly within scope, not a new architecture sprint. Preserve evidence provenance and honest
+limitations; adding a reader must not pretend scanned pages were read when extraction failed.
+
+Use the established independent review for substantive implementation, proportionate tests,
+clean deployment and smoke checks. Record the observed need, rationale, exact change, version,
+test/production evidence, likely cost/behavior impact, remaining limitations and rollback path.
+Prefer existing tools and budgets. Roll back code/config safely if checks fail or results regress;
+this does not authorize destructive data restoration. Report meaningful shipped improvements.
+
+Researcher/writer feedback is one input for this judgment, not an instruction to execute blindly.
+Validate the need against actual work. Avoid accumulating speculative capabilities or turning
+a small fix into a new subsystem. Escalate when expected costs, blast radius, editorial effects
+or rollback are meaningfully uncertain.
 
 ## Observability checks (Plans 0060-0061)
 
@@ -138,17 +167,30 @@ include focused regression coverage, bump the prompt version when production beh
 and be tested, deployed, smoked, and reported. Prefer the smallest prompt clarification before
 adding machinery.
 
-Writing-tuning authority may not change which stories qualify, source weighting, publication
-standards, corroboration, freshness, model choice, cadence, research behavior, system design,
-or publishing behavior. If a proposed writing change could materially affect any of those, seek
-Brady's approval first.
+Writing-tuning authority may not redefine which stories qualify, source weighting, publication
+standards, corroboration or freshness policy, model choice, cadence, system design or publishing
+behavior. Bounded reporting-tool and execution improvements are separately allowed above;
+systemic or editorial-policy changes still need Brady's approval.
 
-## Propose editorial improvements
+## Propose systemic and editorial-policy changes
 
-Do not autonomously ship source weighting, publication standards, prompt or orientation changes
-outside the bounded writing-execution authority above, corroboration policy, model choice,
-cadence, or any other change expected to materially affect what gets published. Diagnose the
-issue, collect examples, and recommend a bounded change for Brady's approval.
+Do not autonomously change the newsroom architecture or role split, memory architecture,
+publication standards or topical remit, source weighting, corroboration/freshness policy,
+publishing behavior, model roster, cadence, significant recurring spend or service/vendor
+commitments. Broad prompt/orientation rewrites that redefine those policies are not execution
+tuning. Node separation and Perception configuration remain owner decisions. Diagnose, collect
+examples and propose the change; wait for Brady to review systemic changes at the keyboard.
+The distinction is improving execution of the agreed newsroom versus redefining the newsroom,
+not whether a change adds a tool or produces more useful drafts.
+
+## Current autopost instruction
+
+Keep autopost **OFF** throughout calibration until Brady explicitly changes that instruction.
+Verify it during checks and deployments; if it unexpectedly drifts on, restore OFF and report
+the discrepancy. The full drafting/research/editor stack and its already-approved normal
+Typefully delivery behavior continue. This is not permission for the audit to manually publish,
+rewrite or dismiss drafts. The emergency authority below also applies after any future
+owner-authorized return to autopost.
 
 ## Emergency autopost authority
 
@@ -168,6 +210,6 @@ autopost back on.
 - Queue owner skip overrides or stage/dismiss/retry actions without an explicit owner request.
 - Publish, dismiss, rewrite, or otherwise mutate Typefully content or resolve ambiguous Typefully
   state.
-- Ship editorial improvements outside the bounded writing-execution authority without approval.
+- Ship systemic or editorial-policy changes outside the bounded improvement authority above.
 - Alter credentials.
 - Perform destructive database work.

@@ -34,14 +34,16 @@ readable copy, timely receipts, few duplicate drafts, and sustainable cost matte
 - Source contribution: incremental NBN-native versus Node leads, not raw candidate totals.
   Further separation from the Node remains an owner decision.
 
-## Proposals, not commitments
+## Next bounded improvements and later proposals
 
 1. Measure Plan 0064's original-source follow-through and empty-finalization reduction on natural
    runs, especially whether promised versus completed actions remain distinct and prior drafts
    are not mistaken for published truth.
 2. Targeted primary-data discovery improvements only after measured latency shows a useful gap.
-3. Consider direct PDF-text support only if repeated worthwhile blocked sources justify it;
-   the current adapter reports that limitation honestly. The internal daily audit stays disabled.
+3. Add bounded direct PDF-text support when useful source evidence warrants it. The owner
+   explicitly authorized this class of tool improvement on September 7; repeated blocks or a
+   further approval are not prerequisites. Current runtime still reports unsupported PDFs.
+   The internal daily audit stays disabled.
 4. Later removal of legacy v1/Block code after the owner is comfortable losing that rollback.
 
 No new publishing quotas, automated data filler, new social channel, paid API tier, source
@@ -51,7 +53,8 @@ engagement is already ingested as weak context; it is not a future X-paid analyt
 
 ## Autonomy
 
-AUDIT-AUTONOMY.md governs investigation, technical repairs, bounded writing-execution tuning,
-and proposed editorial improvements. Autopost may be turned off for an evidenced systemic
-problem; only the owner can authorize enabling it. Preserve the existing independent review,
-test/deploy/smoke discipline, with the smallest sufficient change.
+AUDIT-AUTONOMY.md governs investigation, technical repairs and proactive bounded improvements
+to the agreed newsroom, including useful new tools and prompt execution. Keep autopost OFF;
+systemic and editorial-policy changes remain proposals for the owner. Preserve the existing
+independent review, test/deploy/smoke discipline, work records and rollback, with the smallest
+sufficient change. No separate approval is needed for each obvious non-systemic improvement.
