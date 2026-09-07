@@ -194,8 +194,15 @@ Article links, byline, publication metadata and limitations survive extraction. 
 are failed material, not useful source text. Explicitly marked HTML article bodies are selected
 before text/link caps so long navigation menus cannot crowd out the story; ambiguous or unmarked
 pages retain the existing whole-page fallback. This does not read video or unlock blocked pages.
-PDF responses return `unsupported_document`, not raw bytes registered as inspected evidence.
-The writer can use another existing retrieval route; no primary-only requirement is added.
+Text-based PDF responses use local Poppler extraction in the same fetch route. At most the first
+20 pages are parsed, within 10 seconds and the caller's remaining deadline; parser inputs over
+10 MiB are rejected. The existing HTTP download happens before that parser-input check. Returned
+text still obeys the ordinary source allowance (normally 8,000 characters), with page markers
+and explicit clipping/text-only limitations. This is not full-document reading, OCR or chart/
+table-layout verification. No author or publication date is inferred from PDF file metadata.
+Unreadable, protected, image-only or timed-out documents return empty typed failures, never
+binary receipts. Limitations survive the editor and next-session memory. The writer can use
+another existing retrieval route for missing material; no primary-only requirement is added.
 Native source manifests cite exact observed URLs;
 code registers source-specific receipts before validating even a same-response dossier.
 The writer is prompted to include useful supporting and qualifying receipts for each story,
@@ -444,7 +451,8 @@ calls a model or stages correction drafts on schedule.
 The separate rolling production audit follows `AUDIT-AUTONOMY.md`. It may diagnose and repair
 clear technical regressions and proactively ship obvious bounded tool, research-execution,
 writing, Desk and efficiency improvements within the existing design (owner expansion September 7).
-PDF-text reading is an explicitly authorized example, not an already implemented capability.
+Bounded PDF-text reading is implemented within that authority; see
+`AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md` for scope and verification.
 Record rationale, test/deploy/smoke evidence, cost/behavior impact and rollback. Systemic design,
 editorial-policy, source-weighting, model, cadence and significant recurring-spend changes still
 require approval. Keep autopost OFF during calibration, including correcting unexpected drift.

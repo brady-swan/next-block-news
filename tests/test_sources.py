@@ -113,10 +113,10 @@ class SourceFetchSafetyTests(unittest.TestCase):
                     client.return_value.__enter__.return_value.get.return_value = response
                     result = sources.fetch_article("https://example.com/source")
                 self.assertEqual(result["outcome"], "evidence_failed")
-                self.assertEqual(result["error_kind"], "unsupported_document")
+                self.assertEqual(result["error_kind"], "pdf_extraction_failed")
                 self.assertEqual(result["text"], "")
                 self.assertEqual(result["published_at"], "")
-                self.assertIn("no document text was inspected", result["error_message"])
+                self.assertIn("could not be read", result["error_message"])
 
     def test_pdf_redirect_keeps_source_provenance_without_a_receipt(self):
         start = "https://example.com/release"

@@ -33,7 +33,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.18-reporting-followthrough"
+PROMPT_VERSION = "editorial-core-v2.19-pdf-text"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -544,7 +544,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "fetch_source",
-        "description": "Safely fetch one eligible public source page returned by discovery.",
+        "description": "Fetch one public source page or text-based PDF. PDF excerpts cover at most the first 20 pages within the source-text allowance; respect clipping and text-only limitations. No OCR or image/chart verification.",
         "strict": True,
         "input_schema": {
             "type": "object", "additionalProperties": False,
@@ -904,6 +904,8 @@ class NewsroomSession:
                     content_fingerprint=fingerprint, outcome="ok",
                     adapter_provenance="newsroom_story_memory", inspected_at=inspected_at,
                     retrieval_kind=str(raw.get("retrieval_kind") or "direct_fetch"),
+                    published_at=str(raw.get("published_at") or "")[:160],
+                    limitations=str(raw.get("limitations") or "")[:500],
                 )
                 self.fetches[fetch_id] = record
                 # Archival evidence must never satisfy a request for a fresh URL fetch.
@@ -915,6 +917,8 @@ class NewsroomSession:
                     "status": "revalidated_cached_evidence",
                     "retrieval_kind": record.retrieval_kind,
                     "evidence_capability": record.evidence_capability,
+                    "published_at": record.published_at,
+                    "limitations": record.limitations,
                 })
             editor = memory.get("editor") or {}
             delivery = writer_memory.publication(self.con, key) or memory.get("delivery") or {}
@@ -2976,6 +2980,8 @@ class NewsroomSession:
                         "content_fingerprint": record.content_fingerprint,
                         "text": record.text,
                         "retrieval_kind": record.retrieval_kind,
+                        "published_at": record.published_at,
+                        "limitations": record.limitations,
                     } for record in evidence if record is not None and record.eligible][:8],
                 })
             if failure:

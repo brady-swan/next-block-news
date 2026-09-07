@@ -40,10 +40,10 @@ readable copy, timely receipts, few duplicate drafts, and sustainable cost matte
    runs, especially whether promised versus completed actions remain distinct and prior drafts
    are not mistaken for published truth.
 2. Targeted primary-data discovery improvements only after measured latency shows a useful gap.
-3. Add bounded direct PDF-text support when useful source evidence warrants it. The owner
-   explicitly authorized this class of tool improvement on September 7; repeated blocks or a
-   further approval are not prerequisites. Current runtime still reports unsupported PDFs.
-   The internal daily audit stays disabled.
+3. Observe the bounded PDF reader: useful original-source upgrades, explicit clipping, unread
+   scans, extraction failures and memory retaining limitations. Add further document navigation
+   only if actual reporting needs justify it; this is not an OCR or full-document-reading system.
+   The internal daily audit stays disabled. See AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md.
 4. Later removal of legacy v1/Block code after the owner is comfortable losing that rollback.
 
 No new publishing quotas, automated data filler, new social channel, paid API tier, source

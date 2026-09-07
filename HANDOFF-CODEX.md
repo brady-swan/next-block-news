@@ -76,10 +76,12 @@ Packet-pressure repair: optional full storyline cards become retrievable index e
 an oversized compact desk is refused. The 64 KiB limit, candidate identity, source receipts,
 owner overrides and lookup budgets are unchanged. See AUDIT-FIX-2026-09-07-DESK-COMPACTION.md.
 
-The ordinary article adapter reads HTML/text, not PDFs. PDF MIME/signature detection returns
-`unsupported_document` with no receipt or stored evidence, while preserving the final URL and
-redirect trail. Native retrieval and other existing sources remain available. This is an honest
-format limitation, not a publication gate or a newly added PDF-reading capability.
+The article adapter now reads text-based PDFs through local Poppler, detected by MIME/signature.
+The first 20 pages, 10 MiB parser-input and 10-second/deadline bounds are separate from the
+ordinary 8,000-character receipt allowance. Source URLs/redirects and explicit partial/text-only
+limits survive into editor and next-session memory. No OCR, chart/layout verification or dates
+inferred from file metadata. Unreadable PDFs remain empty failures; native retrieval and other
+sources remain available. See AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md for release proof.
 
 Article-body selection repair: explicitly marked HTML story bodies take precedence over long
 navigation menus before the existing text and link caps. Unmarked/ambiguous pages keep the
@@ -132,7 +134,7 @@ capability is not automatically a systemic change. Track rationale, tests, cost/
 deployment/smoke and rollback; keep autopost OFF. Systemic design, editorial-policy, model,
 cadence, significant recurring-spend and vendor changes need review. Audit evidence, owner
 comments, rewrites, misses and peer speed comparisons remain part of the review. Read
-AUDIT-AUTONOMY.md for the exact scope; runtime PDF support is still absent until built.
+AUDIT-AUTONOMY.md for the exact scope and the PDF improvement record for implemented limits.
 
 Plan 0061 adds bounded safe run observations and source-health recording. Exact writer packets
 are saved after shaping; research and true editor returns retain provenance. Missing/pruned history

@@ -36,7 +36,7 @@ class ReporterWriterTests(unittest.TestCase):
                 client.return_value.__enter__.return_value.get.return_value = response
                 result = desk._fetch(url, intake={"url_hash": "pdf-test", "title": "BSP proposal"})
             self.assertFalse(result["ok"])
-            self.assertEqual(result["error_kind"], "unsupported_document")
+            self.assertEqual(result["error_kind"], "pdf_extraction_failed")
             self.assertFalse(result["retry_same_call"])
             self.assertEqual(desk.fetches, {})
             self.assertEqual(desk.fetch_chars, 0)

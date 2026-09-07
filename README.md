@@ -31,7 +31,8 @@ for the bounded diagnostics and live verification; models, budgets and cadence a
 
 | Module | Responsibility |
 |---|---|
-| `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article text, FRED charts |
+| `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article/PDF text, FRED charts |
+| `nbn/pdf_source.py` | Local bounded Poppler text extraction; explicit partial/no-OCR limits |
 | `nbn/lead_material.py` | Bounded long X text, quoted sources, media pointers and metric age; discovery, not evidence |
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
 | `nbn/desk_prep.py` | Run-scoped Luna distillation/routing; protected work and every failure advance |
@@ -145,6 +146,11 @@ python3.12 -m unittest discover -s tests -v
 Configuration is read from environment variables; the code does not automatically load
 `.env`. Python 3.12 or newer is required. Defaults keep autopost disabled. Be careful when
 using `railway run`, which injects the production service environment.
+
+PDF source reading and its offline fixtures require Poppler (`pdftotext`): `brew install poppler`
+on macOS or the `poppler-utils` package on Debian/Ubuntu. The Dockerfile installs it for production.
+There is no new model/API fee for extraction. Text excerpts retain the existing fetch budgets;
+scans, figures and the unreturned parts of long documents are not inspected evidence.
 
 The test package removes inherited credentials, forces autopost off, uses temporary data
 paths, and blocks real socket connections. HTTP, model, and publisher boundaries must be

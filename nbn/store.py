@@ -2449,6 +2449,8 @@ def _bounded_memory_evidence(raw: dict) -> dict:
         "truncated": bool(raw.get("truncated") or text != str(raw.get("text") or "")),
         "text": text,
         "retrieval_kind": str(raw.get("retrieval_kind") or "direct_fetch")[:40],
+        "published_at": str(raw.get("published_at") or "")[:160],
+        "limitations": str(raw.get("limitations") or "")[:500],
     }
 
 
