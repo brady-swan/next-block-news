@@ -37,5 +37,20 @@ oversized mandatory packet still defers. This does not promise unlimited packet 
   60,604 bytes, keeping all 13 candidates and all six prepared receipts unchanged. No model,
   source-provider or publishing calls; no writes to the live database.
 
-Release and natural-cycle smoke evidence will be recorded after deployment. Rollback is
-the previous runtime; no database rollback or configuration change is needed.
+## Production release
+
+- Runtime `b26d3ab` pushed to origin/main, deployed from clean archive
+  `/tmp/nbn-desk-compaction-release.qE6vee`; **490 clean-release tests passed**.
+- Online backup `/data/backups/nbn-pre-source-policy-20260907T134542Z.db` passed the
+  full integrity check. No schema or configuration change.
+- Railway deployment `38ac4c30-a6b3-43b4-864a-02884dab743a` reached SUCCESS on the
+  existing production service, one replica and `/data` volume.
+- Runtime newsroom SHA-256 `950177ac4520b7c4c33c8711fc15cdf779dff9f95d514253299711c08c354105`
+  matches the release. All four authenticated Desk views returned 200. Public health
+  reports two natural cycles after restart, latest completed 13:49:56 UTC, no error,
+  autopost OFF. No pending delivery or unfinished X pagination.
+- No post-deployment nonempty newsroom session had occurred at smoke time. The isolated
+  reconstruction verifies the precise failure path without forcing a paid model run.
+  The existing rolling audit remains ACTIVE and will watch the next ordinary session.
+
+Rollback is the previous runtime; no database rollback or configuration change is needed.
