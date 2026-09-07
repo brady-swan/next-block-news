@@ -43,3 +43,35 @@ Regression fixture reproduces a published event followed by two aliased open dra
 and TAPE outputs. Before the fix, the reader card contained the failed/TAPE ledes. The repaired
 normal and compact packets separately retain the published and draft ledes, preserve aliases,
 and retain UNCERTAIN duplicate protection. Release and smoke results follow below.
+
+## Production release
+
+- Working-tree suite: **495 tests passed** (two unrelated evaluator tests included).
+  Clean archive `/tmp/nbn-coverage-copy-release.361R0E`: **493 tests passed**.
+- Runtime `81eb8d5` pushed to origin/main and deployed to existing production as Railway
+  `9ed211cb-8160-4aa9-88fa-a895aa71fbf9`, SUCCESS. One replica and `/data` unchanged.
+- Online backup `/data/backups/nbn-pre-source-policy-20260907T161202Z.db` passed the
+  backup script's full integrity check. No schema, configuration or source-policy migration.
+- Production newsroom SHA-256
+  `90bcb46739bbb1cca014711ec2a0d14db61635fe0185e3bcaab768d7405e2845`
+  and store SHA-256
+  `e964b8410d27a32e71e0801efca69c793541e46ff8e2c1a4e789ffe8b147cb34`
+  match the clean release. The preceding article-extraction repair remains installed.
+- Read-only production card construction for the real Liquid canonical event now puts the
+  original incident and conditional-return published ledes in reader coverage; only the
+  unpublished 3,998-BTC claim appears in the draft list. This proves corrected projection,
+  not that a model has already researched the 3,400-BTC lead or corrected the draft.
+- All four authenticated Desk JSON views and public health returned 200. The new worker
+  initially respected the previous process's short lease; after normal expiry it completed
+  a natural cycle at **16:17:29 UTC**. Interrupted run `cycle:1788797689:dd95c646` was
+  recovered as `fallback` / `interrupted_before_materialization`, with six candidates still
+  pending, zero items held and no delivery mutation. No lease/DB/manual retry was forced.
+- Worker healthy, Node 16:00 pulse fresh, autopost OFF, no pending delivery. Next normal
+  editorial deadline is approximately 16:29:49 UTC; no post-deploy nonempty writer packet
+  is claimed. The ACTIVE rolling audit will check natural behavior and any new recovery lead.
+- Historical packets, wrong Liquid draft, Strategy draft, prompts and publisher rules are
+  unchanged. Rollback is the prior code; no database restore is required.
+
+The newer transaction subsequently confirmed in block 965950 (16:09:25 UTC); a direct API
+check around 16:16 UTC verified its amounts/status. This updates the earlier audit observation,
+not production copy or receipt records. Recipient ownership remains attributed to prior reporting.
