@@ -110,3 +110,12 @@ destruction, PDF/browser acquisition, larger model/retrieval budgets, or new pub
 The previously identified Liquid/Strategy drafts remain owner review items, not sprint mutations.
 Rollback uses the prior verified runtime (`81eb8d5`) if a runtime regression appears; additive
 optional dossier/catalog fields require no destructive schema migration.
+
+## Smoke-discovered technical follow-up
+
+The first natural run completed reporting/editing and replaced the existing Liquid update draft,
+then exposed an older variable-shadowing bug in legacy decision recording. The independent lead
+approved renaming only the existing-update branch's `pending` local to `pending_update_draft`.
+Regression coverage must use real decision storage and mutation finalization for a successful
+replacement, plus stale-base suppression. No production-data rewrite or delivery retry. See the
+findings report for exact run/cost/release evidence and remaining source-selection limitations.

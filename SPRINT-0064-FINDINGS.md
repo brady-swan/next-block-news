@@ -1,6 +1,6 @@
 # Sprint 0064 — reporting follow-through
 
-September 7, 2026. Implementation/review complete; release verification pending below.
+September 7, 2026. Independently reviewed and deployed; natural-run findings and repair below.
 Plan: PLAN-0064-REPORTING-FOLLOW-THROUGH.md.
 
 ## What changed
@@ -71,12 +71,60 @@ essential. Watch actual source upgrades, original dates, corroboration and selec
 the reporting note is not proof of those actions. Compare natural post usefulness, latency and
 cost, not research counts alone. Check the new finalization observations and any guard deferrals.
 
-Existing Liquid draft 10663389 and Strategy draft 10663976 remain owner-review items; this sprint
-does not modify or dismiss them. Autopost remains OFF. Node and Perception are unchanged. The
+Strategy draft 10663976 remains an owner-review item. No manual draft mutation or dismissal was
+performed. The normal worker updated Liquid draft 10663389 during the natural smoke (see below).
+Autopost remains OFF. Node and Perception are unchanged. The
 dated system PDF still represents the same architecture; current prose documents describe these
 protocol/prompt refinements without regenerating the PDF.
 
 ## Release evidence
 
-Pending clean-archive tests, backup, Railway deployment, HTTP/runtime checks and natural run.
-The existing rolling audit is paused for the build and will be restored with Plan 0064 watches.
+- Runtime commit `c5c9096`, pushed and deployed from a clean archive, not the dirty worktree.
+  Clean-release suite: **503 tests passed**. Unrelated owner/evaluation work was excluded.
+- Online SQLite backup `/data/backups/nbn-pre-source-policy-20260907T164834Z.db` passed its
+  integrity check before deployment. Rollback runtime remains `81eb8d5`.
+- Railway deployment `c7509510-00a4-464d-80b7-d390aa70590a` is **SUCCESS** on the existing
+  production service, with one replica and the existing `/data` volume.
+- At 11:53 AM CT, `/health`, `/status`, all four Desk pages and all four authenticated workspace
+  views returned HTTP 200. Production hashes for newsroom, main, editor and the orientation
+  brief matched the clean release. Writer v2.18 and preparation v2.5 were loaded; no worker error.
+- Autopost remains **OFF**. Writer/editor models and efforts, six-response/360-second allowance,
+  and four-call retrieval allowance are unchanged. No manual production run or Typefully mutation.
+
+## First natural run and the smoke-discovered repair
+
+Run `cycle:1788800447:34e6afcd`, 12:00:51–12:02:05 PM CT, processed ten items; preparation sent
+nine to the writer and one to Background. The exact writer packet contained the new assignment,
+canonical event identity and confirmed-copy catalog fields in **54,389 bytes**, below the 64 KiB
+cap. The run table's longstanding 40-character version bound truncates the suffix; the exact
+writer-input observation preserves `editorial-core-v2.18-reporting-followthrough`.
+
+The writer used three responses and three native calls, grouped four Liquid leads into one
+material update, and passed six source-specific receipts plus its reporting note to the editor.
+Preparation cost $0.00398150, writer $0.11391250, editor $0.02548600: **$0.14338000** recorded
+model/provider cost for the run, excluding shared intake/source-service costs. No added diagnostic
+run was invoked. Plain-completion finalization/receipt repair and UPDATE normalization were not
+needed on this natural case; their edge paths are regression-tested, not claimed live-exercised.
+
+The editor accepted the distinction between a promised return and confirmed return of 3,400 BTC,
+tightened the lede and removed accelerator mechanics without primary transaction proof. Normal
+production replacement updated the existing untouched draft **10663389**, rather than creating a
+second draft or publishing. The worker had already replaced its earlier incorrect 3,998-return
+copy with an unconfirmed-3,400-return draft before this run; this run advanced confirmation.
+
+This is better story handling, but **not a complete original-source win**: the final selected link
+is still Simply Bitcoin's X post, despite additional reporting in the evidence set, and no direct
+transaction-detail fetch was performed. The writer's “independent reports” claim is its own
+summary, not a verified independence count. Audit these choices and native-source dates.
+
+After confirmed delivery, a pre-existing variable-shadowing bug (introduced in `3ed0787`) raised
+`TypeError` while recording the legacy last-decision summary: the existing-update branch replaced
+the `pending` intake list with a draft dictionary. Delivery and newsroom observations were already
+saved; the worker continued, but this run's last-decision summary did not update. No remote retry
+or historical rewrite was attempted.
+
+The independently approved repair only renames that branch-local variable. A real-store regression
+reproduces the failure in both successful replacement and stale-base suppression, then verifies
+the original intake is recorded, the existing post is updated exactly once, and the mutation is
+confirmed. All publication guards and recovery behavior are unchanged. Follow-up deployment and
+audit restoration evidence will be recorded here.

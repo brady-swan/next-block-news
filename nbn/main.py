@@ -629,15 +629,15 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                   "incoherent distinct relation to reader-visible event")
                 continue
             if output_state["drafts"]:
-                pending = output_state["drafts"][0]
-                if pending.get("coverage_relation") != "material_update" \
-                        or int(pending.get("base_post_id") or 0) != base_post_id:
+                pending_update_draft = output_state["drafts"][0]
+                if pending_update_draft.get("coverage_relation") != "material_update" \
+                        or int(pending_update_draft.get("base_post_id") or 0) != base_post_id:
                     suppress_existing(
                         story_id, members, resolution.story_key,
                         "legacy or stale pending draft requires owner cleanup",
                     )
                     continue
-                operation, target_draft = "replace_draft", pending
+                operation, target_draft = "replace_draft", pending_update_draft
         elif output_state["state"] == "open_draft":
             if relation not in {"same_event", "material_update"}:
                 suppress_existing(story_id, members, resolution.story_key,

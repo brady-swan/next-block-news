@@ -235,6 +235,46 @@ class ReportingFollowthroughTests(unittest.TestCase):
         self.assertIn("primary-only publication requirement", reporter.GUIDANCE)
         self.assertIn("viability, timing or scope of legislation", newsroom.ORIENTATION_BRIEF)
 
+    def test_pending_update_draft_preserves_intake_for_decision_recording(self):
+        for stale in (False, True):
+            with self.subTest(stale=stale), temporary_store() as con, ExitStack() as stack:
+                body = "UPDATE: The SEC announced a Bitcoin policy update."
+                row, _, draft, desk = materialization_fixture(con, "pending-update", post=body)
+                draft["coverage_relation"] = "material_update"
+                store.log_post(con, "sec-bitcoin-policy", "prior-item", "primary",
+                               "Prior announcement.", "https://www.sec.gov/prior", "IMMEDIATE",
+                               "prior", publisher_backend="typefully")
+                base_id = con.execute("SELECT MAX(id) FROM posts").fetchone()[0]
+                store.log_post(con, "sec-bitcoin-policy", "draft-item", "primary",
+                               "UPDATE: Prior draft.", "https://www.sec.gov/prior-update", "DRAFT",
+                               "existing", publisher_backend="typefully", coverage_relation="material_update",
+                               base_post_id=base_id + 1 if stale else base_id)
+                stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="token"))
+                stack.enter_context(patch.object(newsroom, "start_session", return_value=desk))
+                review = stack.enter_context(patch.object(editor, "review_newsroom_batch", return_value={
+                    "ok": True, "decisions": {"sec": {"verdict": "publish", "post": body, "reason": "New fact."}}}))
+                publish = stack.enter_context(patch.object(main.publisher, "publish"))
+                replace = stack.enter_context(patch.object(main.publisher, "replace_draft", return_value=("DRAFT", "existing")))
+                stack.enter_context(patch.object(main.publisher, "backend_name", return_value="typefully"))
+                stack.enter_context(patch.object(main.publisher, "intended_mode", return_value="DRAFT"))
+                stack.enter_context(patch.object(config, "RUN_NEWSROOM_MODE", "live"))
+                self.assertTrue(store.acquire_cycle_lease(con, "test-owner"))
+                result = main._run_editorial_v2(con, lease_owner="test-owner", pipeline_run_id="pending-update",
+                    inventory=[row], pending=[row], result={k: 0 for k in
+                    ("held", "skipped", "posted", "drafted", "uncertain", "failed", "taped")},
+                    theme_snapshot=[], overrides={}, run_started=time.time())
+                recorded = json.loads(store.kv_get(con, "desk:last_decision_run"))
+                self.assertEqual([d["url_hash"] for d in recorded["items"]], [row["url_hash"]])
+                publish.assert_not_called()
+                if stale:
+                    review.assert_not_called()
+                    replace.assert_not_called()
+                else:
+                    replace.assert_called_once()
+                    self.assertEqual(result["drafted"], 1)
+                    self.assertEqual(con.execute("SELECT body FROM posts WHERE nuelink_id='existing'").fetchone()[0], body)
+                    self.assertEqual(con.execute("SELECT state FROM publisher_mutations").fetchone()[0], "confirmed")
+
     def test_assignment_is_included_in_packet_byte_cap(self):
         with temporary_store() as con, patch.object(config, "EDITORIAL_ENGINE", "v2"):
             desk = session(con)
