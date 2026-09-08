@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-08 for Plan 0069 and its dense-packet follow-up. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-08 for the completed Plan 0070 visual correctness release. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -238,7 +238,16 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
-Current runtime **684fd39 / editorial-core-v2.27-dense-fallbacks** is live on Railway
+Current runtime **ccea9a0 / editorial-core-v2.29-visual-evidence** is live on Railway
+**451d51c7-c9c9-4ef8-8ab8-32b07b96200e** (SUCCESS). All five visual correctness priorities and
+approved style changes are implemented, along with the separately reviewed appendix-reference
+contract repair. Independent plan/code reviews approved; 628 local/clean-archive tests, 11 runtime
+hashes, health, four authenticated Desk views, immutable asset access and a natural writer run
+passed. Autopost OFF; same audit ACTIVE and its actual editorial coverage cutoff preserved.
+The natural run made no image; organic generation remains unverified. See SPRINT-0070-FINDINGS.md.
+No Plan 0070 or standalone v2.28 implementation/release work remains. Rollback is ab7529e.
+
+Earlier dense-packet runtime **684fd39 / editorial-core-v2.27-dense-fallbacks** shipped on Railway
 **ac251388-dd31-4dd9-aeb9-da3b20eaa134** (SUCCESS). 583 clean-release tests, seven file
 hashes, health and four authenticated workspace views passed. A natural 25-candidate
 run completed with a 63,856-byte packet and all20 open-draft cards preserved. Its writer

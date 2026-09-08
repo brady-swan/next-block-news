@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-08, Plan 0069 and its dense-packet follow-up. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-08, deployed Plan 0070 (ccea9a0). This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
@@ -9,7 +9,7 @@ story desk every 15 minutes when prepared candidates exist, sends the resulting 
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
 
-## Model roster — unchanged in Plan 0068
+## Model roster — unchanged in Plan 0070
 
 | Role | Model | Effort |
 | --- | --- | --- |

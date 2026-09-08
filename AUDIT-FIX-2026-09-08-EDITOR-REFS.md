@@ -2,12 +2,12 @@
 
 ## Current disposition
 
-Plan and actual-code review independently approved. The main NBN task explicitly agreed to
-include this existing repair in Plan 0070's clean combined release and avoid a competing deploy.
-Combined runtime review is approved and all 628 offline tests pass. The release marker is
-editorial-core-v2.29-visual-evidence. Remaining clean-archive/deployment/smoke results are recorded
-in SPRINT-0070-FINDINGS.md. No reimplementation or separate v2.28 deployment is needed.
-Autopost remains OFF; audit ACTIVE.
+COMPLETE in the coordinated Plan 0070 release: ccea9a0 / editorial-core-v2.29-visual-evidence,
+Railway deployment 451d51c7-c9c9-4ef8-8ab8-32b07b96200e SUCCESS. Independent review approved;
+628 tests passed locally and from the clean archive. Health, authenticated Desk, runtime hashes
+and natural writer-cycle smoke passed. The natural run produced no story requiring editor
+appendix selection, so no production proof of that specific selection is claimed. See
+SPRINT-0070-FINDINGS.md. No separate v2.28 implementation/release remains. Autopost OFF; audit ACTIVE.
 
 ## New evidence and scope
 
@@ -42,7 +42,7 @@ is claimed. Monitor ordinary outcomes rather than forcing paid replay.
 - Five new tests cover empty/missing appendices, exact request IDs and template immutability,
   strict mocked xAI HTTP payload, actual post-pruning recovery, and valid-sibling preservation.
 -43 focused tests pass: new contract, evidence-to-reader, reporting execution and model adapters.
-- Runtime marker becomes `editorial-core-v2.28-editor-appendix-refs`; writer/orientation prose
+- Original standalone marker was `editorial-core-v2.28-editor-appendix-refs`; writer/orientation prose
   is unchanged. Only editor.py and that marker are runtime edits.
 - After code approval: clean commit/archive excluding unrelated dirty evaluation and audit
   changes; full suite in the clean archive; deploy existing Railway service; verify health,

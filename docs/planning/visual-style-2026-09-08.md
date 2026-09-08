@@ -1,8 +1,8 @@
 # Generated image style — owner feedback, September 8, 2026
 
-Status: approved style incorporated into Plan 0070; independent actual-code review and clean
-release verification in progress. The owner subsequently authorized all five visual correctness
-priorities and the established independent-review playbook. See PLAN-0070-VISUAL-CORRECTNESS.md.
+Status: COMPLETE in Plan 0070, deployed as ccea9a0. Independent review, 628 clean-archive tests
+and production smoke passed. The owner authorized all five visual correctness priorities and
+the established independent-review playbook. See SPRINT-0070-FINDINGS.md for exact release evidence.
 
 The owner requested these changes:
 

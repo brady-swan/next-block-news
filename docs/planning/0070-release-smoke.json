@@ -1,0 +1,97 @@
+{
+  "runtime_commit": "ccea9a0cb95e633638a5db2d820d6c81cc3b93dc",
+  "deployment": {
+    "project": "1e1f32d1-6153-4f71-80b3-9543050caa7e",
+    "environment": "90c43f68-970a-4f93-a392-414c3c175502",
+    "service": "ff9549a3-6f78-481a-a550-d8c10136af64",
+    "deployment": "451d51c7-c9c9-4ef8-8ab8-32b07b96200e",
+    "status": "SUCCESS",
+    "replicas": 1,
+    "regions": {
+      "europe-west4-drams3a": {
+        "numReplicas": 1
+      }
+    },
+    "mounts": [
+      "/data"
+    ]
+  },
+  "observed_at": 1788906665.3822367,
+  "prompt": "editorial-core-v2.29-visual-evidence",
+  "template": "nbn-visuals-4",
+  "autopost": false,
+  "mount": true,
+  "hashes": {
+    "nbn/editor.py": "5aac0125054e1a96fd1a8d79f9a904a92d660b1e078ac73806cf4e2088cec8a5",
+    "nbn/main.py": "828f50805aa2fd313c01dfa0a9db8dc418dff38b51f91e2ff5dfcda4cc842958",
+    "nbn/newsroom.py": "6b4aa5488ff824334e7847c81acd15879e11666ca81e05969f18bbbe8d9212ad",
+    "nbn/visual_tools.py": "c7cad92b284aaa2d402b6ed31fe51f5e957c79932aa2acf64d8bcba450e99945",
+    "nbn/visuals.py": "1622ed435c13959470e7a294307501c4261b78616207245830c760ff437d3bc3",
+    "nbn/visual_render.py": "53487331bd59f5482be690d77e6b5b7cd0ad94e152aca0369ef05b6def5a6e91",
+    "nbn/store.py": "f076ef4f0ca8984166ae1622a5f5adda2fd9de9630e21a9e98180308a08f110b",
+    "nbn/visual_choices.py": "4a1e41c408b6261569e4cbb6d8325f19d3b1c60adfcd9ce50a3696af514f7f36",
+    "nbn/models.py": "632d339ca952670a55cba97c97fcc1f3da11d09dca8f25f05aa8ca015593af7a",
+    "nbn/config.py": "30b1a5594d566dfac248b070b1f349825f0095f4099f4e403fe7cf726af436dc",
+    "prompts/orientation-brief-v2.md": "987389b3559ba7b735b0f6ec88d81dc304b9f0240a687d7e2f6ee3e0f5e6f9cf"
+  },
+  "hash_mismatches": [],
+  "desk": {
+    "newsroom": {
+      "status": 200,
+      "bytes": 145886,
+      "view": "newsroom"
+    },
+    "intake": {
+      "status": 200,
+      "bytes": 56087,
+      "view": "intake"
+    },
+    "outputs": {
+      "status": 200,
+      "bytes": 28293,
+      "view": "outputs"
+    },
+    "system": {
+      "status": 200,
+      "bytes": 18876,
+      "view": "system"
+    }
+  },
+  "asset_get": {
+    "status": 200,
+    "bytes": 19616,
+    "hash_matches": true,
+    "unauthenticated": 403
+  },
+  "visual_counts": [
+    {
+      "kind": "source_image",
+      "count": 4
+    }
+  ],
+  "uploads": 0,
+  "health": {
+    "status": 200,
+    "started": 1788906568.9559412,
+    "cycles": 2,
+    "last_cycle_ts": 1788906664.1469188,
+    "last_error": null,
+    "autopost": false
+  },
+  "natural_run": {
+    "run_id": "cycle:1788906635:e1f77c39",
+    "status": "completed",
+    "prompt_version": "editorial-core-v2.29-visual-evidence",
+    "created_at": 1788906640.6105745,
+    "completed_at": 1788906664.130964,
+    "counters": {
+      "rounds": 1,
+      "tool_calls": 0,
+      "native_calls": 0,
+      "prefetch_successes": 2,
+      "visuals": {},
+      "duration_seconds": 23.49
+    },
+    "stories": 0
+  }
+}

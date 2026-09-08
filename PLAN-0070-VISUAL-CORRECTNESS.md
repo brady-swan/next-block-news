@@ -1,6 +1,6 @@
 # Plan 0070 — image evidence and graphics correctness
 
-Owner authorized all five priorities and the established independent review playbook on September 8, 2026. Approved highlight styling is included. Status: independent plan and actual-code review approved; all 628 offline tests pass. Clean release verification is in progress.
+Owner authorized all five priorities and the established independent review playbook on September 8, 2026. Approved highlight styling is included. Status: COMPLETE. Independent plan and code reviews approved; all 628 tests pass locally and from the clean archive. Runtime ccea9a0 is deployed with verified natural-cycle smoke. See SPRINT-0070-FINDINGS.md.
 
 Checkout: /Users/brady/claude/nbn-post-visuals-0070, branch codex/post-visuals-correctness.
 Base: c4bc70e (current main; runtime last recorded ab7529e). The main checkout contains unrelated owner evaluator/audit edits and a separately pending appendix-reference repair. Preserve those. Import only this task's already-approved style changes. Reconcile any intervening reviewed release before deployment.
@@ -69,13 +69,16 @@ If the other task has deployed a newer repair, incorporate that reviewed code an
 
 Natural production proof is scoped honestly: a healthy natural cycle is required. An image-bearing natural story may not arrive during release validation; explicitly report absence instead of asserting verified organic image creation.
 
-## Review log
+## Review and completion
 
-Independent reviewer visuals_independent_review: APPROVED, no blockers. Implementation checks
-include atomic per-candidate image admission, original ownership during later Desk review IDs,
-explicit legacy line-chart categorization, and bounded cached-asset reinspection. Implementation
-is now in progress in the isolated checkout.
+Independent reviewer visuals_independent_review approved the plan and actual code with no
+blockers. Original ownership on retained Desk reviews, candidate-atomic image admission,
+explicit category dates and cached source/PDF bounds were verified. Reviewer independently
+passed 87 focused tests, then 20 combined visual/reference tests, and inspected v4 proof PNGs.
 
-Main task confirmed at release coordination: no competing deployment and no newer runtime than ab7529e. Include its independently approved nine-line appendix-reference schema repair and five tests in the combined release, preserving all unrelated evaluator/audit changes. Combined marker is editorial-core-v2.29-visual-evidence.
-
-Independent actual-code review: APPROVED with no blockers, including the coordinated appendix-reference repair. Reviewer independently passed 87 focused and 20 combined tests and inspected the v4 graphics. Full local combined suite: 628 passed. See SPRINT-0070-FINDINGS.md for release verification.
+Main task explicitly agreed to combine its previously independently approved nine-line appendix
+schema repair and five tests. No competing/newer runtime was deployed. The combined v2.29
+release passed all 628 tests locally and from the clean intended commit archive. Runtime ccea9a0
+is live, with health/Desk/assets/hashes and a natural writer cycle verified. Autopost OFF; audit
+configuration and its real editorial cutoff preserved. Organic image generation remains
+unverified. Exact release/backup/rollback evidence is in SPRINT-0070-FINDINGS.md.
