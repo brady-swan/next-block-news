@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-08, Plan 0069. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-08, Plan 0069 and its dense-packet follow-up. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
@@ -208,6 +208,11 @@ explicit truncation and separate excerpt/full-capture fingerprints. Candidate id
 retry, owner-override and visual hints survive compaction, with full candidate/reference cards
 retrievable. Every in-scope open draft retains its exact key and a short lede rather than
 disappearing behind a three-row cap. Full storyline cards can likewise move behind indexes.
+A final density tier removes only empty optional card fields and repetitive code-generated
+preparation-failure boilerplate. It retains an explicit `batch_fail_open` outcome and protection
+reason, rather than presenting fallback prose as model judgment. Real preparation and all
+nonempty control fields remain intact; original full cards stay retrievable. This adds no
+model calls and does not change the packet or retrieval limits.
 An irreducibly oversized packet still defers, recording section sizes as an assembly failure,
 not a delivered writer input. Only inline cards count as initially supplied/read. These are
 ceilings, not required consumption. The

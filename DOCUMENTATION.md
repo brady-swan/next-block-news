@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-08: Plan 0069 compact-desk repair; Plan 0067 parked.
+Updated 2026-09-08: Plan 0069 plus the dense-packet follow-up; Plan 0067 parked.
 This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
@@ -35,6 +35,7 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | SPRINT-0068-FINDINGS.md | Independent review, bounded model replays, release proof and remaining tuning questions |
 | docs/planning/0069-compact-desk-repair.md | Bounded packet repair and explicit resumption scope |
 | SPRINT-0069-FINDINGS.md | Overflow reproduction, preservation tests, review and production release evidence |
+| AUDIT-FIX-2026-09-08-DENSE-PACKET.md | Separate v2.26 residual-density fix, exact scope and release proof |
 | AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md | Bounded PDF extraction, evidence limitations, tests and release proof |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.

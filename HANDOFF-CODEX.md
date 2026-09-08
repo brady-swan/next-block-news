@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-08 for Plan 0069. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-08 for Plan 0069 and its dense-packet follow-up. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -31,6 +31,10 @@ receipt metadata/full capture behind existing context IDs under pressure, preser
 control hints and all in-scope open-draft identities/ledes, and records section sizes on true
 overflow. The initial 64 KiB and optional retrieval budgets are unchanged. Excerpts are honestly
 fingerprinted and full retained receipts remain unchanged. See SPRINT-0069-FINDINGS.md.
+The v2.26 follow-up removes remaining mechanical fail-open preparation repetition and empty
+optional fields only at the final density tier. Real preparation, source evidence, controls
+and every coverage key/lede are unchanged. See AUDIT-FIX-2026-09-08-DENSE-PACKET.md for the
+distinct residual failure, reproduction, independent review and release status.
 The audit's start-of-pass continuity check reconciles completed, deployed, local-only and paused
 work before acting; old task summaries or repair notes are not fresh build instructions.
 

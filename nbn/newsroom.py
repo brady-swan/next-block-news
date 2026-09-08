@@ -34,7 +34,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.25-compact-desk"
+PROMPT_VERSION = "editorial-core-v2.26-dense-desk"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -745,6 +745,21 @@ def _coverage_card(row: dict, post_leads_key: str = "post_leads") -> dict:
                     list(row.get("sources") or [])[:3]],
         "updated_at_epoch": round(float(row.get("updated_at") or 0), 3),
     }
+
+
+def _compact_candidate_density(row: dict, full: dict) -> dict:
+    """Remove mechanical repetition, never real preparation or control context."""
+    compact = dict(row)
+    preparation = full.get("haiku_preparation") or {}
+    if preparation.get("outcome") == "batch_fail_open":
+        # This is code-generated fallback text, not a model's editorial judgment.
+        # Its repeated headline/objective remains in the full candidate context.
+        compact["haiku_preparation"] = {
+            key: preparation.get(key) for key in ("outcome", "protection_reason")
+        }
+    # False and zero are meaningful values. Omit only absent/empty optional fields.
+    return {key: value for key, value in compact.items()
+            if value is not None and value != "" and value != [] and value != {}}
 
 
 def _cached_url_is_public(url: str) -> bool:
@@ -1695,6 +1710,16 @@ class NewsroomSession:
                 packet["prepared_evidence"] = [
                     _evidence_excerpt(row, excerpt_bytes) for row in packet["prepared_evidence"]
                 ]
+            if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                packet["intake_board"] = [
+                    _compact_candidate_density(row, self.context_rows[row["candidate_context_id"]])
+                    for row in packet["intake_board"]
+                ]
+                packet["run_brief"]["compaction_note"] = (
+                    "Empty optional candidate fields are omitted. batch_fail_open preparation "
+                    "was unavailable; no model judgment was supplied. Full candidate details "
+                    "remain available via candidate_context_id."
+                )
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 from . import observations
                 observations.record(self.con, self.run_id, "writer_packet_overflow", {

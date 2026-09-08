@@ -1,4 +1,4 @@
-"""Plan 0069: crowded desks keep evidence and identity without a larger budget."""
+"""Plan 0069 and dense-packet follow-up: keep evidence within the same budget."""
 import copy
 import json
 import unittest
@@ -48,6 +48,83 @@ def crowded_desk(con, *, candidates=25, receipts=6):
 
 
 class CompactDeskTests(unittest.TestCase):
+    def test_dense_fail_open_desk_removes_only_mechanical_repetition(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            desk = crowded_desk(con, receipts=5)
+            for index, item in enumerate(desk.inventory):
+                item["note"] = "defer:initial_context_overflow"
+                if index:
+                    item.pop("_owner_reconsider", None)
+                desk.preparations[item["url_hash"]] = {
+                    "outcome": "batch_fail_open", "event_summary": item["title"][:200],
+                    "bitcoin_relevance": "Preparation was unavailable; advanced to newsroom.",
+                    "research_objective": "Let Sonnet inspect and make the editorial call.",
+                    "source_leads": [], "protection_reason": "guide_account",
+                }
+            desk.recent_clusters = [{
+                "canonical_key": f"covered-event-{index}", "draft_open": index < 20,
+                "reader_covered": index == 0, "titles": ["Existing exact event title " * 10],
+                "draft_post_leads": ["An existing open draft lede " * 10],
+                "reader_post_leads": ["Published post lede " * 10],
+            } for index in range(50)]
+            baseline = {}
+            def unchanged(row, full):
+                baseline[row["candidate_id"]] = copy.deepcopy(row)
+                return row
+            with patch.object(newsroom, "_compact_candidate_density", side_effect=unchanged):
+                with self.assertRaises(newsroom.NewsroomError):
+                    desk._initial_packet()
+            packet = desk._initial_packet()
+            self.assertLessEqual(newsroom._json_bytes(packet), 65536)
+            self.assertEqual(len(packet["intake_board"]), 25)
+            self.assertEqual(len(packet["prepared_evidence"]), 5)
+            self.assertIn("no model judgment", packet["run_brief"]["compaction_note"])
+            for row in packet["intake_board"]:
+                self.assertEqual(row["haiku_preparation"], {
+                    "outcome": "batch_fail_open", "protection_reason": "guide_account"})
+                original = baseline[row["candidate_id"]]
+                for key, value in original.items():
+                    if key != "haiku_preparation" and value not in (None, "", [], {}):
+                        self.assertEqual(row[key], value, key)
+            drafts = packet["coverage_board"]["open_drafts"]
+            self.assertEqual(len(drafts), 20)
+            for row, original in zip(drafts, desk.recent_clusters[:20]):
+                self.assertEqual(row["event_key"], original["canonical_key"])
+                self.assertEqual(row["post_leads"], [original["draft_post_leads"][0][:260]])
+            first = packet["intake_board"][0]
+            full = desk._read_desk_context([first["candidate_context_id"]])["rows"][0]
+            self.assertEqual(full["haiku_preparation"]["event_summary"],
+                             desk.preparations[first["candidate_id"]]["event_summary"])
+            self.assertEqual(full["haiku_preparation"]["outcome"], "batch_fail_open")
+            self.assertEqual(first["owner_override"], full["owner_override"])
+            self.assertEqual(first["prior_item_state_untrusted_context"],
+                             full["prior_item_state_untrusted_context"])
+
+    def test_density_tier_preserves_real_preparation_controls_false_and_zero(self):
+        row = {
+            "candidate_id": "c1", "research_retry": False, "first_seen_at": 0,
+            "candidate_context_id": "ctx_full", "owner_override": {"note": "", "by": "Brady"},
+            "identity_correction": {"failure": "wrong_key", "allowed_exact_event_keys": ["exact-1"]},
+            "haiku_preparation": {"event_summary": "Useful actual judgment.",
+                                  "source_leads": [{"url": "https://example.com/original"}]},
+            "empty_optional": None, "empty_list": [], "empty_text": "", "empty_object": {},
+        }
+        original = copy.deepcopy(row)
+        full = {**copy.deepcopy(row), "haiku_preparation": {
+            **row["haiku_preparation"], "outcome": "model", "protection_reason": "guide_account"}}
+        model = newsroom._compact_candidate_density(row, full)
+        self.assertEqual(model["haiku_preparation"], original["haiku_preparation"])
+        for key in ("research_retry", "first_seen_at", "owner_override", "identity_correction"):
+            self.assertEqual(model[key], original[key])
+        for key in ("empty_optional", "empty_list", "empty_text", "empty_object"):
+            self.assertNotIn(key, model)
+        full["haiku_preparation"]["outcome"] = "batch_fail_open"
+        fallback = newsroom._compact_candidate_density(row, full)
+        self.assertEqual(fallback["haiku_preparation"], {
+            "outcome": "batch_fail_open", "protection_reason": "guide_account"})
+        self.assertEqual(row, original)
+        self.assertEqual(full["haiku_preparation"]["event_summary"], "Useful actual judgment.")
+
     def test_crowded_packet_retains_candidates_receipts_hints_and_older_open_draft(self):
         self.assertIn("full candidate details via candidate_context_id", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("receipt text/link/image metadata via context_id", newsroom.NEWSROOM_V2_SYSTEM)
