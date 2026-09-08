@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-08, Plan 0068. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-08, Plan 0069. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
@@ -201,9 +201,15 @@ drafts, Luna-selected NBN storyline cards, guide attention signals, and verified
 spellings. Raw provider payloads and internal plumbing do not reach the model. Large recent-feed,
 continuity, storyline, and handle context is sent as compact indexes with code-issued IDs; the writer can
 retrieve bounded full records on demand: at most four calls, 16 KiB per call and 48 KiB total,
-with the initial desk still capped at 64 KiB. Under severe packet pressure, full storyline
-cards move behind that same lookup with explicit index entries; prepared receipts and every
-candidate remain intact. Only inline cards count as initially supplied/read. These are
+with the initial desk still capped at 64 KiB. Plan 0069 first moves bulky prepared-receipt
+link/image metadata behind that same lookup when the packet is oversized. Full captures stay
+retained with their fetch IDs; inline evidence can become shorter UTF-8-bounded excerpts with
+explicit truncation and separate excerpt/full-capture fingerprints. Candidate identity,
+retry, owner-override and visual hints survive compaction, with full candidate/reference cards
+retrievable. Every in-scope open draft retains its exact key and a short lede rather than
+disappearing behind a three-row cap. Full storyline cards can likewise move behind indexes.
+An irreducibly oversized packet still defers, recording section sizes as an assembly failure,
+not a delivered writer input. Only inline cards count as initially supplied/read. These are
 ceilings, not required consumption. The
 stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
 output state, including encrypted reasoning, in bounded run history only—not editorial memory.

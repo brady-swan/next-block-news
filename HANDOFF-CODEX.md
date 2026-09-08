@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-08 for Plan 0068. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-08 for Plan 0069. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -25,6 +25,14 @@ to retained evidence, never full article bodies in publisher mutations. Models g
 later-outcome/date/selection guidance and clearer existing image-tool affordances. See SYSTEM.md
 and SPRINT-0068-FINDINGS.md. Nano Banana is parked by owner; GEMINI_API_KEY exists but is unused.
 Do not implement or enable it until Brady explicitly reopens that proposal.
+
+Plan 0069 is a separate packet-compaction repair, not a repeat of 0068. It moves prepared
+receipt metadata/full capture behind existing context IDs under pressure, preserves candidate
+control hints and all in-scope open-draft identities/ledes, and records section sizes on true
+overflow. The initial 64 KiB and optional retrieval budgets are unchanged. Excerpts are honestly
+fingerprinted and full retained receipts remain unchanged. See SPRINT-0069-FINDINGS.md.
+The audit's start-of-pass continuity check reconciles completed, deployed, local-only and paused
+work before acting; old task summaries or repair notes are not fresh build instructions.
 
 ## Live roster
 

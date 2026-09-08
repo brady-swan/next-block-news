@@ -7,6 +7,26 @@ calibration, proactively ship obvious, bounded improvements that confidently ser
 product goals. New useful capabilities need not be disguised as regression fixes. Keep autopost
 OFF, track the work, preserve rollback, and reserve systemic changes for owner review.
 
+## Start-of-pass continuity check
+
+Identify the actual current trigger and latest user instruction before acting. A carried-forward
+summary cannot turn an ordinary user message into a heartbeat or make an old sprint approval new.
+Reconcile completion messages, relevant plans/release records, git history and dirty changes;
+verify the deployed version when production state matters. Distinguish completed/deployed work,
+local-only work, paused work, superseded proposals and genuinely new findings.
+
+Before building, replaying tests, delegating or deploying, record the delta in the audit notes:
+what is already complete, what new evidence remains unresolved, the smallest next action and
+its authorization. Reuse completed reviews and release evidence. Do not repeat a finished sprint
+because stale notes still call it pending; reproduce a claimed regression against current
+production before repairing it. Resolve conflicting status or authority before mutation work.
+
+A new follow-up repair is separate from the completed task. Explain that transition before
+starting it in an interactive turn; in a heartbeat, log it while preserving quiet-notification
+rules. Existing autonomy still applies, but explicitly paused or parked work does not resume
+automatically. Check the audit itself for repeated work without new evidence or misleading
+completion/continuation claims, and correct stale action notes rather than carrying them forward.
+
 ## Automatically investigate
 
 ### Plan 0068 reporting/visual execution watches

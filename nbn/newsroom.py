@@ -34,7 +34,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.24-reporting-execution"
+PROMPT_VERSION = "editorial-core-v2.25-compact-desk"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -285,7 +285,9 @@ HOW TO WORK
 - When calling search_web, include the candidate_ids the query is researching. That lets useful
   result pointers return with those exact candidates in a later fresh newsroom session.
 - Routine prepared stories may already have a safely inspected receipt. Finish in one response
-  when that is enough. Use read_desk_context only for history you actually need.
+  when that is enough. Use read_desk_context for specific context you actually need: current
+  receipt text/link/image metadata via context_id, full candidate details via candidate_context_id,
+  or indexed history. An excerpt is not the whole capture; opening it needs no new source fetch.
   Check retrieval_kind: provider_reported_extract is a source-specific paraphrase
   from native search, not a verbatim page capture or automatic independent corroboration. Use its
   attribution, dates, and limitations honestly; the selected source's reputation still informs judgment.
@@ -706,6 +708,19 @@ def _json_bytes(value: Any) -> int:
 
 def _clean_text(value: Any, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
+
+
+def _evidence_excerpt(payload: dict, byte_limit: int) -> dict:
+    """A display excerpt, not a change to the retained/validated FetchRecord."""
+    text = payload["text"]
+    excerpt = text.encode("utf-8")[:byte_limit].decode("utf-8", errors="ignore")
+    if excerpt == text:
+        return dict(payload)
+    return {**payload, "text": excerpt, "text_truncated": True,
+            "excerpt_of_content_fingerprint": payload.get(
+                "excerpt_of_content_fingerprint", payload["content_fingerprint"]),
+            "content_fingerprint": source_policy.content_fingerprint(excerpt),
+            "excerpt_note": "Short desk excerpt; full capture and metadata remain available via context_id."}
 
 
 def _pointer_id(candidate_id: str, url: str) -> str:
@@ -1449,9 +1464,9 @@ class NewsroomSession:
             if record.adapter_provenance != "desk_prefetch":
                 continue
             payload = self._fetch_payload(record, cached=True)
-            payload["text_truncated"] = record.text_truncated or len(record.text) > 4000
-            payload["text"] = record.text[:4000]
-            prepared_evidence.append(payload)
+            context_id = _context_id("prepared_receipt", record.fetch_id)
+            self.context_rows[context_id] = {"kind": "prepared_receipt", **payload}
+            prepared_evidence.append(_evidence_excerpt({**payload, "context_id": context_id}, 4000))
         packet = {
             "run_brief": {
                 "run_id": self.run_id,
@@ -1568,7 +1583,23 @@ class NewsroomSession:
                 catalog["next_offset"] = len(catalog["rows"])
             packet["memory_catalog"] = catalog
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                # Receipt sidecars can cost more than the evidence text. Offload those
+                # first, before sacrificing candidate assignments or output continuity.
+                for row in prepared_evidence:
+                    row["link_count"] = len(row.pop("links", []))
+                    row["image_count"] = len(row.pop("image_candidates", []))
+                    if row.get("visual_available"):
+                        row["visual_available"] = {key: row["visual_available"][key]
+                            for key in ("count", "tool", "purpose")}
+            if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 for row in intake_board:
+                    context_id = _context_id("candidate", row["candidate_id"])
+                    # Deep copy before in-place preview trimming below.
+                    self.context_rows[context_id] = {"kind": "candidate",
+                        **copy.deepcopy(row),
+                        "references": [r for r in reference_board
+                                       if r["candidate_id"] == row["candidate_id"]]}
+                    row["candidate_context_id"] = context_id
                     row["x_lead"] = lead_material.compact_preview(row.get("x_lead"))
                     row["what_arrived"] = row["what_arrived"][:240]
                     if row.get("guide_tip"):
@@ -1613,13 +1644,29 @@ class NewsroomSession:
                         "full_lead_context_id": row.get("full_lead_context_id"),
                         "first_seen_at": row.get("first_seen_at"),
                         "research_retry": row.get("research_retry"),
+                        "candidate_context_id": row["candidate_context_id"],
+                        "identity_correction": row.get("identity_correction"),
+                        "prior_item_state_untrusted_context": row.get("prior_item_state_untrusted_context"),
+                        "visual_available": ({key: row["visual_available"][key]
+                            for key in ("count", "tool", "purpose")}
+                            if row.get("visual_available") else None),
                     })
                 packet["intake_board"] = compact_cards
                 packet["reference_board"] = []  # every intake URL remains on its card
-                packet["coverage_board"] = {
-                    key: rows[:3] for key, rows in packet["coverage_board"].items()
-                }
+                compact_coverage = {}
+                for kind, rows in packet["coverage_board"].items():
+                    compact_coverage[kind] = []
+                    for index, row in enumerate(rows):
+                        context_id = _context_id("coverage", f"{kind}:{row['event_key']}:{index}")
+                        self.context_rows[context_id] = {"kind": "coverage", "output_state": kind, **row}
+                        compact_coverage[kind].append({
+                            "event_key": row["event_key"], "context_id": context_id,
+                            "post_leads": row["post_leads"][:1],
+                            "headlines": row["headlines"][:1] if not row["post_leads"] else [],
+                        })
+                packet["coverage_board"] = compact_coverage
                 packet["recent_reader_feed_48h"]["index"] = recent_index[:8]
+                packet["recent_reader_feed_48h"]["truncated_rows"] = max(0, len(recent_index) - 8)
                 packet["recent_reader_feed_48h"]["related_full_posts"] = []
                 packet["continuity_board"]["matching_full"] = []
                 packet["storyline_board"] = list(self.storyline_cards)
@@ -1642,7 +1689,20 @@ class NewsroomSession:
                 if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                     packet["memory_catalog"] = {**catalog, "rows": [], "next_offset": 0,
                         "note": "Open search_memory(query='',offset=0) to see the complete catalog."}
+            for excerpt_bytes in (2000, 1000, 500):
+                if _json_bytes(packet) <= config.COMPACT_DESK_INITIAL_BYTES:
+                    break
+                packet["prepared_evidence"] = [
+                    _evidence_excerpt(row, excerpt_bytes) for row in packet["prepared_evidence"]
+                ]
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                from . import observations
+                observations.record(self.con, self.run_id, "writer_packet_overflow", {
+                    "bytes": _json_bytes(packet), "limit": config.COMPACT_DESK_INITIAL_BYTES,
+                    "candidate_count": len(packet["intake_board"]),
+                    "prepared_receipt_count": len(prepared_evidence),
+                    "section_bytes": {key: _json_bytes(value) for key, value in packet.items()},
+                }, phase="assembly_failed")
                 raise NewsroomError("initial_context_overflow",
                                     "compact clean desk exceeds 64 KiB bound")
             supplied_keys = {c["storyline_key"] for c in packet["storyline_board"]}

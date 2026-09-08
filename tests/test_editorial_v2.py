@@ -101,7 +101,7 @@ class EditorialV2Tests(unittest.TestCase):
                 "uncertain": 0, "failed": 0, "taped": 0}
 
     def test_v212_prompts_teach_writer_craft_without_style_gates(self):
-        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.24-reporting-execution")
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.25-compact-desk")
         self.assertIn("FINAL WRITING PASS", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("still be publication-ready", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("Do not define a familiar Bitcoin-native", newsroom.NEWSROOM_V2_SYSTEM)
@@ -285,7 +285,8 @@ class EditorialV2Tests(unittest.TestCase):
             self.assertEqual([c["candidate_id"] for c in packet["intake_board"]], [row["url_hash"]])
             self.assertEqual(packet["intake_board"][0]["owner_override"], row["_owner_reconsider"])
             self.assertEqual(packet["prepared_evidence"][0]["text"], receipt.text)
-            self.assertEqual(packet["prepared_evidence"][0]["links"], list(receipt.links))
+            receipt_context = session.context_rows[packet["prepared_evidence"][0]["context_id"]]
+            self.assertEqual(receipt_context["links"], list(receipt.links))
             supplied = {c["storyline_key"] for c in packet["storyline_board"]}
             deferred = packet["retrievable_context_index"]["storylines"]
             self.assertTrue(deferred)
@@ -338,7 +339,7 @@ class EditorialV2Tests(unittest.TestCase):
             } for index in range(40)]
             with patch.object(store, "recent_feed_posts", return_value=recent):
                 packet = session._initial_packet()
-            self.assertLessEqual(len(json.dumps(packet).encode()),
+            self.assertLessEqual(newsroom._json_bytes(packet),
                                  config.COMPACT_DESK_INITIAL_BYTES)
             self.assertEqual(
                 {row["url_hash"] for row in rows},

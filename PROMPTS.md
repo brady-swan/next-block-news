@@ -1,6 +1,6 @@
 # Next Block News prompt inventory
 
-Current 2026-09-08, Plan 0068. This is an index, not a duplicated prompt snapshot.
+Current 2026-09-08, Plan 0069. This is an index, not a duplicated prompt snapshot.
 Live editorial orientation: prompts/orientation-brief-v2.md, body after its separator.
 The draft v3 brief and tuning examples are not loaded. The wire_voice charter is retained
 for legacy paths; its old "source of truth" heading does not make it current v2 authority.
@@ -28,6 +28,10 @@ storylines, guide attention context and verified-handle spellings. Full indexed 
 retrievable within bounds. X cards additionally preserve long-note, original/quoted-source,
 media-pointer and age-stamped metric context; fuller material is behind per-candidate retrieval
 IDs. Default optional retrieval is four calls / 48 KiB total, 16 KiB per call; initial desk 64 KiB.
+Under packet pressure, prepared-receipt sidecars move behind context IDs before candidate
+summaries are reduced. Explicit byte-bounded evidence excerpts retain provenance and a link to
+the full capture. Compact cards preserve candidate correction/retry/owner/visual hints and all
+in-scope open-draft keys/ledes. An irreducible overflow is measured, not disguised as a handoff.
 Raw Node envelopes and Node theme metadata do not reach the live
 preparation/writer payload.
 
@@ -50,7 +54,9 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.24-reporting-execution. The dossier field descriptions distinguish the selected
+editorial-core-v2.25-compact-desk. Plan 0069 changes packet assembly and clarifies that context
+lookup can open current receipt/candidate details as well as history; editorial guidance is unchanged.
+The dossier field descriptions distinguish the selected
 reader link from the complete story-specific evidence sent to the editor. Retaining native
 extracts alone or describing them in a reporting note does not attach them to a story; the
 writer cites their exact URLs in the same dossier. A small optional unassigned research appendix
