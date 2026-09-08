@@ -24,6 +24,11 @@ native web/X research in its writing context, with six responses / six minutes a
 reporting memory. Optional writer self-reports appear in Desk, for human review only. These are explicit per-seat
 production overrides; conservative Anthropic defaults remain available for rollback.
 
+Plan 0066 adds optional image inspection and five sourced NBN graphic templates. Writer and
+editor inspect the exact stored pixels; approved media travels through resumable Typefully
+delivery. The Desk's Visuals tab supports queued selection, omission and layout review.
+Text-only remains normal. No new model seat, image-generation service or cadence change.
+
 Plan 0064 adds concise story-specific reporting notes for the editor, clearer confirmed-coverage
 memory, source-preserving receipt deduplication and fewer empty completion loops. It repairs
 UPDATE prefixes only after existing output/identity checks. See [SPRINT-0064-FINDINGS.md](SPRINT-0064-FINDINGS.md)
@@ -33,6 +38,8 @@ for the bounded diagnostics and live verification; models, budgets and cadence a
 |---|---|
 | `nbn/sources.py` | RSS, SEC EDGAR, Perception, X recent-search, article/PDF text, FRED charts |
 | `nbn/pdf_source.py` | Local bounded Poppler text extraction; explicit partial/no-OCR limits |
+| `nbn/visuals.py`, `nbn/visual_tools.py`, `nbn/visual_render.py` | Bounded pixel inspection, immutable source evidence and five exact graphic templates |
+| `nbn/x_payload.py`, `nbn/publisher_visuals.py`, `nbn/visual_choices.py` | Full media identity, resumable uploads and worker-reviewed Desk requests |
 | `nbn/lead_material.py` | Bounded long X text, quoted sources, media pointers and metric age; discovery, not evidence |
 | `nbn/intake_triage.py` | Cheap RSS/EDGAR priority/candidate/background mailroom; all failures fail open |
 | `nbn/desk_prep.py` | Run-scoped Luna distillation/routing; protected work and every failure advance |

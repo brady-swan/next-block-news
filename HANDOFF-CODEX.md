@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-07 for Plan 0065. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-07 for Plan 0066. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -173,6 +173,25 @@ approval. Keep it separate from legacy operator gates/action IDs. Consume only a
 writer protocol response, not transport success. Repeated POSTs check the latest action id;
 state changes to held/drafted/delivered are blocked, never rewound. No schema or provider call
 was added to the dashboard action.
+
+## Post visuals (0066)
+
+The reporter-writer now has optional bounded still-image/PDF-page inspection and five exact
+Pillow templates, without a new seat or quota. `visual_tools`, `visuals` and `visual_render`
+own discovery/tools, immutable assets/evidence and deterministic rendering. Both writer and
+editor see identical stored pixels; prompt v2.23 includes visual guidance in its hash.
+`x_payload` defines full ordered text/media/alt/credit identity. `publisher_visuals` persists
+preparation inside the existing mutation lifecycle (`awaiting_media`), resumes uploads without
+models and never repeats an uncertain draft mutation. Text-only revisions of formerly imaged
+drafts retain the versioned identity. `visual_choices` queues fenced Desk actions for worker
+editor review. All owner visual actions stage drafts. Autopost remains OFF.
+
+Keep `/data/visual-assets` with SQLite backups/restores; do not delete files just because the
+14-day observations or 30-day notebook expired. The 512 MiB soft cap declines new optional
+assets; there is no automatic pruning. Media-level alt + acknowledged Typefully draft version
+is the supported confirmation contract; draft-local alt is absent from draft GET and alt-only
+UI version behavior has not been empirically proved. Lost/mismatched identity stays unresolved.
+See SYSTEM.md for exact bounds and SPRINT-0066-FINDINGS.md for release proof/limitations.
 
 ## Release playbook
 

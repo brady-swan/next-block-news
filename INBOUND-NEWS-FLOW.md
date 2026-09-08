@@ -88,7 +88,9 @@ fetched or processed by the native research path.
 X also retains a separate, bounded 12 KiB `source_material` record: long note text, original
 author/post/date, one level of quoted/referenced sources, links, media metadata, and age-stamped
 engagement. Missing quote expansions and truncated text are explicit. Media is neither downloaded
-nor visually inspected by this intake change. Preparation gets a richer preview; the writer can
+nor visually inspected during intake. Plan 0066 lets the reporter-writer explicitly inspect
+relevant still images or render sourced NBN graphics later; captions/pointers are not pixels,
+and reusable rights are separate from relevance. Preparation gets a richer preview; the writer can
 retrieve the fuller card via `full_lead_context_id`. Source-chain URLs enter the existing pointer
 and prefetch path, not the evidence catalog automatically. Same-post enrichment never changes
 first-seen, first origin or disposition; different posts sharing an article do not overwrite

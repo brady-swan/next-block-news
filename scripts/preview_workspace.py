@@ -1,5 +1,6 @@
 """Loopback-only, disposable UI fixtures. Never starts the worker or calls providers."""
 import json
+import os
 import time
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
@@ -42,6 +43,28 @@ def populate(con):
     store.kv_set(con,"publisher:last_success",str(now-50))
     store.kv_set(con,"editorial:next_run_at",str(now+600))
     main.STATE.update(last_cycle_ts=now-30,last_error="")
+    if os.environ.get("NBN_VISUAL_QA") == "1":
+        from nbn import visuals
+        rid="cycle:fixture-2"
+        text="Bitcoin gives people a way to hold and send money without asking permission. That matters most where access to reliable banking is limited."
+        evidence=[{"fetch_id":"fetch:one","text":text,"retrieval_kind":"direct_fetch","final_url":"https://example.org/report"}]
+        common={"source":"Offline QA · not news","date":"September 2026"}
+        points=[{"label":d,"value":v,"date":"Illustration","source_fetch_id":"fetch:one"} for d,v in zip(["Mon","Tue","Wed","Thu","Fri"],[182,-75,246,0,112])]
+        specs={"quote":{**common,"passage":text.split(". ")[0]+".","speaker":"Example speaker","source_fetch_id":"fetch:one"},
+            "excerpt":{**common,"passage":text,"source_fetch_id":"fetch:one","highlights":["without asking permission"]},
+            "bar":{**common,"headline":"A mixed week for Bitcoin ETF flows","unit":"USD millions","period":"Illustrative week","points":points,"metric":"sum"},
+            "line":{**common,"headline":"Daily flows turned positive","unit":"USD millions","period":"Illustrative week","points":points,"metric":"none"},
+            "comparison":{**common,"headline":"Before and after","unit":"Institutions","period":"Illustrative","points":[{**points[0],"label":"Before","value":24},{**points[1],"label":"After","value":47}],"metric":"none"}}
+        first=None
+        for kind,spec in specs.items():
+            a=visuals.render_asset(con,run_id=rid,candidate_id="lead0",kind=kind,preset="landscape",
+                spec=spec,evidence=evidence,alt_text="Offline illustrative "+kind+" proof. Not news.",purpose="Verify actual stored image previews and spacing.")
+            first=first or a
+        dossier=json.loads(con.execute("SELECT dossier_json FROM newsroom_runs WHERE run_id=?",(rid,)).fetchone()[0])
+        dossier["stories"][0]["visual_asset_id"]=first["asset_id"]
+        con.execute("UPDATE newsroom_runs SET dossier_json=? WHERE run_id=?",(json.dumps(dossier),rid));con.commit()
+        observations.record(con,rid,"editor_input",{"payload":{"candidates":[{"story_id":"story-bpi","post":POST,
+            "selected_receipt":{"url":"https://example.org/report"},"inspected_evidence_refs":[]}],"evidence_catalog":[]}})
 
 
 if __name__=="__main__":

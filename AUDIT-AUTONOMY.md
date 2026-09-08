@@ -159,7 +159,20 @@ pages. Compare source disclosure → first sight → draft clocks; owner feedbac
 and AnchorWatch added no value supersedes the earlier favorable audit reading. Evaluate whether
 copy leads with a useful finding and whether replacements preserve still-current warnings/context.
 Do not demand another lookup or more detail merely to prove the new capability was exercised.
-The image sprint and systemic changes remain outside this release; autopost stays OFF.
+Plan 0066 activates the owner-approved image sprint. Autopost stays OFF; unrelated systemic
+changes remain outside audit authority.
+
+Plan 0066 visual checks: inspect useful-image selection versus decorative work; compare exact
+stored pixels with copy, source snapshots, units/signs/periods, quote/highlight boundaries,
+mobile legibility, alt text and credits. Verify writer/editor received actual pixels, including
+recovery, not just metadata; absent visual work is not a failure or quota shortfall. Distinguish
+unknown-rights recommendations from authorized attachment. Monitor optional render/fetch failures,
+encoded-image budgets, model cost/latency, storage admission, upload preparation age and exact
+Typefully media/alt/version confirmation. Pending/ambiguous media must never cause duplicate
+creates or unapproved text fallback. Check owner edits are preserved, omitted/fallback images
+are not shown as selected, and Desk actions queue fresh review without publishing. Image artifacts
+and evidence must remain available after ordinary notebook/observation expiry. The isolated
+`IMAGE CAPABILITY TEST` draft is transport QA, not news, throughput or editorial success.
 
 Typefully drafts whose titles begin `REPLAY` are owner-requested historical review copies,
 not normal wire deliveries. Exclude them from production throughput, freshness/latency,

@@ -82,6 +82,7 @@ def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
         # Notebook-first catalog; artifacts belong beneath their originating run.
         union += " UNION ALL SELECT 'run:'||run_id,'reporting_run',run_id,MAX(created_at),CAST(COUNT(*) AS TEXT),'Reporting operations' FROM writer_artifacts WHERE expires_at>? GROUP BY run_id"
     params = [now - TTL, now - TTL, now]
+    union += " UNION ALL SELECT asset_id,'visual_asset',kind||': '||COALESCE(json_extract(metadata_json,'$.purpose'),''),created_at,run_id,metadata_json FROM visual_assets"
     terms = re.findall(r"[\w@.-]+", str(query).lower())[:6]
     conditions = " AND ".join("lower(title||' '||state||' '||searchable) LIKE ? ESCAPE '\\'" for _ in terms) or "1"
     params += ["%" + t.replace("_", "\\_").replace("%", "\\%") + "%" for t in terms]
@@ -136,9 +137,18 @@ def intake(con, query, *, hours=72, offset=0):
 
 
 def read(con, context_id):
+    if context_id.startswith("visual_"):
+        from . import visuals
+        try:
+            asset=visuals.get(con,context_id)
+            return {"kind":"visual_asset","visual":visuals.manifest(asset),
+                    "note":"Immutable historical asset and evidence. Not fresh by itself; inspect_visual supplies actual pixels before reuse."}
+        except ValueError: return None
     if context_id.startswith("run:"):
         rid = context_id.removeprefix("run:")
-        return {"kind": "reporting_run", "run_id": rid, "artifacts": [dict(r) for r in con.execute(
+        return {"kind": "reporting_run", "run_id": rid, "visual_assets":[dict(r) for r in con.execute(
+            "SELECT asset_id AS context_id,kind,created_at FROM visual_assets WHERE run_id=? ORDER BY created_at LIMIT 40",(rid,))],
+            "artifacts": [dict(r) for r in con.execute(
             "SELECT artifact_id AS context_id,kind,title,created_at FROM writer_artifacts WHERE run_id=? AND expires_at>? ORDER BY created_at,artifact_id LIMIT 100",
             (rid, time.time()))], "note": "Use these IDs to open operations; search_memory with the run ID searches all matching artifacts."}
     if context_id.startswith("notebook:"):

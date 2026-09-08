@@ -1,6 +1,6 @@
 # The run-first Desk
 
-Current 2026-09-07, Plan 0063. The Desk is part of the existing NBN Railway service, not a separate app
+Current 2026-09-07, Plan 0066. The Desk is part of the existing NBN Railway service, not a separate app
 or public news site. All /desk routes, assets, snapshots and the PDF require the existing
 NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documentation.
 
@@ -78,7 +78,25 @@ At 1440+ CSS px the inspector is a persistent side pane; intermediate widths use
 mobile uses full-width detail. Selection and reading position survive resizing. Escape/close
 returns focus. Extra-wide monitors use the space for comparison/context, not unbounded prose.
 Post cards retain all-side padding. Review tools preserve guarded actions and old anchors while
-collapsing the earlier diagnostic wall. No new mutation powers or editorial rules were added.
+collapsing the earlier diagnostic wall.
+
+### Visuals
+
+Each story's **Visuals** tab shows exact stored image previews, alternatives, alt text,
+source/credit, reuse status, recipe, editor decision and delivery state. Proposed/approved,
+omitted, held and text-only fallback are distinct; an omitted image is not labeled selected.
+Click an image for its full-size authenticated asset. Unknown rights are review-only.
+
+**Select for review**, **Use text only**, and **Review square/landscape version** queue a
+versioned request. The leased worker gets fresh independent-editor approval, rechecks current
+output and owner edits, then uses the normal delivery lifecycle. HTTP clicks do not call models
+or immediately PATCH Typefully; refreshes never enqueue work. Published/ambiguous outputs and
+pending delivery cannot be overwritten. A request is not guaranteed editorial approval.
+Regeneration changes only the fixed layout preset and creates another immutable asset from
+retained evidence; it is not an arbitrary image editor. Missing old review context directs the
+lead back through the newsdesk rather than inventing it. All actions stage drafts, never enable
+autopost. The upload may remain processing between worker cycles, or require owner review if
+the exact remote attachment/version cannot be confirmed.
 
 ## Count and timestamp definitions
 
@@ -163,6 +181,9 @@ contract for compatibility. `/report` remains server-rendered and is not automat
 `POST /desk/api/item-action` accepts only authenticated reconsideration, reusing operator_actions
 and checking the latest owner-action version. The worker activates it at its leased inventory
 boundary; the HTTP handler never invokes a model or publisher. No new table is required.
+`POST /desk/api/visual-action` uses a separate versioned `visual_choices` queue. Immutable
+images are served through authenticated read-only `/desk/visuals/<asset_id>` lookups, never
+arbitrary local paths. Image files/evidence outlive normal rich observation expiry.
 The approved React UI compiles to one static bundle; Python remains the sole Railway runtime.
 Sources/lockfile/build live in `desk_ui/`. Run `npm ci && npm run build`; committed assets and
 their SHA-256 manifest ship with the Python archive. No second service, websocket, tracing vendor

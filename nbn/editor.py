@@ -20,6 +20,10 @@ BATCH_EDITOR_SCHEMA = {
             "story_id": {"type": "string"},
             "verdict": {"type": "string", "enum": ["publish", "revise", "draft", "drop"]},
             "post": {"type": ["string", "null"]}, "reason": {"type": "string"},
+            "visual_verdict": {"type": "string", "enum": ["none", "approve", "omit", "hold"]},
+            "visual_asset_id": {"type": ["string", "null"]},
+            "visual_content_hash": {"type": ["string", "null"]},
+            "text_fallback": {"type": ["string", "null"], "description": "Separately approved standalone copy if the image cannot be delivered; null if image is essential."},
             "additional_evidence_refs": {"type": "array", "maxItems": 8,
                 "items": {"type": "string"}, "description":
                 "Optional: exact refs from unassigned_run_research that you inspected and find relevant to THIS story. Empty otherwise. Writer evidence plus additions may total at most eight. Never select unrelated research."},
@@ -183,9 +187,20 @@ Every publish, revise, or draft decision MUST repeat the complete final post in 
 field. Use `publish` only when that text is unchanged from the candidate. Use `revise` whenever
 you change it. Only `drop` may return a null post.
 
+For a candidate with a visual, the actual image follows its manifest. Inspect those pixels,
+not just the alt/caption. Check mobile readability, dates/units/signs, exact quote wording and
+context, highlighting, provenance and visible credit. The typed recipe is not proof of data.
+Approve only that exact asset/hash, with accurate alt text and supported facts. Unknown reuse
+rights cannot be approved for upload. Use visual_verdict=omit and a separately approved
+standalone text_fallback when the story works without the image; hold when it depends on an
+unusable image. For an approved image, text_fallback may be null or separately approved
+standalone copy. No replacement image or factual regeneration is implied by approval.
+
 Return ONLY JSON:
 {"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
-"post":"final copy or null","reason":"brief newsroom explanation","additional_evidence_refs":[]}]}"""
+"post":"final copy or null","reason":"brief newsroom explanation","additional_evidence_refs":[],
+"visual_verdict":"none|approve|omit|hold","visual_asset_id":null,"visual_content_hash":null,
+"text_fallback":null}]}"""
 
 
 def review(post: str, item: dict, con) -> dict:
@@ -361,7 +376,29 @@ def _editor_decision(row: dict, payload: dict, card: dict, origin: str) -> dict 
     refs = list(dict.fromkeys(refs))
     if card.get("evidence_records_used", len(card["inspected_evidence_refs"])) + len(refs) > 8:
         return None
+    visual = card.get("visual")
+    visual_review = None
+    if visual and verdict != "drop":
+        from . import visuals
+        choice = row.get("visual_verdict")
+        if choice not in {"approve", "omit", "hold"}:
+            return None
+        fallback = row.get("text_fallback")
+        if fallback is not None and (not isinstance(fallback, str) or not fallback.strip() or len(fallback)>8000):
+            return None
+        if choice == "approve" and (visual.get("error") or not visual.get("reusable") or
+                row.get("visual_asset_id") != visual.get("asset_id") or
+                row.get("visual_content_hash") != visual.get("content_hash")):
+            return None
+        if choice == "omit":
+            if not fallback: return None
+            final = fallback
+        visual_review = {"verdict": choice, "asset_id": visual.get("asset_id"),
+            "content_hash": visual.get("content_hash"), "post_hash": visuals.digest(final),
+            "alt_text": (visual.get("metadata") or {}).get("alt_text", ""),
+            "credit": (visual.get("metadata") or {}).get("credit", ""), "text_fallback": fallback}
     return {"verdict": verdict, "post": final, "reason": str(row.get("reason") or "")[:500],
+            "visual_review": visual_review,
             "origin": origin, "additional_evidence_refs": refs,
             "additional_evidence": [dict(available[ref]) for ref in refs] if verdict != "drop" else []}
 
@@ -409,6 +446,7 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict], *,
             "mechanical_rails_to_fix": candidate.get("mechanical_rails_to_fix", []),
             "editorial_warnings": candidate.get("editorial_warnings", []),
             "output_continuity": candidate.get("output_continuity", {}),
+            **({"visual": candidate["visual"]} if candidate.get("visual") else {}),
         })
     feed = [{
         "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
@@ -464,6 +502,34 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         modes=("IMMEDIATE", "DRAFT", "UNCERTAIN"),
     )
     payload, payload_deferred = _batch_editor_payload(candidates, recent, research=research)
+    # Resolve immutable pixels once. Initial and omitted-only recovery share these exact bytes.
+    from . import visuals
+    pixels = {}
+    total = 0
+    for card in list(payload["candidates"]):
+        visual = card.get("visual")
+        if not visual: continue
+        try:
+            if visual.get("error"): raise ValueError("unavailable visual")
+            asset = visuals.get(con, visual["asset_id"])
+            if asset["content_hash"] != visual.get("content_hash"): raise ValueError("asset mismatch")
+            block = visuals.image_block(asset)
+            if len(pixels)>=4 or total+visuals.image_bytes(block)>visuals.MAX_IMAGE_CONTEXT:
+                raise ValueError("image review capacity")
+            pixels[card["story_id"]] = block
+            total += visuals.image_bytes(block)
+        except (ValueError, OSError, KeyError):
+            payload["candidates"].remove(card)
+            payload_deferred.append(card["story_id"])
+    def content(packet):
+        text = json.dumps(packet, separators=(",", ":"), ensure_ascii=False)
+        selected = [c for c in packet["candidates"] if c["story_id"] in pixels]
+        if not selected: return text
+        blocks = [{"type":"text", "text":text}]
+        for card in selected:
+            blocks.extend([{"type":"text", "text":"Exact visual for story " + card["story_id"]},
+                {k:v for k,v in pixels[card["story_id"]].items() if not k.startswith("_")}])
+        return blocks
     observations.record(con, run_id, "editor_input", {
         "payload": payload, "payload_deferred": payload_deferred,
         "model": config.EDITOR_MODEL, "effort": config.EDITOR_EFFORT,
@@ -477,7 +543,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         resp = brain._create(
             config.EDITOR_MODEL,
             BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n" + newsroom.ORIENTATION_BRIEF,
-            json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
+            content(payload),
             max_tokens=8000, effort=config.EDITOR_EFFORT, reservation=reservation,
             schema=BATCH_EDITOR_SCHEMA,
         )
@@ -542,7 +608,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                     config.EDITOR_MODEL,
                     BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n"
                     + newsroom.ORIENTATION_BRIEF,
-                    json.dumps(recovery_payload, separators=(",", ":"), ensure_ascii=False), max_tokens=5000,
+                    content(recovery_payload), max_tokens=5000,
                     effort=config.EDITOR_EFFORT, reservation=reservation,
                     schema=BATCH_EDITOR_SCHEMA,
                 )

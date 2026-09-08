@@ -1870,6 +1870,8 @@ def connect() -> sqlite3.Connection:
     _ensure_model_usage_columns(con)
     _ensure_desk_preparation_columns(con)
     _ensure_search_provider_columns(con)
+    from . import visuals
+    visuals.initialize(con)
     return con
 
 
@@ -4167,7 +4169,7 @@ def exact_thread_output_exists(con, body: str, receipt_url: str) -> bool:
 
 
 _MUTATION_PROTECTED_STATES = {
-    "prepared", "in_flight", "ambiguous", "needs_owner_review", "owner_suppressed",
+    "prepared", "awaiting_media", "in_flight", "ambiguous", "needs_owner_review", "owner_suppressed",
 }
 _MUTATION_STATES = _MUTATION_PROTECTED_STATES | {"confirmed", "definite_failure"}
 _MUTATION_OPERATIONS = {"create", "replace_draft", "schedule"}
@@ -4214,6 +4216,8 @@ def canonical_output_state(con, story_key: str) -> dict:
         "publisher_status": row.get("publisher_status") or "",
         "relation": row.get("coverage_relation") or "legacy",
         "base_post_id": row.get("base_post_id"),
+        "media_payload": row.get("media_payload_json"),
+        "media_remote_version": row.get("media_remote_version"),
     } for row in rows]
     signature = hashlib.sha256(json.dumps(
         {"root": root, "outputs": signature_rows,
@@ -4300,7 +4304,7 @@ def publisher_mutation(con, mutation_id: str):
 def pending_publisher_mutations(con, limit: int = 20) -> list[dict]:
     rows = con.execute(
         "SELECT * FROM publisher_mutations WHERE state IN "
-        "('prepared','in_flight','ambiguous','needs_owner_review')"
+        "('prepared','awaiting_media','in_flight','ambiguous','needs_owner_review')"
         " ORDER BY updated_at LIMIT ?", (max(1, min(int(limit), 100)),),
     ).fetchall()
     return [dict(row) for row in rows]
@@ -4411,6 +4415,13 @@ def finalize_publisher_mutation(
             if not found:
                 raise RuntimeError("publisher mutation post was not materialized")
             post_id = found["id"]
+        if data.get("media_payload"):
+            con.execute("UPDATE posts SET media_payload_json=?,media_remote_version=? WHERE id=?",
+                (json.dumps(data["media_payload"],separators=(",",":")),
+                 json.dumps(data.get("remote_version"),separators=(",",":")),post_id))
+            for p in data["media_payload"]["posts"]:
+                for media in p["media"]:
+                    con.execute("UPDATE visual_assets SET retained=1 WHERE asset_id=?",(media["asset_id"],))
         for index, member in enumerate(list(data.get("members") or [])[:25]):
             item_hash = str(member.get("url_hash") or "")[:64]
             if not item_hash:

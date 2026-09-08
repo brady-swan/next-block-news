@@ -34,6 +34,14 @@ def response_input(messages: list[dict]) -> list[dict]:
         for block in content:
             if block["type"] == "text":
                 result.append({"role": message["role"], "content": block["text"]})
+            elif block["type"] == "image":
+                source = block.get("source") or {}
+                if source.get("type") != "base64" or source.get("media_type") not in {
+                        "image/png", "image/jpeg", "image/webp"} or not source.get("data"):
+                    raise ValueError("Unsupported image input")
+                result.append({"role": message["role"], "content": [{"type": "input_image",
+                    "image_url": "data:" + source["media_type"] + ";base64," + source["data"],
+                    "detail": "high"}]})
             elif block["type"] == "tool_use":
                 result.append({"type": "function_call", "call_id": block["id"],
                                "name": block["name"], "arguments": json.dumps(block["input"])})

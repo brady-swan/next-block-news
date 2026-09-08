@@ -22,8 +22,8 @@ class TypefullyTests(unittest.TestCase):
         prior = {
             "id": "42", "social_set_id": "set", "status": "draft",
             "platforms": {"x": {"enabled": True, "settings": {"reply": "all"},
-                                "posts": [{"text": "old", "media_ids": ["m1"],
-                                           "quote_post_url": "https://x.com/a/status/1",
+                                "posts": [{"text": "old", "media_ids": [],
+                                           "quote_post_url": None,
                                            "subscribers_only": False,
                                            "paid_partnership": False,
                                            "made_with_ai": True,
@@ -39,7 +39,7 @@ class TypefullyTests(unittest.TestCase):
         self.assertIs(outcome, tf.PublishOutcome.STAGED)
         self.assertEqual(ref, "42")
         body = patch_http.call_args.kwargs["json"]
-        self.assertEqual(body["platforms"]["x"]["posts"][0]["media_ids"], ["m1"])
+        self.assertEqual(body["platforms"]["x"]["posts"][0]["media_ids"], [])
         self.assertFalse(body["platforms"]["x"]["posts"][0]["subscribers_only"])
         self.assertFalse(body["platforms"]["x"]["posts"][0]["paid_partnership"])
         self.assertTrue(body["platforms"]["x"]["posts"][0]["made_with_ai"])
@@ -71,7 +71,7 @@ class TypefullyTests(unittest.TestCase):
         prior = {
             "id": "42", "social_set_id": "set", "status": "draft",
             "platforms": {"x": {"enabled": True, "settings": {"reply": "all"},
-                                "posts": [{"text": legacy, "media_ids": ["m1"],
+                                "posts": [{"text": legacy, "media_ids": [],
                                            "subscribers": False}]}},
         }
         desired_texts = ["updated copy", "Source: https://example.com/new"]
@@ -80,7 +80,7 @@ class TypefullyTests(unittest.TestCase):
             "platforms": {"x": {
                 **prior["platforms"]["x"],
                 "posts": [
-                    {"text": desired_texts[0], "media_ids": ["m1"],
+                    {"text": desired_texts[0], "media_ids": [],
                      "subscribers": False},
                     {"text": desired_texts[1]},
                 ],

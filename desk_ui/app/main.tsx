@@ -82,7 +82,7 @@ function readState(): State {
     run: p.get("run") || "",
     lead: p.get("lead") || "",
     tab: tabNames.includes(p.get("tab") || "") ? p.get("tab")! : "decisions",
-    detail: ["overview", "research", "copy"].includes(p.get("detail") || "")
+    detail: ["overview", "research", "copy", "visuals"].includes(p.get("detail") || "")
       ? p.get("detail")!
       : "overview",
     filter: p.get("filter") || "all",
@@ -588,6 +588,56 @@ function Research({ run, story }: { run: Row; story?: Row }) {
     </div>
   );
 }
+function VisualPanel({run, story}: {run: Row; story: Row}) {
+  const panel = story.visuals || {assets: []};
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  useEffect(() => {setMessage(""); setSubmitted(false);}, [story.id, panel.version]);
+  async function request(action: string, asset: Row, preset = "landscape") {
+    if (busy || submitted) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/desk/api/visual-action", {method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: new URLSearchParams({k: token, run: run.run_id, story: story.id, action,
+          asset: asset.asset_id, preset, version: String(panel.version || 0)}), signal: AbortSignal.timeout(12000)});
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw Error(result.reason || "Request not accepted");
+      setSubmitted(true); setMessage("Queued. The worker will get a fresh editor review before changing an untouched draft.");
+    } catch (e: any) {setMessage(e.message || "Could not confirm request; refresh before retrying.");}
+    finally {setBusy(false);}
+  }
+  const locked = busy || submitted || ["pending", "reviewing", "delivery_pending", "awaiting_media", "in_flight", "ambiguous", "needs_owner_review"].includes(panel.request?.state);
+  return <div className="inspector-section visual-panel">
+    <p className="meta-copy">An image is optional. These are exact stored pixels, not regenerated previews. Source permissions and editorial approval are separate.</p>
+    {panel.decision !== "none" && panel.decision && <p className="meta-copy">Image decision: {({approve:"approved",omit:"omitted — text only",hold:"held for review",text_fallback:"approved text fallback — no image"} as Row)[panel.decision] || panel.decision}{panel.delivery_state && ` · Delivery: ${panel.delivery_state.replaceAll("_"," ")}`}</p>}
+    {panel.request && <p className="meta-copy">Latest request: {panel.request.action} · {panel.request.state}</p>}
+    {message && <p role="status">{message}</p>}
+    {!panel.assets.length && <p>No visual was inspected or rendered for this story.</p>}
+    {panel.assets.map((a: Row) => <article key={a.asset_id} className="visual-card">
+      <div className="visual-card-heading"><strong>{a.kind.replaceAll("_", " ")}</strong>
+        {a.asset_id === panel.selected_asset_id && <Pill text="Selected" />}</div>
+      <a href={`/desk/visuals/${a.asset_id}?${new URLSearchParams({k: token})}`} target="_blank" rel="noreferrer">
+        <img loading="lazy" src={`/desk/visuals/${a.asset_id}?${new URLSearchParams({k: token})}`}
+          alt={a.metadata.alt_text || "Source visual under review"} /></a>
+      <p>{a.metadata.purpose}</p>
+      <dl><dt>Alt text</dt><dd>{a.metadata.alt_text || "Not supplied"}</dd>
+        <dt>Source / credit</dt><dd>{a.metadata.credit || "Unknown"} · <External url={a.metadata.source_url}>Source</External></dd>
+        <dt>Reuse</dt><dd>{a.metadata.reuse_status?.replaceAll("_", " ") || "Unknown"}</dd>
+        <dt>Delivery</dt><dd>{a.upload?.state || "Not uploaded"}{a.upload?.error && ` · ${a.upload.error}`}</dd>
+      </dl>
+      <div className="visual-actions">
+        <Button size="sm" variant="outline" disabled={locked} onClick={() => request("select",a)}>Select for review</Button>
+        <Button size="sm" variant="outline" disabled={locked} onClick={() => request("omit",a)}>Use text only</Button>
+        {["quote","excerpt","bar","line","comparison"].includes(a.kind) && <Button size="sm" variant="outline" disabled={locked}
+          onClick={() => request("regenerate",a,a.metadata.preset === "square" ? "landscape" : "square")}>
+          Review {a.metadata.preset === "square" ? "landscape" : "square"} version</Button>}
+      </div>
+      <details><summary>Exact recipe and provenance</summary><pre>{JSON.stringify(a.metadata,null,2)}</pre></details>
+    </article>)}
+  </div>;
+}
 function Inspector({
   run,
   story,
@@ -620,6 +670,7 @@ function Inspector({
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="research">Research</TabsTrigger>
           <TabsTrigger value="copy">Copy</TabsTrigger>
+          <TabsTrigger value="visuals">Visuals</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
           <div className="inspector-section">
@@ -692,6 +743,7 @@ function Inspector({
         <TabsContent value="copy">
           <CopyPanel story={story} />
         </TabsContent>
+        <TabsContent value="visuals"><VisualPanel run={run} story={story} /></TabsContent>
       </Tabs>
     </>
   );

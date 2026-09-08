@@ -666,8 +666,20 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             post = _normalize_update_label(con, pipeline_run_id, story_id, post, phase="before_editor")
             draft["post"] = post  # The unavailable/omitted-editor fallback must use the same copy.
             hard_errors = lint.hard_rails_v2(post, {"_source_text": source_text}, anchor)
+        if target_draft and target_draft.get("media_payload_json") and not draft.get("visual"):
+            # A replacement of our illustrated draft must re-review its pixels with the new copy.
+            from . import visuals
+            prior_media = json.loads(target_draft["media_payload_json"])
+            prior_assets = [m for p in prior_media["posts"] for m in p["media"]]
+            if prior_assets:
+                try:
+                    asset = visuals.get(con, prior_assets[0]["asset_id"])
+                    draft["visual"] = {**visuals.manifest(asset), "required":False, "reusable":True}
+                except (ValueError, OSError):
+                    draft["visual"] = {"error":"prior visual unavailable", "required":True}
         row = {
             "story_id": story_id, "post": post,
+            **({"visual": draft["visual"]} if draft.get("visual") else {}),
             "reader_value": draft.get("reader_value", ""),
             "reporting_note": draft.get("reporting_note"),
             "selected_receipt": {"fetch_id": selected.fetch_id,
@@ -747,6 +759,16 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
+        visual_review = decision.get("visual_review") if decision else None
+        if candidate["draft"].get("visual") and verdict != "drop" and (
+                not visual_review or visual_review.get("verdict") == "hold"):
+            for member in members:
+                store.defer_item(con, member["url_hash"], "defer:visual_editor_review_required",
+                    story_key=resolution.story_key, stage="editor", category="visual_review")
+            store.set_newsroom_story_state(con,pipeline_run_id,story_id,"held",
+                details={"reason":"visual_editor_review_required", "editor_reason":reason})
+            result["held"] += len(members)
+            continue
         additions = decision.get("additional_evidence", []) if decision and verdict != "drop" else []
         retained = []
         for evidence in additions:
@@ -789,12 +811,23 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         if (verdict != "drop" and candidate["coverage_relation"] == "material_update"
                 and candidate["base_post_id"] is not None):
             post = _normalize_update_label(con, pipeline_run_id, story_id, post, phase="after_editor")
+        if visual_review and verdict != "drop":
+            from . import visuals
+            if visual_review["post_hash"] != visuals.digest(post):
+                for member in members:
+                    store.defer_item(con,member["url_hash"],"defer:visual_copy_changed_after_review",
+                        story_key=resolution.story_key,stage="editor",category="visual_review")
+                store.set_newsroom_story_state(con,pipeline_run_id,story_id,"held",
+                    details={"reason":"visual_copy_changed_after_review"})
+                result["held"] += len(members)
+                continue
         from . import observations
         editor_origin = ("capacity_defer" if payload_deferred else
                          "unavailable_fallback" if not editorial["ok"] else
                          "omitted_fallback" if decision is None else decision.get("origin", "initial"))
         observations.record(con, pipeline_run_id, "editor_applied", {
             "verdict": verdict, "post": post, "reason": reason, "origin": editor_origin,
+            "visual_review": visual_review,
             "canonical_key": resolution.story_key,
             "additional_evidence_refs": decision.get("additional_evidence_refs", []) if decision else [],
         }, ref=story_id, phase="applied")
@@ -931,6 +964,44 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                     },
                 )
         mutation = None
+        if (visual_review and visual_review.get("verdict") == "approve" or
+                target_draft and target_draft.get("media_payload_json")):
+            from . import publisher_visuals
+            if publisher.backend_name() != "typefully":
+                result["held"] += len(members)
+                continue
+            try:
+                queued = publisher_visuals.queue(con,visual_review=visual_review,
+                story_key=resolution.story_key,operation=operation,intended_mode=intended_mode,
+                desired_thread=desired_thread,prior_thread=prior_thread,materialization=materialization,
+                expected_output_signature=candidate["output_state"]["signature"],
+                target_draft_id=str(target_draft["nuelink_id"]) if target_draft else "",
+                target_post_id=int(target_draft["id"]) if target_draft else None,
+                base_post_id=candidate["base_post_id"],
+                prior_payload=json.loads(target_draft["media_payload_json"]) if target_draft and target_draft.get("media_payload_json") else None,
+                    prior_version=json.loads(target_draft["media_remote_version"]) if target_draft and target_draft.get("media_remote_version") else None)
+            except (ValueError, KeyError, OSError) as exc:
+                for member in members:
+                    store.defer_item(con,member["url_hash"],"defer:visual_preparation_unavailable",
+                        story_key=resolution.story_key,stage="delivery",category="visual_delivery")
+                store.set_newsroom_story_state(con,pipeline_run_id,story_id,"held",
+                    details={"delivery":{"reason":"visual_preparation_unavailable","error":str(exc)[:200]}})
+                result["held"] += len(members)
+                continue
+            if queued["ok"]:
+                status=publisher_visuals.process_one(con,dict(store.publisher_mutation(con,queued["mutation_id"])))
+                if status=="confirmed":
+                    result["drafted" if intended_mode=="DRAFT" else "posted"] += 1
+                else:
+                    for member in members:
+                        store.set_status(con,member["url_hash"],"held",resolution.story_key,
+                            "visual delivery: "+status,stage="delivery",category="visual_delivery")
+                    store.set_newsroom_story_state(con,pipeline_run_id,story_id,"held",
+                        details={"delivery":{"visual_state":status,"mutation_id":queued["mutation_id"]}})
+                    result["held"] += len(members)
+            else:
+                suppress_existing(story_id,members,resolution.story_key,"visual delivery state changed")
+            continue
         if publisher.backend_name() == "typefully":
             # Replacement was selected against the earlier state; any intervening change
             # must be re-evaluated by a later clean run, never papered over here.
@@ -1062,6 +1133,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     pipeline_run_id = f"cycle:{int(run_started)}:{lease_owner[:8]}"
     if config.SEARCH_RESILIENCE_ENABLED:
         store.prune_search_state(con, now=run_started)
+    from . import visual_choices
+    visual_choices.process(con)
     mutation_recovery = publisher.reconcile_mutations(con)
     if mutation_recovery.get("checked"):
         log.info("publisher mutation recovery: %s", mutation_recovery)
@@ -1922,8 +1995,8 @@ class Health(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
-        workspace_action = parsed.path == "/desk/api/item-action"
-        if parsed.path not in {"/item-action", "/mutation-action", "/desk/api/item-action"}:
+        workspace_action = parsed.path in {"/desk/api/item-action", "/desk/api/visual-action"}
+        if parsed.path not in {"/item-action", "/mutation-action", "/desk/api/item-action", "/desk/api/visual-action"}:
             self.send_response(404)
             self.end_headers()
             return
@@ -1941,7 +2014,15 @@ class Health(BaseHTTPRequestHandler):
         day = (q.get("d") or [""])[0]
         con = store.connect()
         try:
-            if parsed.path == "/mutation-action":
+            if parsed.path == "/desk/api/visual-action":
+                from . import visual_choices
+                try:
+                    version=int((q.get("version") or ["-1"])[0])
+                except ValueError:
+                    version=-1
+                outcome=visual_choices.request(con,(q.get("run") or [""])[0],(q.get("story") or [""])[0],
+                    action,(q.get("asset") or [""])[0],(q.get("preset") or ["landscape"])[0],version)
+            elif parsed.path == "/mutation-action":
                 try:
                     version = int((q.get("version") or ["0"])[0])
                 except ValueError:

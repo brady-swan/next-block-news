@@ -29,11 +29,12 @@ from . import (
     store,
     verify,
     writer_memory,
+    visual_tools,
 )
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.22-evidence-to-reader"
+PROMPT_VERSION = "editorial-core-v2.23-post-visuals"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -73,6 +74,7 @@ class FetchRecord:
     limitations: str = ""
     original_content_fingerprint: str = ""
     text_truncated: bool = False
+    image_candidates: tuple = ()
 
     @property
     def direct_primary(self) -> bool:
@@ -367,6 +369,7 @@ FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
 
 The only acceptable final action is submit_editorial_dossier.
 """
+NEWSROOM_V2_SYSTEM += visual_tools.GUIDANCE
 
 
 V2_DOSSIER_TOOL = {
@@ -409,12 +412,14 @@ V2_DOSSIER_TOOL = {
                         "description": "Short handoff context, not evidence. Sources described as support must also be cited in this story's evidence_fetch_ids."},
                     "reason": {"type": "string", "maxLength": 500},
                     "storyline_key": {"type": ["string", "null"]},
+                    "visual_asset_id": {"type": ["string", "null"], "description": "An exact asset you inspected this run, or null for text-only."},
+                    "visual_required": {"type": "boolean", "description": "Does this copy depend on its visual to be useful/accurate?"},
                 },
                 "required": ["story_id", "story_key", "existing_cluster_key",
                              "coverage_relation",
                              "member_candidate_ids", "post",
                              "selected_fetch_id", "evidence_fetch_ids", "elevated_claim",
-                             "reader_value", "reporting_note", "reason", "storyline_key"],
+                             "reader_value", "reporting_note", "reason", "storyline_key", "visual_asset_id", "visual_required"],
             }},
             "storyline_updates": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False,
@@ -1009,6 +1014,8 @@ class NewsroomSession:
             "haiku_rounds": self.haiku_rounds,
             "haiku_tool_calls": self.haiku_tool_calls,
             "initial_packet_bytes": self.initial_packet_bytes,
+            "visuals": {k:v for k,v in getattr(self,"visual_state",{}).items()
+                        if k in {"inspections","renders","image_bytes"}},
             "storylines": {
                 "indexed": len(self.storyline_index),
                 "haiku_selected": len(self.storyline_selected_keys),
@@ -1691,8 +1698,11 @@ class NewsroomSession:
             raise NewsroomError("wall_timeout", "newsroom wall-clock limit reached")
         history_limit = (config.COMPACT_DESK_HISTORY_BYTES if self.compact_enabled
                          else config.RUN_NEWSROOM_MAX_HISTORY_BYTES)
-        if _json_bytes(self.messages) > history_limit:
+        from . import visuals
+        if _json_bytes(visuals.without_pixels(self.messages)) > history_limit:
             raise NewsroomError("context_overflow", "newsroom message history exceeds bound")
+        if visuals.image_bytes(self.messages) > visuals.MAX_IMAGE_CONTEXT:
+            raise NewsroomError("image_context_overflow", "newsroom image context exceeds bound")
         kwargs = dict(
             model=config.NEWSROOM_MODEL,
             max_tokens=max_tokens,
@@ -1702,6 +1712,12 @@ class NewsroomSession:
             tools=tools or TOOLS,
             output_config={"effort": config.NEWSROOM_EFFORT},
         )
+        # Asset identifiers are local provenance, not provider API fields.
+        for message in kwargs["messages"]:
+            if isinstance(message.get("content"),list):
+                for block in message["content"]:
+                    if isinstance(block,dict) and block.get("type")=="image":
+                        block.pop("_asset_id",None); block.pop("_content_hash",None)
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
         elif isinstance(self.client, models.ResponsesClient):
@@ -1767,6 +1783,13 @@ class NewsroomSession:
                 round_number=self.rounds, response=response,
                 latency_ms=int((time.monotonic() - called_at) * 1000), outcome="ok",
             )
+            if getattr(response, "stop_reason", None) not in {"refusal", "max_tokens", "invalid_response"}:
+                for message in self.messages:
+                    for block in message.get("content", []) if isinstance(message.get("content"), list) else []:
+                        if isinstance(block, dict) and block.get("type") == "image" and block.get("_asset_id"):
+                            self.con.execute("UPDATE visual_assets SET writer_inspected_at=? WHERE asset_id=? AND run_id=?",
+                                             (time.time(), block["_asset_id"], self.run_id))
+                self.con.commit()
             return response
 
     def _append_assistant(self, response) -> list[Any]:
@@ -1873,6 +1896,7 @@ class NewsroomSession:
             published_at=str(fetched.get("published_at") or "")[:160],
             limitations=str(fetched.get("limitations") or "")[:500],
             text_truncated=bool(fetched.get("text_truncated")),
+            image_candidates=tuple(fetched.get("image_candidates") or []),
         )
         self.fetches[fetch_id] = record
         self.fetch_by_url[normalized] = fetch_id
@@ -1906,6 +1930,7 @@ class NewsroomSession:
             "limitations": record.limitations,
             "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
             "text_truncated": record.text_truncated,
+            "image_candidates": list(record.image_candidates),
         }
 
     def _register_native_sources(self, value: dict) -> dict[str, str]:
@@ -2575,7 +2600,8 @@ class NewsroomSession:
                 15 + config.SERPAPI_TIMEOUT_SECONDS):
             return self._tool_result(block.id, {"ok": False, "kind": "finalization_reserve"}, error=True)
         allowed = {"fetch_intake_item", "search_web", "fetch_source", "finish_research",
-                   "read_desk_context", "search_memory", "search_intake", "record_sources"}
+                   "read_desk_context", "search_memory", "search_intake", "record_sources",
+                   "list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"}
         if allow_assignment:
             allowed.add("assign_haiku_research")
             allowed.add("assign_research")
@@ -2585,6 +2611,9 @@ class NewsroomSession:
             if self.tool_calls >= config.RUN_NEWSROOM_MAX_TOOL_CALLS:
                 return self._tool_result(block.id, {"ok": False, "kind": "tool_capacity"}, error=True)
             self.tool_calls += 1
+        if name in {"list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"}:
+            from . import visual_tools
+            return visual_tools.dispatch(self, block)
         if name == "record_sources":
             submitted = [str(row.get("url") or "") for row in value.get("native_sources", []) if isinstance(row, dict)]
             mapping = self._register_native_sources(value)
@@ -2663,6 +2692,8 @@ class NewsroomSession:
         if self.compact_enabled or self.context_rows:
             research_tools.insert(-1, READ_DESK_CONTEXT_TOOL)
         research_tools.extend(reporter.TOOLS)
+        from . import visual_tools
+        research_tools.extend(visual_tools.TOOLS)
         if self.research_mode == "on" and not self.reporter_enabled:
             research_tools.insert(-1, ASSIGN_RESEARCH_TOOL)
         finalize_after_failure = False
@@ -2755,7 +2786,8 @@ class NewsroomSession:
             for block in blocks:
                 if block.name not in {"fetch_intake_item", "search_web", "fetch_source",
                                       "read_desk_context", "assign_haiku_research", "assign_research",
-                                      "record_sources", "search_memory", "search_intake"}:
+                                      "record_sources", "search_memory", "search_intake",
+                                      "list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"}:
                     raise NewsroomError("invalid_tool", f"unexpected v2 tool {block.name}")
                 signature = json.dumps([block.name, block.input], sort_keys=True,
                                        separators=(",", ":"))
@@ -2766,7 +2798,11 @@ class NewsroomSession:
                         "message": "Use another source or make the editorial call now.",
                     }, error=True))
                 else:
-                    results.append(self._dispatch(block))
+                    result = self._dispatch(block)
+                    pixels = result.pop("_pixels", None)
+                    results.append(result)
+                    if pixels:
+                        results.append(pixels)
             self.messages.append({"role": "user", "content": results})
 
     def _review_key_in_use(self, key: str, member_families: set[str]) -> bool:
@@ -3068,6 +3104,14 @@ class NewsroomSession:
                 "preserve_member_story_keys": bool(force_draft_reason == "identity_conflict"),
                 "storyline_key_requested": _clean_text(raw.get("storyline_key"), 120) or None,
             }
+            if raw.get("visual_asset_id"):
+                from . import visuals
+                try:
+                    draft["visual"] = visuals.proposal(self.con, raw["visual_asset_id"],
+                        run_id=self.run_id, members=members, required=raw.get("visual_required", False))
+                except (ValueError, OSError) as exc:
+                    # Never silently discard a requested, possibly essential visual.
+                    draft["visual"] = {"error": str(exc), "asset_id": str(raw["visual_asset_id"]), "required": True}
             for member in members:
                 item = self.by_hash[member]
                 resolutions[member] = replace(

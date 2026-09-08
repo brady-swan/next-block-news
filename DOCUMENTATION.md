@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-07 for Plan 0065. This index separates how NBN works now from how earlier
+Updated 2026-09-07 for Plan 0066. This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -28,6 +28,8 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | SPRINT-0064-FINDINGS.md | Isolated prompt probes, verification, release evidence and unresolved judgments |
 | PLAN-0065-EVIDENCE-TO-READER.md | Bounded editor research, article extraction, outcome-aware memory and reader-value guidance |
 | SPRINT-0065-FINDINGS.md | Afternoon evidence, regression tests, independent review and release/smoke record |
+| PLAN-0066-POST-VISUALS.md | Activated image capability scope and independent review contracts |
+| SPRINT-0066-FINDINGS.md | Visual templates, delivery/QA proof, costs and known limitations |
 | AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md | Bounded PDF extraction, evidence limitations, tests and release proof |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.
@@ -82,3 +84,7 @@ editorial standards, cadence, the model roster and publishing authority are unch
 Plan 0064 improves execution of that design; it does not replace the architecture in the dated
 visual guide. SYSTEM.md/PROMPTS.md carry its exact updated prompt/protocol behavior. The PDF
 was not regenerated for this focused reporting/handoff repair.
+
+Plan 0066 implements the previously queued image plan in the existing Python service. Current
+SYSTEM, Desk, prompt and handoff docs describe it. The older system PDF predates optional image
+tools and the Visuals tab; it remains a dated general architecture guide, not an image manual.

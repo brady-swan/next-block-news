@@ -63,7 +63,7 @@ def now_data(con, state, now):
             "publisher_sync": desk.number(kv.get("publisher:last_success")), "publisher_error": bool(kv.get("publisher:last_error")),
             "node_fetch": desk.number(kv.get("node:last_success")), "node_generated": kv.get("node:last_pulse_generated"),
             "node_error": bool(kv.get("node:last_error")), "autopost": config.AUTOPOST_ENABLED,
-            "pending_delivery": con.execute("SELECT COUNT(*) FROM publisher_mutations WHERE state IN ('prepared','in_flight','ambiguous','needs_owner_review')").fetchone()[0]}
+            "pending_delivery": con.execute("SELECT COUNT(*) FROM publisher_mutations WHERE state IN ('prepared','awaiting_media','in_flight','ambiguous','needs_owner_review')").fetchone()[0]}
 
 
 def run_window(con, run_id="", direction=""):
@@ -178,6 +178,10 @@ def run_detail(con, row):
                         "selected_fetch_id": s.get("selected_fetch_id"), "evidence_fetch_ids": s.get("evidence_fetch_ids") or [],
                         "editor": editor, "delivery": deliveries.get(sid), "outcome": outcome, "reason": reason,
                         "commit_at": commit.get("updated_at"), "validation": details.get("validation")})
+        from . import visual_choices
+        selected_visual=(editor or {}).get("visual_review", {}) or {}
+        stories[-1]["visuals"]=visual_choices.panel(con,rid,sid,members,
+            selected_visual.get("asset_id") or s.get("visual_asset_id"),review=selected_visual)
     for h in delivered:
         if h not in used and h in cards:
             d = decisions.get(h, {})

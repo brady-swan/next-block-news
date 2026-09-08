@@ -6283,6 +6283,48 @@ svg {
     grid-template-columns: repeat(2,minmax(0,1fr));
   }
 }
+.visual-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  margin-block: 18px;
+}
+.visual-card-heading, .visual-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.visual-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin-block: 16px;
+}
+.visual-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  font-size: .85rem;
+}
+.visual-card dt {
+  opacity: .65;
+}
+.visual-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.visual-card details {
+  margin-top: 16px;
+}
+.visual-card pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: .75rem;
+  max-height: 360px;
+  overflow: auto;
+}
 @property --tw-translate-x {
   syntax: "*";
   inherits: false;

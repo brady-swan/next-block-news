@@ -567,6 +567,8 @@ def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None)
         published_at = ""
         if m := re.search(r'(?is)<meta[^>]+(?:property|name)=["\'](?:article:published_time|datePublished|date)["\'][^>]+content=["\']([^"\']+)', body):
             published_at = html.unescape(m.group(1)).strip()[:160]
+        from . import visuals
+        image_candidates = visuals.discover_html(body, str(resp.url))
         body = _article_markup(body)
         body = re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", body)
         links = []
@@ -587,6 +589,7 @@ def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None)
         return {"text": text,
                 "final_url": str(resp.url), "canonical_url": canonical or str(resp.url),
                 "byline": byline, "published_at": published_at, "links": links,
+                "image_candidates": image_candidates,
                 "limitations": "Dynamic shell; no usable reporting text" if shell else "",
                 "outcome": "evidence_failed" if shell else "ok", "error_kind": "dynamic_shell" if shell else "",
                 "error_message": "", "redirect_chain": redirect_chain}

@@ -9,7 +9,7 @@ story desk every 15 minutes when prepared candidates exist, sends the resulting 
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
 
-## Model roster — unchanged in Plan 0065
+## Model roster — unchanged in Plan 0066
 
 | Role | Model | Effort |
 | --- | --- | --- |
@@ -115,7 +115,8 @@ and missed overflow, without another collector process. See INBOUND-NEWS-FLOW.md
 Long X text, original/quoted sources, media pointers and dated engagement snapshots live in a
 separate bounded 12 KiB item record. The summary is only a preview. Preparation and writer cards
 carry useful context; fuller material is retrieved on demand. It is discovery, never automatic
-receipt evidence or proof that the model watched a video. No media downloads/reposting added.
+receipt evidence or proof that the model watched a video. Plan 0066 adds optional, explicit
+still-image inspection and authorized reuse at the writer stage, not during intake.
 The pilot's first snapshot stores older archive entries as explicit bootstrap skips before
 Haiku; later entries follow normal routing. Missing dates are not silently skipped.
 
@@ -425,6 +426,50 @@ That feedback is not a hidden rejection rule.
 The editor payload is bounded to 256 KiB. Repeated evidence bodies are cataloged once; selected
 receipts and warnings take priority. If an entire candidate cannot fit without losing its
 selected receipt, it is staged as a human draft and labeled `editor_payload_capacity`.
+
+## Optional post visuals — Plan 0066
+
+The existing reporter-writer can list relevant article/X image pointers, inspect actual static
+image pixels, inspect one original-layout PDF page, or render an NBN graphic from retained
+evidence. Bar, line, before/after, quote and highlighted-excerpt templates support landscape and
+square layouts. Pillow draws exact text/numbers with packaged Inter fonts; there is no paid
+image-generation provider. Quotations/excerpts must match a contiguous directly fetched source
+passage, with whitespace-only normalization. Native paraphrases cannot supply literal quotes.
+Source dates, units, signed/missing values, highlights, source context and transformations are
+retained. Numerical interpretation and visual usefulness remain editorial judgments.
+
+Both writer and editor receive the exact immutable image bytes. Captions and metadata do not
+count as inspection. The independent editor approves, omits or holds an image and separately
+considers standalone text fallback. Approval binds final copy, asset hash, alt text and credits.
+An unavailable editor cannot attach an unreviewed image or approve fallback text by default.
+Unknown external-image rights mean review-only; explicit reusable status and retained permission
+evidence are required before attachment. External-image credit is included in the source reply.
+Text-only remains normal; there is no visual quota or new mandatory model turn.
+
+Bounds: six shortlist pointers; two external inspections per story; four inspections and four
+renders per run within the existing writer calls/deadline. Static PNG/JPEG/WebP is limited to
+4 MiB / 12 million pixels; downloads to ten seconds. Original-layout PDFs use the first 20 pages,
+10 MiB input and ten-second combined download/render bound, without OCR or arbitrary crop.
+Editor image context is separately limited to four images / 12 MiB base64; ordinary 256 KiB text
+limits remain. Optional overflow is explicit, not hidden source/image truncation.
+
+SQLite `visual_assets` stores immutable metadata; content-hashed files live in
+`/data/visual-assets`. They and their evidence survive the 30-day writer-memory TTL. A 512 MiB
+soft admission cap declines new optional assets rather than removing retained work; automated
+pruning is not enabled. Observations store IDs/hashes, not base64. Visual counters record use;
+image tokens are charged inside the existing writer/editor ledger, not a new image-model seat.
+
+Typefully preparation is persisted in `visual_uploads`, then the existing publisher intent
+moves from `awaiting_media` to `in_flight` only after a ready upload and matching alt text.
+One bounded status poll happens per worker boundary; preparation expires after 15 minutes.
+Lost draft acknowledgments/read-back ambiguity never trigger a second create or text fallback.
+Full-payload identity includes ordered text/media, immutable asset/hash, alt and credits.
+Media-level alt verification plus an acknowledged `{id, created_at, updated_at}` draft version
+fences later edits. Present `updated_at: null` is valid; absent version fields are not proof.
+Typefully does not expose draft-local alt text in draft GET, and alt-only UI version behavior
+has not been empirically verified. Unknown or changed snapshots stay unresolved for review.
+Legacy drafts with unrecorded media cannot be automatically replaced. `planned` remains an
+inert DRAFT, not confirmed publication. See DESK-GUIDE.md for queued visual review controls.
 
 ## Delivery classes and safety
 

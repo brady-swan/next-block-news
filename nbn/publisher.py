@@ -64,7 +64,9 @@ def reconcile_mutations(con) -> dict:
     """Bounded restart recovery for Typefully operations; never repeats a mutation."""
     if _backend() != "typefully":
         return {"disabled": 1}
-    from . import publisher_typefully, store
+    from . import publisher_typefully, publisher_visuals, store, x_payload
+    import json
+    publisher_visuals.process_pending(con)
     now = time.time()
     try:
         last = float(store.kv_get(con, "publisher:mutation_reconcile_last") or 0)
@@ -91,6 +93,10 @@ def reconcile_mutations(con) -> dict:
     for row in pending:
         stats["checked"] += 1
         token, version = row["owner_token"], int(row["version"])
+        if json.loads(row["materialization_json"]).get("media_payload"):
+            outcome=publisher_visuals.reconcile_one(con,row)
+            stats["confirmed" if outcome=="confirmed" else "deferred" if outcome=="pending" else "review"] += 1
+            continue
         if row["state"] == "prepared":
             if store.transition_publisher_mutation(
                     con, row["mutation_id"], token, version, "definite_failure",
@@ -107,7 +113,7 @@ def reconcile_mutations(con) -> dict:
                 if created is None or abs(created - float(row["created_at"])) > 1800:
                     continue
                 texts = publisher_typefully.draft_x_texts(raw)
-                if texts and store.x_thread_fingerprint(texts) == row["desired_fingerprint"]:
+                if texts and not x_payload.has_media(raw) and store.x_thread_fingerprint(texts) == row["desired_fingerprint"]:
                     matches.append(raw)
             if len(matches) == 1:
                 remote = matches[0]
@@ -153,7 +159,7 @@ def reconcile_mutations(con) -> dict:
             stats["failed"] += 1
             continue
         texts = publisher_typefully.draft_x_texts(remote)
-        fingerprint = store.x_thread_fingerprint(texts) if texts else ""
+        fingerprint = store.x_thread_fingerprint(texts) if texts and not x_payload.has_media(remote) else ""
         if fingerprint == row["desired_fingerprint"]:
             mode = "DRAFT" if status == "draft" else "IMMEDIATE"
             store.finalize_publisher_mutation(
@@ -183,7 +189,8 @@ def reconcile_mutations(con) -> dict:
 def resolve_mutation(con, mutation_id: str, owner_token: str, version: int,
                      resolution: str, remote_draft_id: str = "") -> dict:
     """Desk-facing owner resolution; no branch retries a remote mutation."""
-    from . import publisher_typefully, store
+    from . import publisher_typefully, publisher_visuals, store, x_payload
+    import json
     row = store.publisher_mutation(con, mutation_id)
     if not row or row["owner_token"] != str(owner_token) or int(row["version"]) != int(version):
         return {"ok": False, "reason": "stale or unknown mutation"}
@@ -203,6 +210,19 @@ def resolve_mutation(con, mutation_id: str, owner_token: str, version: int,
             != str(config.TYPEFULLY_SOCIAL_SET_ID):
         return {"ok": False, "reason": "draft belongs to another social set"}
     texts = publisher_typefully.draft_x_texts(remote)
+    data=json.loads(row["materialization_json"])
+    if data.get("media_payload"):
+        if remote.get("status") not in {"draft","planned","scheduled","publishing","published"}:
+            return {"ok":False,"reason":"remote draft has no bindable active status"}
+        if not data.get("remote_version") or not x_payload.matches(remote,data["media_payload"],
+                media_lookup=publisher_visuals.media_get,remote_version=data["remote_version"]):
+            return {"ok":False,"reason":"Exact media/alt snapshot or acknowledged draft version cannot be verified"}
+        result=store.finalize_publisher_mutation(con,mutation_id,owner_token,version,
+            mode="DRAFT" if remote.get("status") in {"draft","planned"} else "IMMEDIATE",
+            provider_ref=str(remote_draft_id),publisher_status=str(remote.get("status")))
+        return {"ok":bool(result.get("ok")),"state":"confirmed","post_id":result.get("post_id")}
+    if x_payload.has_media(remote):
+        return {"ok":False,"reason":"Legacy intent has unrecorded remote media"}
     if not texts or store.x_thread_fingerprint(texts) != row["desired_fingerprint"]:
         return {"ok": False, "reason": "draft content does not match desired output"}
     status = str(remote.get("status") or "").casefold()

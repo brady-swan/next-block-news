@@ -50,7 +50,7 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.22-evidence-to-reader. The dossier field descriptions distinguish the selected
+editorial-core-v2.23-post-visuals. The dossier field descriptions distinguish the selected
 reader link from the complete story-specific evidence sent to the editor. Retaining native
 extracts alone or describing them in a reporting note does not attach them to a story; the
 writer cites their exact URLs in the same dossier. A small optional unassigned research appendix
@@ -69,6 +69,13 @@ concrete Bitcoin use, demonstrations, access/adoption and substantive culture wi
 market/protocol impact. It rejects newborn low engagement as a dismissal reason. Standalone
 software releases remain out; releases can advance larger ongoing stories. Treasury and writing
 rules are unchanged. Media metadata and quoted-source tips are not inspected corroboration.
+
+Plan 0066 appends `nbn/visual_tools.py:GUIDANCE` to the hashed newsroom system prompt and adds
+optional list/inspect/render/PDF-page tools. The dossier selects an inspected immutable asset;
+the editor sees its exact pixels, evidence, alt text and reuse basis and must explicitly
+approve/omit/hold it. No new mandatory turn or model seat is added. The loaded editorial
+orientation itself is unchanged. Source quotes remain exact; rendered data remains subject
+to editorial support/units/period checks. Text-only is normal, not a failed visual quota.
 
 Plan 0064 clarifies original-statement lookup, exact prior facts versus new developments,
 matching periods/transaction direction, and practical Bitcoin/monetary scope. Preparation uses

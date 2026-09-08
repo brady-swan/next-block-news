@@ -254,6 +254,9 @@ def replace_draft(draft_id: str, prior_texts: list[str], desired_texts: list[str
         )
         if texts is None or texts not in accepted_priors:
             return PublishOutcome.FAILED, "remote_modified"
+        from . import x_payload
+        if x_payload.has_media(raw):
+            return PublishOutcome.FAILED, "media_requires_versioned_review"
         x = raw.get("platforms", {}).get("x", {})
         if set(x) - {"enabled", "posts", "settings"}:
             return PublishOutcome.FAILED, "unexpected_x_structure"

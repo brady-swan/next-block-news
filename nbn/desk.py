@@ -488,6 +488,16 @@ def handle(handler, parsed, state):
         respond(handler, 403, "Forbidden", "text/plain; charset=utf-8")
         return
     path = parsed.path.removeprefix("/desk").strip("/")
+    if path.startswith("visuals/"):
+        from . import visuals
+        try:
+            with reader() as con:
+                asset=visuals.get(con,path.split("/",1)[1])
+                content=visuals.bytes_for(asset)
+            respond(handler,200,content,asset["mime"])
+        except (ValueError,OSError,sqlite3.Error):
+            respond(handler,404,"Visual not available","text/plain; charset=utf-8")
+        return
     assets = {"assets/desk.css": (ASSETS / "desk.css", "text/css; charset=utf-8"),
               "assets/desk.js": (ASSETS / "desk.js", "text/javascript; charset=utf-8"),
               "assets/workspace.css": (ASSETS / "workspace.css", "text/css; charset=utf-8"),
