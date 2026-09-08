@@ -461,6 +461,14 @@ an old one-post or new two-post attempt. Legacy inline-link drafts are retained 
 mechanically migrated. `scripts/typefully_feedback.py` provides a tightly bounded, GET-only view
 of recent owner comments; its marker-free display reads are never used for draft replacement.
 
+Since September 8, the rolling Codex audit is authorized to add draft-specific review comments
+and replies through Typefully's Comments API. Each starts with `Codex audit`; distinguish these
+AI observations from owner feedback even when the connected account supplies the API author.
+The audit checks current copy and existing comments, avoids repeated notes, and verifies writes.
+It does not edit, schedule, publish or dismiss the draft. Existing comment-based replacement
+protection remains unchanged. This is an audit workflow, not a new in-worker model stage;
+see `AUDIT-AUTONOMY.md` and the local comment ledger `audit/typefully-comments.md`.
+
 The editor compares apparent conflicts by actor, place or facility, time, and scope. A newer
 specific action is not contradicted by an older general intention; when current evidence
 supports a narrower accurate version, the editor should revise rather than drop useful news.

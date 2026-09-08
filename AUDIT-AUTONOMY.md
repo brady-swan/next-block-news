@@ -169,6 +169,44 @@ do not broaden authority or authorize publication/Typefully actions.
 Add strong examples, misses, weak drafts, owner comments, peer comparisons, and suggested
 rewrites to the tuning record.
 
+### In-context Typefully review comments — owner authorized September 8, 2026
+
+Leave useful draft-specific audit feedback as Typefully comments so Brady can review it beside
+the copy. This is a narrow exception to the manual Typefully mutation prohibition: adding
+review comments and follow-up replies only, not changing draft text, media, scheduling or status,
+publishing, dismissing, or editing/deleting/resolving anyone's comments.
+
+- Begin every message with `Codex audit` so it cannot be mistaken for Brady's feedback, even
+  if the API attributes it to the connected account. These are advisory AI observations,
+  not owner instructions, publication approval, or a new factual source. Never recycle them
+  into the tuning record as owner feedback or treat repetition of our opinion as corroboration.
+- Read the complete current draft, receipt reply, relevant media and existing comment threads
+  before commenting. Keep notes concise: what works, the most important concern, and a suggested
+  rewrite when useful. Distinguish copy feedback, editorial judgment and verified factual issues;
+  do not imply a fact check was completed when it was not. Include positive examples too.
+- Prefer one consolidated review per meaningful draft version. Anchor it to an exact relevant
+  substring, or reply to an existing appropriate unresolved audit thread. Read resolved as well
+  as unresolved comments to avoid repeating unchanged feedback. Do not reopen resolved discussions
+  without genuinely new evidence. No comment is required merely because an audit ran.
+- Use only the documented comment POST endpoints and existing credentials. Record the draft ID,
+  intended note and version/time before posting; read back the returned comment and confirm the
+  reader-visible thread, media and publishing state are unchanged. If a write times out or has
+  an uncertain result, inspect the remote comments before considering another attempt; do not
+  blindly retry. Preserve an unresolved outcome if remote state cannot be established.
+- Comment anchors are structural metadata and may change Typefully's updated timestamp. They
+  are not a new draft, rewrite or publication. NBN currently protects commented drafts from
+  automatic replacement; preserve that protection, including for audit comments, rather than
+  changing publishing semantics as part of this workflow.
+- Keep broader lessons and evidence in the tuning record, and speed/cost/system findings in
+  their existing records. Draft comments are the convenient review surface, not a new model
+  pipeline. Record confirmed comment IDs in `audit/typefully-comments.md`.
+
+API reference: https://typefully.com/docs/api (Comments). For an X comment, POST to
+`/v2/social-sets/{social_set_id}/drafts/{draft_id}/comment-threads` with `platform: "x"`,
+`post_index`, an exact nonempty `selected_text`, `occurrence` and the comment `text`.
+For a reply, POST `text` to `/comment-threads/{comment_thread_id}/comments`. Existing
+`scripts/typefully_feedback.py` remains a read-only viewer; it is not the comment writer.
+
 Plan 0063 checks: follow guide-to-original-source journeys, especially links within reporting
 and original statements already captured but skipped. Count native web/X work inside the writer,
 not only delegated assignments. Inspect source-specific extract provenance and attribution;
@@ -278,7 +316,7 @@ autopost back on.
 - Enable autopost.
 - Queue owner skip overrides or stage/dismiss/retry actions without an explicit owner request.
 - Publish, dismiss, rewrite, or otherwise mutate Typefully content or resolve ambiguous Typefully
-  state.
+  state, except the explicitly authorized review-comment additions/replies above.
 - Ship systemic or editorial-policy changes outside the bounded improvement authority above.
 - Alter credentials.
 - Perform destructive database work.

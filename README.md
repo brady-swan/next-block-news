@@ -138,6 +138,10 @@ mutation fingerprints remain authoritative across deployments. Owner comments ca
 without mutation through `python scripts/typefully_feedback.py`; the command is GET-only and
 strictly bounded.
 
+The rolling Codex audit may also leave clearly labeled `Codex audit` review comments directly
+on drafts under `AUDIT-AUTONOMY.md`. Comments are advisory, never owner instructions or automatic
+copy edits. Commented drafts keep the existing protection against automatic replacement.
+
 Nuelink remains as a legacy fallback for single posts, but it is not the preferred rail
 and cannot publish threads.
 
