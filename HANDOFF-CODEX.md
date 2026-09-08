@@ -216,6 +216,15 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
+Plan 0066 shipped as `0232620`, Railway deployment `2c7fb9d9-46d9-4e2e-a1dd-837b7447dcec`
+SUCCESS. 564 clean-release tests passed (566 with owner evaluator work), clean static build
+matched, health/Desk/schema/runtime hashes passed, and a natural intake cycle completed.
+Isolated unpublished transport draft 10673284 confirmed exact image + alt + first-reply receipt;
+its journal/tapes are outside production editorial tables. Do not publish it or treat it as news.
+The existing audit is ACTIVE with image quality/cost/delivery watches and build-window backfill
+after 2026-09-08T00:47:12.894Z. First natural image-bearing editorial delivery remains unverified;
+see SPRINT-0066-FINDINGS.md. Autopost is OFF. The older release evidence below is historical.
+
 Plan 0065 shipped as `02c864d`, Railway deployment `d8e6c4bf-b951-4103-b60a-345746823fc2`
 (SUCCESS). Working-tree suite: 536 tests; clean release: 534. Seven runtime/prompt hashes,
 Desk/health/API access, read-only production memory projections and a normal intake cycle

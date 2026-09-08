@@ -1,7 +1,7 @@
 # Sprint 0066 — exact post visuals
 
-September 7, 2026 Central. Implementation and release checks in progress; release evidence below
-will distinguish local verification, provider capability and actual Typefully transport.
+September 7, 2026 Central. Deployed and smoke-tested. The evidence below distinguishes local
+verification, provider capability, actual Typefully transport and still-pending natural image use.
 
 ## What changed
 
@@ -28,11 +28,14 @@ Final review requested only truthful omitted/fallback and inert planned labels, 
 No further architecture expansion was requested.
 
 - Full working-tree suite: 566 tests passed (includes two unrelated owner evaluator tests).
+  Clean committed archive: **564 tests passed**; clean npm install, type-check and static build
+  passed, with an identical compiled-asset manifest.
 - Targeted final visual checks: 30 tests passed, including actual bounded Poppler page rendering,
   quote integrity, signed/missing data, same-batch image allowance, editor recovery/capacity,
   failed confirmation, interrupted upload, owner version changes and queued Desk actions.
 - All ten template/preset proofs rendered and visually inspected. Desktop 1728px and mobile
-  390px Desk previews loaded all five real PNGs without horizontal overflow; disposable selection
+  390px Desk previews loaded all five real PNGs without horizontal overflow; 1024px/2560px
+  checks also passed. Disposable selection
   returned queued and did not invoke a model or change Typefully. Full-size asset links work.
 - Configured Grok 4.3 medium and Grok 4.5 medium both correctly read a tiny two-color image.
   Combined provider-reported capability-probe cost: approximately $0.001692, recorded under
@@ -64,6 +67,35 @@ PDF predates these tools; current Markdown/Desk documentation describes the new 
 
 ## Release evidence
 
-Pending clean-archive tests, explicit Railway backup/deploy, health/Desk checks, isolated
-unpublished media transport and natural worker cycle. Rollback baseline: `02c864d`.
-Restore code only for ordinary rollback; preserve additive tables/assets and pending intents.
+Runtime commit **0232620**, pushed to origin/main and explicitly deployed from its clean archive.
+Railway deployment **2c7fb9d9-46d9-4e2e-a1dd-837b7447dcec**: SUCCESS, one replica, `/data` mount.
+Pre-release online SQLite backup passed integrity check:
+`/data/backups/nbn-pre-source-policy-20260908T021831Z.db`.
+
+Production hashes matched newsroom, immutable asset storage, delivery module and compiled Desk
+manifest. Health and all four workspace views returned 200; JS/CSS, Review tools and APIs
+returned 200; missing authorization returned 403 and nonexistent visual returned 404. The
+natural intake cycle completed at 02:20 UTC with healthy process state and unchanged roster /
+autopost OFF. Schema contains all three visual tables. No forced newsroom call was made.
+
+One isolated **unpublished** Typefully draft **10673284**, created 02:21:37 UTC, is titled
+`IMAGE CAPABILITY TEST — DO NOT PUBLISH`. It used the real renderer and resumable uploader;
+the first pass persisted processing, the second confirmed the same intent after ready status.
+Read-back verified two ordered posts, media counts `[1, 0]`, exact alt text and acknowledged
+draft version. A subsequent read still matched exactly. No existing Typefully draft was modified.
+Production `posts` contains zero smoke rows; separate journal/assets/tape remain at
+`/data/smoke/visual-0066`. Do not count this synthetic transport fixture as editorial success.
+
+The same `audit-nbn-production` heartbeat was restored ACTIVE at its 15-minute interval with
+standing autonomy/quiet notifications preserved. Image-specific checks and first-natural-run
+follow-through were added. It must backfill after the last full cutoff
+**2026-09-08T00:47:12.894Z**; smoke/health checks do not advance that editorial audit boundary.
+
+Clean npm install reported an existing PostCSS build-tool advisory. The dependency was not
+changed by this sprint, processes our repository CSS offline and is absent from the Python
+runtime; a routine dependency update remains maintenance work, not a discovered live image-path
+vulnerability. No force upgrade or unrelated lockfile changes were bundled here.
+
+Rollback baseline: `02c864d`. Restore code only for ordinary rollback; preserve additive
+tables/assets and pending intents. If there are pending v2 media mutations, settle/hold them
+before using a baseline that predates media identity; never blindly recreate them as text drafts.
