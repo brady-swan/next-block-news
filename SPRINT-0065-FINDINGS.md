@@ -100,6 +100,29 @@ ambiguous/blank Bitcoin Magazine bodies. Existing extraction fixtures now includ
 The archive contains the release plan/findings as they stood before deployment; this final
 release-proof update is a documentation-only follow-up, not another worker restart.
 
+### First full natural run
+
+`cycle:1788827076:cc52c9a1` completed at 2026-09-08 00:27:43 UTC / 7:27 PM Central without a
+worker error. Preparation advanced eight of 18 inputs. The writer used four responses; the batch
+editor returned three valid decisions in one call, accepting the new refs contract without recovery.
+The actual editor request included three optional unassigned receipts; it selected **zero** additions.
+This proves the live appendix/schema path works, not that omitted evidence has yet been rescued.
+
+- Liquid: the editor explicitly identified lost return/outcome context and restored it in its
+  revision. Normal worker delivery recorded replacement of existing draft **10663389**, not a
+  new draft or publication. This is encouraging for the replacement guidance, not proof that all
+  useful warnings or details were optimally preserved.
+- ETF: the writer still proposed September 4 daily flow totals. The editor dropped them as routine
+  and already contextualized. Freshness/selection is still a live tuning issue.
+- Stacks/Xverse: the writer proposed a product launch with an unrelated selected Fidelity receipt;
+  the editor dropped it for scope and sourcing. The proposed blanket self-custody wording also
+  deserves review rather than being accepted as an established fact. Handoff discipline is not fixed
+  merely because the optional appendix exists.
+
+Tracked run spend: preparation **$0.0057745**, writer **$0.213675**, editor **$0.0623212**, total
+**$0.2817707**. This is one run, not a daily forecast or an isolated measure of appendix overhead.
+The audit will continue evaluating natural choices, misses, freshness, writing and source quality.
+
 Watch natural runs for actual appendix selection, preserved reader context, honest event timing,
 and current outcome caveats. Static tests prove the handoff mechanics, not that future copy is
 better. Optional editor input can increase cost; no extra provider calls were introduced. Measure

@@ -201,9 +201,11 @@ Plan 0065 shipped as `02c864d`, Railway deployment `d8e6c4bf-b951-4103-b60a-3457
 (SUCCESS). Working-tree suite: 536 tests; clean release: 534. Seven runtime/prompt hashes,
 Desk/health/API access, read-only production memory projections and a normal intake cycle
 verified. Autopost OFF; model roster/budgets/cadence unchanged. The original rolling audit is
-ACTIVE with Plan 0065 watches and its full-audit cutoff preserved for backfill. Initial smoke
-preceded the first full v2.22 newsroom run; the audit must evaluate natural output, not infer
-editorial improvement from passing tests. See SPRINT-0065-FINDINGS.md for backup and limits.
+ACTIVE with Plan 0065 watches and its full-audit cutoff preserved for backfill. The first full
+natural v2.22 run then completed: three editor decisions, one existing Liquid draft replacement,
+two drops, $0.2817707 tracked spend. Appendix delivered, zero additions selected. The editor
+restored useful outcome context, but stale ETF selection and an unrelated Stacks receipt remain
+observed writing issues. Do not infer broad improvement from one run. See SPRINT-0065-FINDINGS.md.
 
 Plan 0064 shipped reporting follow-through as `c5c9096`; production smoke exercised the real
 writer/editor handoff and exposed an older intake-variable shadowing bug after successful draft
