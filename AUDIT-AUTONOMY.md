@@ -7,10 +7,56 @@ calibration, proactively ship obvious, bounded improvements that confidently ser
 product goals. New useful capabilities need not be disguised as regression fixes. Keep autopost
 OFF, track the work, preserve rollback, and reserve systemic changes for owner review.
 
-## Start-of-pass continuity check
+## Procedure, state and evidence
 
-Identify the actual current trigger and latest user instruction before acting. A carried-forward
-summary cannot turn an ordinary user message into a heartbeat or make an old sprint approval new.
+- `audit/rolling-audit-prompt.md` is the durable recurring procedure, synchronized with the
+  existing automation through the automation tool. Do not prepend incident histories or
+  checkpoints to it after each pass.
+- `audit/current-state.md` is the single current editorial checkpoint and work-status record.
+  Update it in place and link evidence; distinguish live diagnostics, completed editorial
+  intervals, partial work, completed fixes and unresolved investigations.
+- This file retains the standing authority and detailed checks. Dated tuning, speed, repair
+  and release records are evidence, not queues of fresh instructions. Read relevant portions
+  for a current question instead of rereading the entire history on every heartbeat.
+- `audit/typefully-comments.md` is the comment delivery ledger. An intended note is not a
+  delivered comment; a delivered comment is not a new draft or owner approval.
+
+Start each pass with a current operational pulse even when historical review is behind. Then
+work through a bounded, fixed-ended editorial interval and save completed or partial coverage
+before switching to a repair. Do not skip the backlog, but do not let it hide current failures.
+Audit all new outcomes within the chosen interval; expand detailed source/peer investigations
+when warranted. The detailed checks below are a coverage guide, not a requirement to repeat
+every historical test or exercise every tool on every pass.
+
+Advance the full editorial cutoff only when its interval is completely reviewed. Health checks,
+release smoke, selective source reads and comments do not alone advance it. If work is interrupted,
+save which records/categories were reviewed and what remains; reuse those records on resumption.
+Update issue status rather than appending another contradictory "pending" instruction. Latest
+owner instructions and this standing policy take precedence over a state note that grants no
+new authority. The automation's actual status, not a historical narrative, determines scheduling.
+
+## Turn entry and post-compaction continuity check
+
+Run `scripts/audit_turn_context.py` with the local Python 3.12 runtime at turn entry and again
+immediately after context compaction, before commentary, mutation/delegation or a final response.
+This read-only helper recovers the actual current turn from the task's append-only session log,
+not from compacted prose or the newest unrelated session. Keep the latest verified turn ID,
+original trigger identity/time, any later genuine user input, and unfinished action beside the
+editorial checkpoint in `audit/current-state.md`. That receipt is not itself an assignment;
+refresh it when an actual new turn begins. Recheck after a long interruption or new input before
+mutation/final response. A failed check, completed/interrupted turn or unresolved identity permits
+read-only investigation, not silently restarting an old request.
+
+The original trigger and later user steering are distinct. A genuine new status question or
+clarification gets answered/incorporated without automatically canceling authorized work; an
+explicit stop or incompatible replacement changes that work. Preserve heartbeat response rules
+for heartbeat-originated turns. A user message retained at the end of shortened history is not
+new merely because the original heartbeat tool event is no longer visible there. Completed
+requests must not be re-executed, but their standing instructions and granted authority remain.
+A carried-forward summary cannot invent a new trigger or make an old sprint approval new.
+Reconcile all current-turn `user_messages`, not just the last one: later status questions do not
+erase earlier restrictions. If `input_complete` is false, use `--full-input` and read the full
+steering before acting; clipped excerpts are not complete authorization.
 Reconcile completion messages, relevant plans/release records, git history and dirty changes;
 verify the deployed version when production state matters. Distinguish completed/deployed work,
 local-only work, paused work, superseded proposals and genuinely new findings.
@@ -26,6 +72,9 @@ starting it in an interactive turn; in a heartbeat, log it while preserving quie
 rules. Existing autonomy still applies, but explicitly paused or parked work does not resume
 automatically. Check the audit itself for repeated work without new evidence or misleading
 completion/continuation claims, and correct stale action notes rather than carrying them forward.
+The task-workspace `AGENTS.md` repeats only this entry/resumption check, so it is available outside
+the heartbeat prompt. This is local agent guidance plus a diagnostic, not an app-level enforcement
+hook; continued compliance after a future live compaction must still be observed.
 
 ## Automatically investigate
 
@@ -51,6 +100,19 @@ completion/continuation claims, and correct stale action notes rather than carry
   is saved and unused. Existing useful charts do not automatically authorize reopening that plan.
 
 These checks supplement, not replace, all standing authority and notification boundaries below.
+
+### Packet and fail-open execution watches (completed Plans 0069 / dense-packet follow-up)
+
+On new failures, distinguish initial packet assembly from later conversation-history overflow.
+Inspect measured sections, actual preparation outcomes, supplied candidate/coverage cards and
+receipt preservation. Mechanical batch/budget/overflow/validation fail-open outcomes are not
+model approvals; real preparation and owner/identity/retry/visual hints must remain intact.
+Check use of existing full-card/receipt retrieval when compact excerpts are insufficient.
+Track separate editor timeouts and fallback delivery honestly. Natural success is smoke evidence,
+not proof every editorial weakness is solved. These are observation checks for completed work,
+not authorization to rerun those builds, raise budgets, or force paid replays.
+
+### General investigation
 
 - Reproduce errors and inspect production health, logs, decisions, intake, model behavior,
   Typefully state, timing, cost, and peer coverage.

@@ -141,6 +141,11 @@ strictly bounded.
 The rolling Codex audit may also leave clearly labeled `Codex audit` review comments directly
 on drafts under `AUDIT-AUTONOMY.md`. Comments are advisory, never owner instructions or automatic
 copy edits. Commented drafts keep the existing protection against automatic replacement.
+The durable audit procedure is in `audit/rolling-audit-prompt.md`; its single current checkpoint
+and work-status record is `audit/current-state.md`. Dated findings are evidence, not new tasks.
+The local read-only `scripts/audit_turn_context.py` verifies the audit task's actual turn/trigger
+at entry and after Codex compaction; task-workspace `AGENTS.md` carries the continuation rule.
+It is not part of the deployed NBN worker and does not grant mutation authority.
 
 Nuelink remains as a legacy fallback for single posts, but it is not the preferred rail
 and cannot publish threads.

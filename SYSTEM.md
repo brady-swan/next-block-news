@@ -574,6 +574,14 @@ calls a model or stages correction drafts on schedule.
 The separate rolling production audit follows `AUDIT-AUTONOMY.md`. It may diagnose and repair
 clear technical regressions and proactively ship obvious bounded tool, research-execution,
 writing, Desk and efficiency improvements within the existing design (owner expansion September 7).
+Its recurring procedure is maintained in `audit/rolling-audit-prompt.md`, with one mutable
+checkpoint/work-status record in `audit/current-state.md`. Current health checks are separate
+from bounded historical editorial coverage; old release notes do not restart completed work.
+Local `scripts/audit_turn_context.py` recovers the actual Codex turn and original trigger from a
+bounded session-journal tail, separately reporting new user steering. The task workspace's
+`AGENTS.md` and recurring prompt require this check on entry and after compaction. Completed
+requests stay closed; an unresolved trigger stops continuation for read-only investigation.
+This is an agent-workflow safeguard, not a production worker stage or an app-level execution lock.
 Bounded PDF-text reading is implemented within that authority; see
 `AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md` for scope and verification.
 Record rationale, test/deploy/smoke evidence, cost/behavior impact and rollback. Systemic design,
