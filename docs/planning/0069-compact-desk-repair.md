@@ -59,3 +59,11 @@ audit pass actually covers the intervening records.
 Implementation review approved with no blockers; the independent reviewer ran 46 focused
 tests. Incorporated the reviewer's small tool clarification: existing context lookup opens
 current receipt/candidate details as well as history. No new tool or mandatory lookup.
+
+## Completed
+
+Released as **bb900b3**, Railway deployment **c71a4a74-09a4-4728-a75f-a4e24a149444**.
+581 clean-release tests passed. The first natural v2.25 run completed with a 58,307-byte
+packet containing 22 candidates, four prepared receipts and all 20 open-draft cards.
+Audit restored ACTIVE at the existing cadence; autopost OFF. Full proof and boundaries:
+SPRINT-0069-FINDINGS.md. This plan is completed, not pending implementation.

@@ -46,12 +46,33 @@ parked. No manual Typefully mutation or paid replay is part of this repair.
   release with no blockers. Their narrow tool-wording clarification was incorporated: context
   retrieval opens current receipt/candidate details as well as history, without requiring a fetch.
 
-## Release status
+## Production release — complete
 
-Implementation review approved. Clean-release verification and deployment pending.
-Audit remains paused; autopost remains OFF.
+- Runtime **bb900b3**, pushed to origin/main and deployed from clean archive
+  `/tmp/nbn-0069-release.WSgO7x`. **581 clean-release tests passed**. The two unrelated
+  working-tree evaluator tests and all unrelated dirty work were excluded from this release.
+- Online backup `/data/backups/nbn-pre-source-policy-20260908T140556Z.db` passed its integrity
+  check. No database migration, credentials, editorial settings or model budgets changed.
+- Railway deployment **c71a4a74-09a4-4728-a75f-a4e24a149444** reached **SUCCESS** on the
+  existing production service. Ten deployed runtime/document/test file hashes match the archive.
+  Newsroom SHA-256: `c6c0030089f723e6ed9ff29e7790dc4c2369ea0ecca45b2433d62463102c8768`.
+- All four authenticated Desk workspace views returned HTTP 200 / JSON; unauthenticated
+  workspace access returned 403. Health returned 200 with autopost OFF and no worker error.
+- First natural run **cycle:1788876448:195d7ba4** completed at **14:08:27 UTC**. Its actual
+  writer packet was **58,307 bytes**, with **22 candidates, four prepared receipts and all
+  20 in-scope open-draft cards**. Four receipt sidecars were offloaded, and all 22 candidates
+  had full context IDs. Four writer responses, five native research operations and one
+  710-byte context lookup completed; there was no packet overflow. This directly exercises
+  the repaired path under assignment-preparation fail-open (`seat_cap`). It is smoke proof,
+  not an assertion that every editorial decision or source choice is now correct.
+- The existing **audit-nbn-production** automation was restored to **ACTIVE**, unchanged at
+  15-minute intervals, with the start-of-pass continuity guard intact. The saved prompt marks
+  Plans 0068 and 0069 complete and adds the new compact-desk outcome watches. Autopost stays OFF;
+  Nano Banana remains parked. No manual Typefully mutation or forced paid live run was used.
+
 The full editorial audit cutoff remains September 8, 11:15:56.744 UTC. Diagnostic reads and
-repair testing do not advance it. The same audit must backfill subsequent normal records.
+repair testing do not advance it. The resumed audit will backfill subsequent normal records
+in bounded chronological batches, advancing only genuinely completed editorial checkpoints.
 
 Rollback: redeploy the previous runtime 58baaf6 (or documentation-only 29a6e25 with identical
 runtime code); no database restore or config change is required.
