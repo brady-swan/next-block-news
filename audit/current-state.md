@@ -6,22 +6,25 @@ records are historical, not competing instructions. Standing authority: [AUDIT-A
 
 ## Audit control
 
-- Updated: September 8, 2026, 21:31 UTC; audit-continuation mitigation implemented, independently
-  reviewed and tested. Existing audit resumed; future live compaction compliance remains a watch.
+- Updated: September 8, 2026, 21:56 UTC. First live heartbeat exposed one metadata-classification
+  gap in the local helper; the minimal correction is independently approved and all18tests pass.
 - Automation: `audit-nbn-production`, existing 15-minute heartbeat in this task.
-- Automation state: ACTIVE. Saved prompt equals `audit/rolling-audit-prompt.md` exactly;
-  existing target and 15-minute cadence verified unchanged. No NBN deployment for this repair.
-- Last verified turn receipt: `01a082e1-dcd2-7221-887b-d934496c59c1`, started 21:17:15.369 UTC.
-  User message `msg_01a082e1-dd43-78c0-8d65-2a8956feb25d` at 21:17:15.459 UTC:
-  "proceed with yoru rec" approves the immediately preceding audit-continuation recommendation.
-  This is NOT a heartbeat or permission to resume the editor repair during this task.
-  Helper verified `trigger_kind=user`, `response_mode=user`, complete input and no later steering.
-  Work is complete; final response pending. On a new turn this receipt becomes historical—run
-  the helper again, do not turn this approval into a second continuity build.
+- Automation state: ACTIVE, same target/15-minute interval. Saved prompt is now a different
+  0058-era procedure; file updated_at is 21:38:18.537 UTC, after the prior verified 21:31 sync.
+  No matching update call occurred in this task. Origin unknown; do not silently overwrite a
+  potentially external/user edit. Current authority and AGENTS continuity instructions still apply.
+- Actual current turn: `01a082fe-a173-71d0-b040-439669efa70a`, started 21:48:40.707 UTC.
+  Heartbeat `fco_01a082fe-a181-7230-9df6-187a4f059bd4` scheduled 21:48:40.690 UTC is the trigger.
+  The preceding role=user message is host-tagged `content_item_kinds=["agents_md.instructions"]`,
+  not fresh owner steering. Helper initially counted that context as user input; --full-input
+  and exact metadata inspection established a real heartbeat, with no new ordinary request.
+  Prior "proceed with yoru rec" is completed, not the assignment for this wakeup.
+  After the metadata-only fix, the actual journal check passed before and immediately after
+  live compaction at21:54:57.387UTC: same heartbeat trigger, no new user input, input_complete=true.
 - Closed interactive requests: "what are you working on?" in turn
   `01a0826b-3865-7b50-ad10-83720d623a96`, and the repetition investigation in
   `01a082dd-11d6-78a2-98d7-b6a4f9984811`, are answered. Do not answer them again on a wakeup.
-- Autopost: must remain OFF. Last observed OFF at20:44:24.666UTC.
+- Autopost: must remain OFF. Last observed OFF at21:50:29.664UTC.
 - Nano Banana: parked by owner. Node/Perception settings unchanged.
 
 ## Coverage
@@ -38,11 +41,12 @@ records are historical, not competing instructions. Standing authority: [AUDIT-A
   13:20–13:50 UTC"; [tuning record](../prompts/orientation-examples.md), same interval heading.
 - Next historical interval begins strictly after13:50UTC. Choose and save a bounded end time;
   do not repeat completed intervals. Later outcomes for earlier items remain eligible.
-- Latest separate live diagnostic:20:44:24.666UTC, health200/autopostOFF/no last_error, deployed
+- Latest separate live diagnostic:21:50:29.664UTC, health200/autopostOFF/no last_error, deployed
   v2.27 hashes unchanged; latest four runs completed.22sourcesOK, Perception errored/owner-deferred.
-  Publisher has no last_error or ambiguous/in-flight mutations (67confirmed/7definite-failure),
-  118localposts. New Liquid replacement20:29 and Block10684538 create20:44 were targeted follow-ups,
-  not full editorial coverage beyond13:50. Block current copy/comments and trace2286–2306 inspected.
+  Publisher has no last_error or ambiguous/in-flight mutations (69confirmed/7definite-failure),
+  119localposts. New Plattsburgh draft10685268 created21:46:08UTC; its copy is not reviewed yet.
+  This is health/status inspection only, not full editorial coverage beyond13:50. Earlier Block
+  current copy/comments and trace2286–2306 were already inspected; do not repeat that comment.
 - Saved partial exports: `/tmp/nbn-audit-20260908-1300*.json`,
   `/tmp/nbn-audit-20260908-1427*.json`. Reuse immutable run/observation data selectively
   if available; export timestamps are not completed checkpoints or current Typefully state.
@@ -57,7 +61,7 @@ records are historical, not competing instructions. Standing authority: [AUDIT-A
 | Evidence URL collision | Runtime `ab7529e` deployed; Railway `f97615a4-7de1-44a4-ab67-6d49f37c681c` SUCCESS, store.py hash verified, 588 clean tests and natural-run smoke. Same v2.27 prompt. No production duplicate-URL replay claimed. | [Repair record](../AUDIT-FIX-2026-09-08-EVIDENCE-URL.md) |
 | Typefully audit-comment workflow | Complete in documentation commit `080fc71`; no new worker code or deployment needed | [Comment ledger](typefully-comments.md), policy |
 | Audit prompt/state cleanup | Complete; removed stale journal instructions. Did not resolve post-compaction trigger confusion; distinct repair below | [Procedure](rolling-audit-prompt.md); retired text kept only in archive |
-| Post-compaction continuation mitigation | Complete locally; independent approval,14tests and four actual incident checks pass. Audit resumed. Future live compliance not yet observed | [Repair record](CONTINUITY-REPAIR-2026-09-08.md), task-workspace AGENTS.md and read-only helper. Do not reimplement. |
+| Post-compaction continuation mitigation | Complete locally; independent approval,18tests and four historical incident checks pass. First real heartbeat and live compaction also verified after fixing host AGENTS metadata classification. Audit active; no runtime change | [Repair record](CONTINUITY-REPAIR-2026-09-08.md), task-workspace AGENTS.md and read-only helper. Do not reimplement. |
 | Strive draft 10678623 review comment | Confirmed 15:44:26.334 UTC; do not repost | Ledger contains returned thread/comment IDs |
 | BTCPay10678624 / miners-AI10678845 review comments | Confirmed19:40:01.743 /19:40:03.646UTC; copy/media/status unchanged; do not repost | [Comment ledger](typefully-comments.md) |
 | Block10684538 review comment | Confirmed20:52:58.363UTC; copy/media/publishing state unchanged; do not repost | [Comment ledger](typefully-comments.md) |
@@ -73,7 +77,7 @@ repair depends on it, not to redo a completed release.
 | ETF draft 10678087 comment | Proposed text saved, **not sent**; no POST was attempted before interruption. | Fresh-read draft/comments and assess whether feedback is still useful before any comment write. Do not mistake intention for delivery. |
 | Unreviewed output after13:50 | Full backfill pending; later targeted diagnostics alone are not full coverage | Continue chronological batches; reuse saved immutable packets and current-copy comparisons, refreshing mutable state when needed. |
 | Strategy receipt regression / unrelated evidence | Investigating.10679340 originally cited official Strategy X, then15:01 replacement chose TFTC without tools/history lookup, after editor timeout; unrelated podcast receipt also selected. New historical detail:13:14 writer only had prior weekly event in retrievable index, but editor1813 had complete earlier copy. | Trace bounded preservation/execution improvement using observations1884/1892/1894/1897 and confirmed mutation644f640804884d21bb2cc9808287f17e; establish relevant current-version behavior before a repair. No new implementation is queued. Do not redo source discovery or change editorial/source policy. |
-| Live continuation compliance | Monitoring; mitigation complete, first future live compaction unobserved | Verify actual trigger/turn on next audit and after compaction. Observe that old requests stay closed; do not repeat the offline build/test cycle without changed code or a new failure. |
+| Saved audit prompt provenance | Saved/delivered prompt changed at21:38UTC after prior verified21:31sync; no matching update call in this task. Automation remains ACTIVE | Leave this potentially external/user edit untouched. Ask owner whether they changed it; do not auto-restore canonical text or treat the discrepancy as build approval. |
 | Editor reference-format failure | Local and undeployed; independent runtime review approved, fixture corrected and83focused tests passed. Suspended during continuity repair | After continuity task closes, an actual audit may resume the remaining clean-release/full-suite/smoke steps under standing authority. [Repair record](../AUDIT-FIX-2026-09-08-EDITOR-REFS.md). Do not rebuild the existing change or broaden scope. |
 
 No evidence-URL implementation/review/deployment work remains. Observe ordinary outcomes without
@@ -96,8 +100,9 @@ Historical (13:20,13:50] is COMPLETE. Next proposed interval (13:50,14:20]UTC is
 reuse14:27 exports rather than re-reviewing prior intervals. Audit-continuation repair is COMPLETE.
 On the next actual audit wakeup, verify its new trigger, then resume the unfinished editor-reference
 release from its issue row under standing authority; do not reconstruct its existing implementation.
-The current user turn does not resume that release. No new
-editorial policy, retries, models or budgets. Evidence-URL repair and existing comments are
+The first live metadata edge case is now repaired and independently approved; this heartbeat
+made no NBN runtime/deployment/Typefully/automation changes. Saved prompt provenance is unresolved.
+No new editorial policy, retries, models or budgets. Evidence-URL repair and existing comments are
 COMPLETE. Source follow-ups for Mexico/Intersango are complete; do not repeat those searches.
 
 Replace the coverage cutoff only after its entire interval is reviewed. If interrupted, save the

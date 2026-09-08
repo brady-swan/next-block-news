@@ -67,6 +67,12 @@ def resolve_turn(records, automation_id=AUTOMATION_ID, excerpt_limit=1200):
                 if payload.get("turn_id") == result["turn_id"]:
                     result["status"] = "completed" if event == "task_complete" else "interrupted"
             elif kind == "response_item" and event == "message" and payload.get("role") == "user":
+                # The host loads AGENTS.md in a user-role envelope. It is binding
+                # context, not a newly submitted owner request. Never filter by prose.
+                metadata = payload.get("internal_chat_message_metadata_passthrough") or {}
+                kinds = metadata.get("content_item_kinds") if isinstance(metadata, dict) else None
+                if isinstance(kinds, list) and kinds and all(k == "agents_md.instructions" for k in kinds):
+                    continue
                 text = "\n".join(c.get("text", "") for c in payload.get("content", []))
                 if text.strip():
                     latest_user = {"id": payload.get("id"), "at": row.get("timestamp"),

@@ -73,3 +73,33 @@ Do not restore the retired 30,000-character prompt or touch NBN runtime/data.
 The earlier issue was real; these checks establish a concrete mitigation, not proof that the
 app's compaction behavior is fixed. On the next genuine audit trigger, verify its own turn,
 resume the existing checkpoint once, and observe compliance without reopening this repair.
+
+## First live entry follow-up — 21:48 UTC
+
+Workspace AGENTS.md did load. The host recorded it as role=user with structured metadata
+`content_item_kinds=["agents_md.instructions"]` immediately before the actual heartbeat.
+The helper incorrectly treated that injected instruction document as a fresh owner request.
+Full-input/raw-metadata inspection resolved the true trigger; no old request was answered.
+
+Smallest correction, now implemented: exclude only messages wholly identified by that host metadata
+as AGENTS instructions from trigger/steering classification. The instructions remain binding;
+this is not a content-prefix filter. Untagged owner messages, including those mentioning
+AGENTS.md, and mixed content kinds remain ordinary input. Four focused regression cases added;
+all18tests pass. Independent final reviewer approved the six-line change and independently
+ran the tests/diff check with no actionable findings. Local-only; no NBN runtime deployment.
+
+Live verification: the actual21:48:40.690UTC heartbeat resolved correctly after the correction.
+The same turn then compacted at21:54:57.387UTC. The required immediate guard invocation preserved
+turn `01a082fe-a173-71d0-b040-439669efa70a`, the original heartbeat trigger and an empty set of
+new user messages. The agent continued the pending final review/record rather than reopening
+an older owner request. This is one successful live continuation observation, not proof that
+every future host format or compaction behavior is covered.
+
+Separately, the saved automation prompt changed after the prior exact-sync check. No update
+call in this task explains the 21:38 modification. Preserve it pending provenance clarification
+rather than silently replacing a potentially external/user change. This does not justify
+rebuilding prompts, expanding scope or re-running completed NBN releases.
+
+Fresh production pulse21:50:29.664UTC: healthy, autopostOFF, same v2.27 runtime, latest four runs
+completed, no ambiguous/in-flight publisher mutations. No Typefully writes or automation
+mutations in this follow-up. Full editorial coverage remains through13:50UTC, unchanged.

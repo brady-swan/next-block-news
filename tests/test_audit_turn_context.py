@@ -31,7 +31,37 @@ def compact(old_message=None):
     return row("compacted", replacement_history=[old_message or user()])
 
 
+def instructions():
+    message = user("# AGENTS.md instructions\n" + "x" * 1600, "injected")
+    message["payload"]["internal_chat_message_metadata_passthrough"] = {
+        "content_item_kinds": ["agents_md.instructions"]}
+    return message
+
+
 class AuditTurnContextTests(unittest.TestCase):
+    def test_host_agents_instructions_before_heartbeat_are_not_owner_input(self):
+        result = resolve_turn([start(), instructions(), heartbeat(), compact()])
+        self.assertEqual(result["response_mode"], "heartbeat")
+        self.assertEqual(result["user_messages"], [])
+        self.assertTrue(result["input_complete"])
+
+    def test_instructions_alone_do_not_invent_a_trigger(self):
+        self.assertEqual(resolve_turn([start(), instructions()])["response_mode"], "stop")
+
+    def test_injected_instructions_do_not_replace_real_user_steering(self):
+        result = resolve_turn([start(), heartbeat(), user("Do not deploy", "owner"), instructions()])
+        self.assertEqual(result["response_mode"], "heartbeat")
+        self.assertEqual(result["latest_user_message"]["id"], "owner")
+
+    def test_untagged_mixed_empty_or_malformed_kinds_remain_user_input(self):
+        for kinds in (None, [], "agents_md.instructions", ["agents_md.instructions", "user_input"]):
+            with self.subTest(kinds=kinds):
+                message = user("# AGENTS.md instructions\nDo not deploy")
+                message["payload"]["internal_chat_message_metadata_passthrough"] = {"content_item_kinds": kinds}
+                result = resolve_turn([start(), message, heartbeat()])
+                self.assertEqual(result["response_mode"], "user")
+                self.assertEqual(result["latest_user_message"]["text"], "# AGENTS.md instructions\nDo not deploy")
+
     def test_heartbeat_does_not_reopen_old_user_after_compaction(self):
         for old in ("finish the repair then unpause the audit", "what are you working on?"):
             with self.subTest(old=old):
