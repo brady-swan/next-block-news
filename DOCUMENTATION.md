@@ -1,6 +1,7 @@
 # Documentation map
 
-Updated 2026-09-07 for Plan 0066. This index separates how NBN works now from how earlier
+Updated 2026-09-08: Plan 0068 reporting execution release; Plan 0067 parked.
+This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -30,6 +31,8 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | SPRINT-0065-FINDINGS.md | Afternoon evidence, regression tests, independent review and release/smoke record |
 | PLAN-0066-POST-VISUALS.md | Activated image capability scope and independent review contracts |
 | SPRINT-0066-FINDINGS.md | Visual templates, delivery/QA proof, costs and known limitations |
+| PLAN-0068-REPORTING-EXECUTION-AND-VISUALS.md | Approved reporting handoff, source choice, editorial and existing visual improvements |
+| SPRINT-0068-FINDINGS.md | Independent review, bounded model replays, release proof and remaining tuning questions |
 | AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md | Bounded PDF extraction, evidence limitations, tests and release proof |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.
@@ -38,6 +41,12 @@ prompts/wire_voice.md remains loaded by legacy paths; its historical heading is 
 authority. It is intentionally not rewritten during a non-editorial sprint.
 
 ## Evaluation, tuning and history
+
+- PLAN-0067-NANO-BANANA.md is **parked by the owner** until NBN is producing useful original
+  visuals with its existing tools and Brady explicitly reopens the proposal. Google's key is
+  saved, but generation/background-worker implementation remains unapproved.
+- Plan 0068 was owner-approved, independently reviewed and implemented. Its findings document
+  distinguishes deterministic verification, historical model replays and natural production outcomes.
 
 - eval/README.md describes the evaluator, which is separate from the production worker.
   Local uncommitted evaluator work may be newer than the released harness; do not bundle it

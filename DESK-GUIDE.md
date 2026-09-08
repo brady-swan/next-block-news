@@ -1,6 +1,6 @@
 # The run-first Desk
 
-Current 2026-09-07, Plan 0066. The Desk is part of the existing NBN Railway service, not a separate app
+Current 2026-09-08, Plan 0068. The Desk is part of the existing NBN Railway service, not a separate app
 or public news site. All /desk routes, assets, snapshots and the PDF require the existing
 NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documentation.
 
@@ -66,6 +66,13 @@ establish recorded use, not how much a finding influenced judgment. Human qualit
 guide review without an invented score. Unassigned research remains visible at run level.
 Copy compares writer proposals with actual editor-returned or submitted copy. Omitted/unavailable
 editor fallbacks are not editor rewrites. Activity shows actual timestamped handoffs.
+
+Copy and the story inspector explicitly label unavailable/omitted editor fallbacks **Needs human
+review — editor response failed**. This means the desk's copy may have been staged for Brady;
+it is not approved editor copy. The Reader source link shows the editor-selected inspected
+receipt, defaulting to the writer's receipt. Current confirmed delivery context takes precedence
+after later visual changes; proposed or uncertain source changes are not displayed as accepted.
+Historical writer receipt choice remains distinguishable from the final submitted source.
 
 **Writer feedback** is an optional end-of-task self-report: what helped, what hindered, and
 one suggested improvement, with references when provided. Open it on a run or browse the

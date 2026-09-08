@@ -1,6 +1,6 @@
 # Next Block News prompt inventory
 
-Current 2026-09-07. This is an index, not a duplicated prompt snapshot.
+Current 2026-09-08, Plan 0068. This is an index, not a duplicated prompt snapshot.
 Live editorial orientation: prompts/orientation-brief-v2.md, body after its separator.
 The draft v3 brief and tuning examples are not loaded. The wire_voice charter is retained
 for legacy paths; its old "source of truth" heading does not make it current v2 authority.
@@ -50,13 +50,20 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.23-post-visuals. The dossier field descriptions distinguish the selected
+editorial-core-v2.24-reporting-execution. The dossier field descriptions distinguish the selected
 reader link from the complete story-specific evidence sent to the editor. Retaining native
 extracts alone or describing them in a reporting note does not attach them to a story; the
 writer cites their exact URLs in the same dossier. A small optional unassigned research appendix
 lets the editor explicitly select already-inspected current-run excerpts omitted by the writer.
 It is not automatic support or another research turn. The exact delivered excerpts and provenance
 follow selected refs into final rails and memory; malformed refs use existing omitted-only recovery.
+The editor can choose the reader-facing source with optional reader_receipt_ref from that story's
+inspected evidence or explicitly selected appendix evidence; null preserves the writer source.
+Text-only schemas omit visual fields; visual/mixed schemas require an explicit visual decision.
+Malformed received JSON also gets the existing one bounded recovery, with field-specific errors.
+Transport failures and refusals do not gain a new retry. Later identity failures surface in
+candidate retry memory. One side-effect-free identity correction shares the existing receipt
+repair allowance; valid siblings are frozen and no additional research loop is opened.
 Writer and editor preserve each statistic's category, unit
 and reporting period when focusing a story on Bitcoin; all-digital-asset totals are not
 Bitcoin-only totals. This is a wording/accuracy clarification, not an extra search requirement
@@ -74,12 +81,15 @@ Plan 0066 appends `nbn/visual_tools.py:GUIDANCE` to the hashed newsroom system p
 optional list/inspect/render/PDF-page tools. The dossier selects an inspected immutable asset;
 the editor sees its exact pixels, evidence, alt text and reuse basis and must explicitly
 approve/omit/hold it. No new mandatory turn or model seat is added. The loaded editorial
-orientation itself is unchanged. Source quotes remain exact; rendered data remains subject
+orientation itself was unchanged in 0066. Plan 0068 adds the owner-approved selection,
+later-outcome and date guidance; visual guidance adds relevant image pointers, valid chart
+examples and the at-a-glance comprehension/potential-reach rationale. Source quotes remain exact; rendered data remains subject
 to editorial support/units/period checks. Text-only is normal, not a failed visual quota.
 
 Plan 0064 clarifies original-statement lookup, exact prior facts versus new developments,
 matching periods/transaction direction, and practical Bitcoin/monetary scope. Preparation uses
-assignment-desk-v2.5-reporting-followthrough. The loaded orientation distinguishes consequential
+assignment-desk-v2.6-related-outcomes now supersedes v2.5: useful later evidence can advance
+without having to justify a second standalone post. The loaded orientation distinguishes consequential
 legislative viability/timing/scope statements from generic political advocacy. A short run
 assignment reinforces these priorities where decisions are made. No lookup is mandated for
 every lead, and no primary-only standard or publication quota is added.

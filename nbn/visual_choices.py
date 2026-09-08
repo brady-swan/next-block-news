@@ -63,6 +63,17 @@ def request(con,run_id,story_id,action,asset_id,preset,version):
         target=state["drafts"][0] if state["drafts"] else None
         candidate={**card,"post":target["body"] if target else outcome.get("post") or story["post"],
             "inspected_evidence":[r for r in packet.get("evidence_catalog",[]) if r["evidence_ref"] in card["inspected_evidence_refs"]]}
+        candidate["inspected_evidence"].extend(outcome.get("additional_evidence") or [])
+        final_receipt = outcome.get("reader_receipt")
+        current_context = store.accepted_reader_context(con, target["id"]) if target else {}
+        if current_context.get("reader_receipt"):
+            final_receipt = current_context["reader_receipt"]
+        if final_receipt:
+            candidate["selected_receipt"] = final_receipt
+            candidate["inspected_evidence"] = [final_receipt] + [r for r in candidate["inspected_evidence"]
+                if r.get("fetch_id") != final_receipt.get("fetch_id")]
+        if target and target["receipt_url"] != candidate["selected_receipt"].get("url"):
+            raise ValueError("Current draft source differs from retained context; use the latest run")
         data={"candidate":candidate,"canonical_key":key,"signature":state["signature"],"target":target,
             "members":story["member_candidate_ids"]}
         encoded=visuals.encoded(data)
@@ -113,7 +124,9 @@ def process(con):
             raise ValueError("editor_not_approved")
         expected="omit" if row["action"]=="omit" else "approve"
         if visual_review["verdict"]!=expected: raise ValueError("editor_did_not_approve_requested_visual_change")
-        target=data["target"]; receipt=(candidate.get("selected_receipt") or {}).get("url")
+        target=data["target"]
+        selected = decision.get("reader_receipt") or candidate.get("selected_receipt") or {}
+        receipt=selected.get("url")
         post=decision["post"]
         from . import lint
         evidence=candidate["inspected_evidence"]+decision.get("additional_evidence",[])
@@ -126,6 +139,31 @@ def process(con):
             "klass":target["class"] if target else "secondary","body":post,"receipt_url":receipt,
             "editor_note":decision.get("reason",""),"publisher_backend":"typefully","coverage_relation":"same_event" if target else "distinct",
             "visual_choice_version":row["version"]}
+        context_ref = f"{row['story_id']}:{row['version']}"
+        materialization["reader_context"] = {"run_id": row["run_id"], "ref": context_ref, "kind": "visual_reader_receipt"}
+        materialization["resolution_id"] = target.get("resolution_id") if target else None
+        if decision.get("reader_receipt"):
+            from . import config, source_policy, verify, newsroom
+            from dataclasses import replace
+            records = [editor.restored_receipt(e) for e in evidence]
+            chosen = editor.restored_receipt(selected)
+            independent = {r.source.independence_key for r in records if r.independent_report}
+            materialization["klass"] = "primary" if chosen.source.official else "corroborated" if len(independent) >= 2 else "secondary"
+            original = source_policy.classify(item.get("url", ""), item.get("source", ""))
+            resolution = verify.ResolutionResult(item["url_hash"], data["canonical_key"], item.get("source", ""),
+                original, chosen.source, source, "selected", True, newsroom._record_originality(chosen),
+                chosen.eligible, chosen.independent_report,
+                chosen.final_url if chosen.direct_primary else "", chosen.content_fingerprint if chosen.direct_primary else "",
+                chosen.content_fingerprint, None, "Editor-selected reader receipt during visual review", tuple(
+                    verify.EvidenceCandidate(ref=r.source, originality=newsroom._record_originality(r),
+                        supported=True, receipt_eligible=True, corroboration_eligible=r.independent_report,
+                        content_fingerprint=r.content_fingerprint) for r in records))
+            for cid in data["members"]:
+                store.persist_resolution(con, replace(resolution, item_hash=cid), config.SOURCE_POLICY_MODE)
+            materialization["resolution_id"] = item["url_hash"]
+        from . import observations
+        observations.record(con, row["run_id"], "visual_reader_receipt", {"reader_receipt": selected,
+            "version": row["version"]}, ref=context_ref, phase="proposed")
         queued=publisher_visuals.queue(con,visual_review=visual_review,desired_thread=publisher.one_off_x_thread(post,receipt),
             prior_thread=publisher.one_off_x_thread(target["body"],target["receipt_url"]) if target else None,
             prior_payload=json.loads(target["media_payload_json"]) if target and target.get("media_payload_json") else None,

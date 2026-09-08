@@ -1,4 +1,5 @@
 """Independent editorial judgment between the run desk and the mechanical delivery shell."""
+import copy
 import hashlib
 import json
 import logging
@@ -20,6 +21,9 @@ BATCH_EDITOR_SCHEMA = {
             "story_id": {"type": "string"},
             "verdict": {"type": "string", "enum": ["publish", "revise", "draft", "drop"]},
             "post": {"type": ["string", "null"]}, "reason": {"type": "string"},
+            "reader_receipt_ref": {"type": ["string", "null"], "description":
+                "Optional exact evidence_ref from this story's inspected_evidence_refs, or from your "
+                "additional_evidence_refs. This is the reader-facing source, not a URL. Null keeps the writer's source."},
             "visual_verdict": {"type": "string", "enum": ["none", "approve", "omit", "hold"]},
             "visual_asset_id": {"type": ["string", "null"]},
             "visual_content_hash": {"type": ["string", "null"]},
@@ -180,8 +184,13 @@ actually supports or qualifies THIS story, list its exact evidence_ref in additi
 Then you may use that supplied excerpt alongside the writer's receipts to revise useful copy.
 Use [] when none is relevant. Writer receipts plus additions may total at most eight. Do not
 infer support from a title, URL, reporting note, reputation or an unseen clipped remainder.
-Multiple extracts repeating one report are still not independent corroboration. The selected
-reader link stays unchanged. No new lookup or research round is required.
+Multiple extracts repeating one report are still not independent corroboration. These arrays contain
+only exact evidence_ref IDs, such as research_ followed by its supplied identifier; never field
+names, URLs, null strings, or visual settings. No new lookup or research round is required.
+Optionally choose reader_receipt_ref from THIS candidate's inspected_evidence_refs, or from
+appendix refs you explicitly selected in additional_evidence_refs. Prefer the useful original
+source when already inspected; retain good reporting when it better serves the reader. Null
+keeps the writer's link. Other receipts still support the post; one link need not contain it all.
 
 Every publish, revise, or draft decision MUST repeat the complete final post in the `post`
 field. Use `publish` only when that text is unchanged from the candidate. Use `revise` whenever
@@ -199,8 +208,28 @@ standalone copy. No replacement image or factual regeneration is implied by appr
 Return ONLY JSON:
 {"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
 "post":"final copy or null","reason":"brief newsroom explanation","additional_evidence_refs":[],
+"reader_receipt_ref":null,
 "visual_verdict":"none|approve|omit|hold","visual_asset_id":null,"visual_content_hash":null,
 "text_fallback":null}]}"""
+
+
+def _batch_contract(payload: dict) -> tuple[str, dict]:
+    """Text-only requests do not ask the provider to fill irrelevant visual fields."""
+    schema = copy.deepcopy(BATCH_EDITOR_SCHEMA)
+    prompt = BATCH_EDITOR_PROMPT
+    if any(card.get("visual") for card in payload["candidates"]):
+        schema["properties"]["decisions"]["items"]["required"].extend(
+            ["visual_verdict", "visual_asset_id", "visual_content_hash", "text_fallback"])
+        prompt += "\nVisual review fields are required in this batch. For a text-only member, use visual_verdict=none and null for the other visual fields. Prose approval alone is not a visual decision."
+    else:
+        props = schema["properties"]["decisions"]["items"]["properties"]
+        for key in ("visual_verdict", "visual_asset_id", "visual_content_hash", "text_fallback"):
+            props.pop(key)
+        prompt = prompt.split("For a candidate with a visual,")[0] + '''Return ONLY JSON:
+{"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
+"post":"final copy or null","reason":"brief newsroom explanation",
+"additional_evidence_refs":[],"reader_receipt_ref":null}]}'''
+    return prompt, schema
 
 
 def review(post: str, item: dict, con) -> dict:
@@ -307,7 +336,7 @@ def receipt_card(record) -> dict:
         "tier": record.source.tier, "receipt_role": record.source.receipt_role,
         "official": record.source.official, "evidence_capability": record.evidence_capability,
         "independent_report": record.independent_report,
-        "content_fingerprint": record.content_fingerprint,
+        "content_fingerprint": source_policy.content_fingerprint(record.text[:8000]),
         "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
         "text_truncated": record.text_truncated or len(record.text) > 8000,
         "retrieval_kind": record.retrieval_kind, "inspected_at": record.inspected_at,
@@ -315,6 +344,47 @@ def receipt_card(record) -> dict:
         "adapter_provenance": record.adapter_provenance, "limitations": record.limitations,
         "url": record.final_url, "text": record.text[:8000],
     }
+
+
+def inspected_reader_record(decision: dict, fetches: dict):
+    """Resolve only the validated catalog choice, retaining the exact editor-visible excerpt."""
+    from dataclasses import replace
+    evidence = decision.get("reader_receipt")
+    if not evidence:
+        return None
+    original = fetches[evidence["fetch_id"]]
+    if evidence["url"] != original.final_url:
+        raise ValueError("reader receipt identity mismatch")
+    return replace(original, text=evidence["text"],
+        content_fingerprint=evidence["content_fingerprint"],
+        original_content_fingerprint=evidence.get("original_content_fingerprint") or original.content_fingerprint,
+        text_truncated=bool(evidence.get("text_truncated")), limitations=evidence.get("limitations", ""))
+
+
+def reader_resolution(resolution, selected):
+    from dataclasses import replace
+    from .newsroom import _record_originality
+    return replace(resolution, selected=selected.source, originality=_record_originality(selected),
+        receipt_eligible=selected.eligible, corroboration_eligible=selected.independent_report,
+        primary_artifact_url=selected.final_url if selected.direct_primary else "",
+        primary_artifact_fingerprint=selected.content_fingerprint if selected.direct_primary else "",
+        content_fingerprint=selected.content_fingerprint)
+
+
+def restored_receipt(evidence: dict):
+    """Restore an exact retained editor card for a later image review, not fresh research."""
+    from .newsroom import FetchRecord
+    url = evidence["url"]
+    text = evidence["text"]
+    if source_policy.content_fingerprint(text) != evidence["content_fingerprint"]:
+        raise ValueError("retained editor receipt fingerprint mismatch")
+    return FetchRecord(evidence["fetch_id"], url, url, url, (url,),
+        source_policy.classify(url, evidence.get("source", "")), evidence.get("byline", ""),
+        text, evidence["content_fingerprint"], "ok", inspected_at=evidence.get("inspected_at") or 0,
+        retrieval_kind=evidence.get("retrieval_kind") or "direct_fetch",
+        published_at=evidence.get("published_at") or "", limitations=evidence.get("limitations") or "",
+        original_content_fingerprint=evidence.get("original_content_fingerprint") or evidence["content_fingerprint"],
+        text_truncated=bool(evidence.get("text_truncated")))
 
 
 def _payload_bytes(value) -> int:
@@ -359,39 +429,51 @@ def _add_run_research(payload: dict, research: list[dict]) -> None:
     payload["unassigned_run_research"] = appendix
 
 
-def _editor_decision(row: dict, payload: dict, card: dict, origin: str) -> dict | None:
+def _editor_decision(row: dict, payload: dict, card: dict, origin: str, errors: list | None = None) -> dict | None:
     """Validate one decision against exactly what this API request exposed."""
+    def reject(field, reason, invalid=None):
+        if errors is not None and len(errors) < 25:
+            errors.append({"story_id": card.get("story_id"), "field": field, "reason": reason,
+                **({"invalid": [str(v)[:100] for v in invalid[:8]]} if invalid else {})})
+        return None
     verdict = row.get("verdict")
     final = row.get("post")
     if not isinstance(verdict, str) or verdict not in {"publish", "revise", "draft", "drop"}:
-        return None
+        return reject("verdict", "Expected publish, revise, draft or drop")
     if verdict != "drop" and (not isinstance(final, str) or not final.strip()):
-        return None
+        return reject("post", "Non-drop decisions require complete final copy")
     refs = row.get("additional_evidence_refs", [])
     available = {r["evidence_ref"]: r for r in
                  (payload.get("unassigned_run_research") or {}).get("receipts", [])}
     if (not isinstance(refs, list) or len(refs) > 8 or
             any(not isinstance(ref, str) or ref not in available for ref in refs)):
-        return None  # Existing omitted-only recovery; never keep copy after discarding bad refs.
+        return reject("additional_evidence_refs", "Use an array of at most eight exact appendix evidence_ref IDs; [] if none",
+            [r for r in refs if not isinstance(r, str) or r not in available] if isinstance(refs, list) else [type(refs).__name__])
     refs = list(dict.fromkeys(refs))
     if card.get("evidence_records_used", len(card["inspected_evidence_refs"])) + len(refs) > 8:
-        return None
+        return reject("additional_evidence_refs", "Writer receipts plus selected additions exceed eight")
+    reader_ref = row.get("reader_receipt_ref")
+    reader_catalog = {r["evidence_ref"]: r for r in payload.get("evidence_catalog", [])
+                      if r["evidence_ref"] in card["inspected_evidence_refs"]}
+    reader_catalog.update({ref: available[ref] for ref in refs})
+    if reader_ref is not None and (not isinstance(reader_ref, str) or reader_ref not in reader_catalog):
+        return reject("reader_receipt_ref", "Must be this story's inspected receipt or explicitly selected appendix ref, or null", [reader_ref])
     visual = card.get("visual")
     visual_review = None
     if visual and verdict != "drop":
         from . import visuals
         choice = row.get("visual_verdict")
         if choice not in {"approve", "omit", "hold"}:
-            return None
+            return reject("visual_verdict", "Visual requires approve, omit or hold", [choice])
         fallback = row.get("text_fallback")
         if fallback is not None and (not isinstance(fallback, str) or not fallback.strip() or len(fallback)>8000):
-            return None
+            return reject("text_fallback", "Standalone fallback must be nonempty text up to 8000 chars, or null")
         if choice == "approve" and (visual.get("error") or not visual.get("reusable") or
                 row.get("visual_asset_id") != visual.get("asset_id") or
                 row.get("visual_content_hash") != visual.get("content_hash")):
-            return None
+            return reject("visual_asset_id/visual_content_hash", "Approval requires the exact supplied reusable asset and hash")
         if choice == "omit":
-            if not fallback: return None
+            if not fallback: return reject("text_fallback", "Omitting an image requires approved standalone text")
             final = fallback
         visual_review = {"verdict": choice, "asset_id": visual.get("asset_id"),
             "content_hash": visual.get("content_hash"), "post_hash": visuals.digest(final),
@@ -400,6 +482,8 @@ def _editor_decision(row: dict, payload: dict, card: dict, origin: str) -> dict 
     return {"verdict": verdict, "post": final, "reason": str(row.get("reason") or "")[:500],
             "visual_review": visual_review,
             "origin": origin, "additional_evidence_refs": refs,
+            "reader_receipt_ref": reader_ref,
+            "reader_receipt": dict(reader_catalog[reader_ref]) if reader_ref and verdict != "drop" else None,
             "additional_evidence": [dict(available[ref]) for ref in refs] if verdict != "drop" else []}
 
 
@@ -477,7 +561,12 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict], *,
             > EDITOR_PAYLOAD_MAX_BYTES:
         for evidence in catalog.values():
             if evidence["evidence_ref"] not in selected_refs:
-                evidence["text"] = evidence["text"][:2000]
+                if len(evidence["text"]) > 2000:
+                    evidence["original_content_fingerprint"] = evidence.get("original_content_fingerprint") or evidence["content_fingerprint"]
+                    evidence["text"] = evidence["text"][:2000]
+                    evidence["content_fingerprint"] = source_policy.content_fingerprint(evidence["text"])
+                    evidence["text_truncated"] = True
+                    evidence["limitations"] = (str(evidence.get("limitations") or "") + " Editor excerpt clipped; unseen remainder not supplied.").strip()[:500]
         for row in feed:
             row["post"] = row["post"][:300]
         payload = assemble(active)
@@ -540,12 +629,13 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
     usage_logged = False
     resp = None
     try:
+        prompt, schema = _batch_contract(payload)
         resp = brain._create(
             config.EDITOR_MODEL,
-            BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n" + newsroom.ORIENTATION_BRIEF,
+            prompt + "\n\nSHARED EDITORIAL ORIENTATION\n" + newsroom.ORIENTATION_BRIEF,
             content(payload),
             max_tokens=8000, effort=config.EDITOR_EFFORT, reservation=reservation,
-            schema=BATCH_EDITOR_SCHEMA,
+            schema=schema,
         )
         store.record_model_usage(
             con, run_id=run_id, seat="editor", model=config.EDITOR_MODEL,
@@ -553,20 +643,30 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
             latency_ms=int((time.monotonic() - called_at) * 1000), outcome="ok",
         )
         usage_logged = True
-        out = brain._json_from(resp)
+        parse_error = ""
+        try:
+            out = brain._json_from(resp)
+            if not isinstance(out, dict) or not isinstance(out.get("decisions"), list):
+                raise ValueError("Expected an object with a decisions array")
+        except (ValueError, TypeError) as exc:
+            if getattr(resp, "stop_reason", "end_turn") in {"refusal", "invalid_response"}:
+                raise
+            parse_error = "Received response is not a valid decisions JSON object: " + type(exc).__name__
+            out = {"decisions": [], "contract_error": parse_error}
         observations.record(con, run_id, "editor_result", out, phase="initial")
         rows = out.get("decisions")
         if not isinstance(rows, list):
             raise ValueError("editor omitted decisions")
         allowed = {row["story_id"]: row for row in payload["candidates"]}
         decisions = {}
+        errors = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
             story_id = str(row.get("story_id") or "")
             if story_id not in allowed or story_id in decisions:
                 continue
-            decision = _editor_decision(row, payload, allowed[story_id], "initial")
+            decision = _editor_decision(row, payload, allowed[story_id], "initial", errors)
             if decision is not None:
                 decisions[story_id] = decision
         omitted = [row for row in payload["candidates"]
@@ -583,7 +683,11 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 "recent_feed_newest_first": payload["recent_feed_newest_first"][:8],
                 "recovery_constraint": (
                     "Decide only these omitted story IDs. Do not retarget canonical families or "
-                    "draft IDs supplied in candidate continuity context."
+                    "draft IDs supplied in candidate continuity context. " + (parse_error or
+                    "Missing or invalid decision: supply a valid verdict, complete post (except drop), "
+                    "exact appendix IDs only in additional_evidence_refs, a reader_receipt_ref from "
+                    "this story's evidence or selected appendix (or null), and valid visual review if present.")
+                    + " Specific errors: " + json.dumps([e for e in errors if e["story_id"] not in decisions], ensure_ascii=False)[:6000]
                 ),
             }
             if "unassigned_run_research" in payload:
@@ -604,13 +708,14 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
             recovery_logged = False
             retry = None
             try:
+                recovery_prompt, recovery_schema = _batch_contract(recovery_payload)
                 retry = brain._create(
                     config.EDITOR_MODEL,
-                    BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n"
+                    recovery_prompt + "\n\nSHARED EDITORIAL ORIENTATION\n"
                     + newsroom.ORIENTATION_BRIEF,
                     content(recovery_payload), max_tokens=5000,
                     effort=config.EDITOR_EFFORT, reservation=reservation,
-                    schema=BATCH_EDITOR_SCHEMA,
+                    schema=recovery_schema,
                 )
                 store.record_model_usage(
                     con, run_id=run_id, seat="editor_recovery", model=config.EDITOR_MODEL,

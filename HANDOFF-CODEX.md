@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-07 for Plan 0066. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-08 for Plan 0068. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -15,6 +15,16 @@ Production uses one Python 3.12 worker plus a threaded HTTP server on Railway, o
 and SQLite on the /data volume. Autopost was verified OFF for this release and must stay off.
 Drafting, research and editing still run fully. Runtime values on Desk / System take priority
 over dated descriptions.
+
+Plan 0068 keeps this architecture and roster. It repairs event/storyline/output identity
+handoffs within the existing shared correction budget; retains precise candidate retry failures;
+simplifies text-only editor schemas while requiring actual visual decisions; and lets the editor
+choose a reader source from exact supplied evidence. That final source follows delivery,
+provenance, memory and subsequent confirmed image changes. Source history uses compact pointers
+to retained evidence, never full article bodies in publisher mutations. Models get targeted
+later-outcome/date/selection guidance and clearer existing image-tool affordances. See SYSTEM.md
+and SPRINT-0068-FINDINGS.md. Nano Banana is parked by owner; GEMINI_API_KEY exists but is unused.
+Do not implement or enable it until Brady explicitly reopens that proposal.
 
 ## Live roster
 
@@ -179,7 +189,7 @@ was added to the dashboard action.
 The reporter-writer now has optional bounded still-image/PDF-page inspection and five exact
 Pillow templates, without a new seat or quota. `visual_tools`, `visuals` and `visual_render`
 own discovery/tools, immutable assets/evidence and deterministic rendering. Both writer and
-editor see identical stored pixels; prompt v2.23 includes visual guidance in its hash.
+editor see identical stored pixels; current prompt v2.24 includes visual guidance in its hash.
 `x_payload` defines full ordered text/media/alt/credit identity. `publisher_visuals` persists
 preparation inside the existing mutation lifecycle (`awaiting_media`), resumes uploads without
 models and never repeats an uncertain draft mutation. Text-only revisions of formerly imaged
@@ -215,6 +225,13 @@ Public base: https://next-block-news-production.up.railway.app.
 Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
+
+Plan 0068 release verification is recorded in SPRINT-0068-FINDINGS.md. Its full editorial audit
+checkpoint is 2026-09-08T11:15:56.744Z; build/smoke observations do not advance that cutoff.
+The same monitor must backfill the build interval when resumed. Organic visual adoption and
+editorial quality remain observation questions, not conclusions from a deliberate tool replay.
+
+The following Plan 0066/0065 evidence and audit checkpoints are historical, not current status.
 
 Plan 0066 shipped as `0232620`, Railway deployment `2c7fb9d9-46d9-4e2e-a1dd-837b7447dcec`
 SUCCESS. 564 clean-release tests passed (566 with owner evaluator work), clean static build

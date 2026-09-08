@@ -1,11 +1,19 @@
 """Optional writer tools. Inspection has an explicit image return, not a textual claim."""
 import json
+import re
 import time
 import httpx
 
 from . import lead_material, visuals, writer_memory
 
 GUIDANCE = """
+When the story turns on a comparison or trend, consider showing it. Inspect a relevant source
+chart, or make an original NBN chart from the evidence using the existing renderer. A useful
+image helps readers understand the story at a glance, making it easier to engage with and
+share, which can extend its reach. Aim for one clear takeaway, not extra decoration.
+Image tools can also help you understand an image-only lead. Unknown reuse rights do not
+prevent inspection; they do prevent automatic attachment. If an image would not improve
+this post, finish the text and move on.
 Optional visuals: use them when a chart, exact quote/excerpt or relevant source photo helps
 readers understand THIS story. Text-only is normal; do not hunt for decoration or use a quota.
 list_visuals returns metadata, not inspected pixels. inspect_visual and render_visual return
@@ -28,7 +36,61 @@ reply. inspect_pdf_page is available for the first 20 pages of an already fetche
 page inspection alone does not establish reuse permission.
 Choose visual_required only if the final copy cannot stand without the image; otherwise write useful
 standalone copy. An independent editor reviews the exact image, data/quote evidence, alt and credits.
+
+Two render_visual examples (illustrative values only: replace with exact sourced facts and
+returned candidate/receipt IDs, never reuse these as news). spec_json is JSON-encoded:
+1. kind=bar, preset=landscape, evidence_fetch_ids=["fetch_id_from_tool"],
+   spec_json={"headline":"Revenue by quarter","source":"Company results","date":"2026-09-08",
+   "unit":"USD millions","period":"Q2 year-over-year","metric":"none","points":[
+   {"label":"Q2 2025","date":"2025-06-30","value":100,"source_fetch_id":"fetch_id_from_tool"},
+   {"label":"Q2 2026","date":"2026-06-30","value":32,"source_fetch_id":"fetch_id_from_tool"}]},
+   alt_text="Revenue was $100 million in Q2 2025 and $32 million in Q2 2026.",
+   purpose="Show the size of the revenue change."
+2. kind=line, preset=landscape, evidence_fetch_ids=["fetch_id_from_tool"],
+   spec_json={"headline":"Daily Bitcoin ETF net flows","source":"Issuer data","date":"2026-09-08",
+   "unit":"USD millions","period":"September 1–3, 2026","metric":"none","points":[
+   {"label":"Sep 1","date":"2026-09-01","value":100,"source_fetch_id":"fetch_id_from_tool"},
+   {"label":"Sep 2","date":"2026-09-02","value":-20,"source_fetch_id":"fetch_id_from_tool"},
+   {"label":"Sep 3","date":"2026-09-03","value":80,"source_fetch_id":"fetch_id_from_tool"}]},
+   alt_text="Daily net flows: September 1 +$100M, September 2 -$20M, September 3 +$80M.",
+   purpose="Show the direction of each day's flow, not price predictions."
+Include candidate_id in both calls. Independently designed graphics can use adequately sourced
+facts when source-image reuse is not permitted. Do not trace protected graphics or invent data
+from unlabeled axes. Check actual pixels, dates, units, alt and the source handle/credit.
 """
+
+
+def source_images(item, receipts=()):
+    """Same six-image allowance, with actual post media before avatars/navigation/duplicates."""
+    found = []
+    material = lead_material.parse(item.get("source_material"))
+    posts = ([material["post"]] + [r["post"] for r in material.get("referenced_posts", [])]) if material else []
+    for post in posts:
+        for media in post.get("media", []):
+            if media.get("type") == "photo" and media.get("url"):
+                found.append({"url": media["url"], "source_url": post["url"],
+                    "alt_text": media.get("alt_text", ""), "kind": "x_photo",
+                    "image_date": post.get("published_at"), "credit": post.get("handle"),
+                    "reuse_status": "unknown", "inspected": False})
+    for receipt in receipts:
+        found.extend(dict(m, fetch_id=receipt.fetch_id) for m in receipt.image_candidates)
+    def rank(m):
+        avatar = bool(re.search(r"avatar|profile_images|favicon|(?:^|[/_.-])logo(?:[/_.-]|$)", str(m.get("url", "")), re.I))
+        return (avatar, m.get("kind") != "x_photo")
+    unique = {}
+    for m in sorted(found, key=rank):
+        if m.get("url"):
+            unique.setdefault(m["url"], m)
+    return list(unique.values())[:6]
+
+
+def availability(images):
+    if not images:
+        return None
+    return {"count": len(images), "tool": "list_visuals → inspect_visual",
+        "purpose": "Understand this lead or assess a useful chart; inspection is not reuse permission.",
+        "sources": [{"source_url": m.get("source_url"), "image_date": m.get("image_date"),
+                     "kind": m.get("kind")} for m in images[:3]]}
 
 
 def tool(name, description, props):
@@ -62,19 +124,8 @@ def dispatch(session, block):
             session.visual_state={"candidates": {}, "inspections":0, "renders":0, "by_story":{}, "image_bytes":0}
         state=session.visual_state
         if block.name=="list_visuals":
-            found=[]
-            for fid in v.get("fetch_ids",[])[:8]:
-                receipt=session.fetches.get(fid)
-                if receipt:
-                    found.extend(dict(m,fetch_id=fid) for m in receipt.image_candidates)
-            material=lead_material.parse(session.by_hash[cid].get("source_material"))
-            posts=([material["post"]]+[r["post"] for r in material.get("referenced_posts",[])]) if material else []
-            for post in posts:
-                for m in post.get("media",[]):
-                    if m.get("type")=="photo" and m.get("url"):
-                        found.append({"url":m["url"],"source_url":post["url"],"alt_text":m.get("alt_text",""),
-                            "kind":"x_photo","image_date":post.get("published_at"),"credit":post.get("handle"),
-                            "reuse_status":"unknown","inspected":False})
+            found = source_images(session.by_hash[cid],
+                [session.fetches[fid] for fid in v.get("fetch_ids", [])[:8] if fid in session.fetches])
             candidates=[]
             for m in found[:6]:
                 key="image_"+visuals.digest([cid,m])[:24]

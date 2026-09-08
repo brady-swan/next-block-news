@@ -13,7 +13,7 @@ import anthropic
 from . import brain, config, guide_context, source_policy, store, models, lead_material
 
 log = logging.getLogger("nbn.desk_prep")
-PROMPT_VERSION = "assignment-desk-v2.5-reporting-followthrough"
+PROMPT_VERSION = "assignment-desk-v2.6-related-outcomes"
 ROUTES = {"advance", "background"}
 
 SYSTEM = """You prepare the assignment desk for Next Block News, an automated Bitcoin wire.
@@ -27,6 +27,10 @@ Use BACKGROUND only when the card is facially outside Bitcoin/monetary scope, fa
 new development, or code says it is an exact duplicate. Examples include unrelated enforcement,
 ordinary corporate news, generic crypto/altcoin promotion, trading forecasts, and commentary with
 no new fact. A source being obscure is not a reason to background it.
+An eligible related report can improve an existing story without earning a second standalone
+post. ADVANCE useful follow-up evidence (for example, detention approved after it was requested),
+and group it with the same event using event_group/related_keys. Do not discard a useful original
+or changed outcome just because a social tip or open draft already covers part of the event.
 A consequential named statement or concrete proposal can itself be a development, even before
 policy changes. Do not dismiss it as mere opinion if it materially advances a Bitcoin-relevant
 story. Distinguish the statement/proposal from enacted policy in the research objective.

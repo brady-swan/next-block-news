@@ -34,7 +34,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.23-post-visuals"
+PROMPT_VERSION = "editorial-core-v2.24-reporting-execution"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -394,7 +394,8 @@ V2_DOSSIER_TOOL = {
                 "properties": {
                     "story_id": {"type": "string"},
                     "story_key": {"type": "string"},
-                    "existing_cluster_key": {"type": ["string", "null"]},
+                    "existing_cluster_key": {"type": ["string", "null"], "description":
+                        "Exact existing event key from coverage/continuity or a member's current key. Never a broader storyline. Null for a new unassigned event."},
                     "coverage_relation": {"type": "string", "enum": [
                         "distinct", "same_event", "material_update"
                     ]},
@@ -769,6 +770,15 @@ _FAILURE_OBJECTIVES = {
     "defer:invalid_existing_cluster_key": (
         "Use only an exact event key supplied by the coverage or continuity board."
     ),
+    "defer:incoherent_coverage_relation": (
+        "Correct coverage_relation and existing_cluster_key using the member's exact event "
+        "and current output state. A storyline is not an event; an open draft is not publication."
+    ),
+    "defer:material_update_has_no_visible_base": (
+        "There is no confirmed earlier output for this event. Correct the event relationship: "
+        "same_event for work on an assigned event, distinct for a genuinely new unassigned event. "
+        "Do not invent prior coverage or research more sources to fix an identity field."
+    ),
     "defer:editor_hard_rail": (
         "Revise or drop the prior copy after applying the code-owned verbatim-quote, URL, "
         "length, mention, and investment-instruction rails shown on the workbench."
@@ -892,7 +902,8 @@ class NewsroomSession:
                 str(row.get("proposed_post") or "") for row in reversed(memory["attempts"])
                 if str(row.get("proposed_post") or "").strip()
             ), "")
-            unresolved = latest  # A resolved older failure is not today's assignment.
+            unresolved = writer_memory.latest_identity_failure(
+                self.con, latest.get("members") or [], after=latest.get("at") or 0) or latest
             members = [str(value) for value in latest.get("members") or []]
             exact = bool(current_hashes.intersection(members) or key in current_keys)
             reusable = []
@@ -961,6 +972,8 @@ class NewsroomSession:
                 "reusable_evidence": reusable,
                 "historical_evidence_omitted": historical,
                 "editor_feedback_untrusted_context": {
+                    "origin": editor.get("origin"),
+                    "review_completed": editor.get("review_completed"),
                     "verdict": str(editor.get("verdict") or "")[:40],
                     "reason": str(editor.get("reason") or "")[:500],
                     "post": str(editor.get("post") or "")[:2000],
@@ -1213,6 +1226,7 @@ class NewsroomSession:
         return replace(outcome, verdicts=verdicts)
 
     def _initial_packet(self) -> dict:
+        from . import visual_tools
         intake_board = []
         reference_board = []
         for item in self.inventory:
@@ -1372,10 +1386,12 @@ class NewsroomSession:
                 "reference_ids": [row["pointer_id"] for row in pointers],
                 "guide_tip": guide_tip,
                 "x_lead": lead_material.preview(material),
+                "visual_available": visual_tools.availability(visual_tools.source_images(item)),
                 "full_lead_context_id": material_id,
                 "operator_gate": _clean_text(item.get("_operator_gate"), 80) or None,
                 "owner_override": item.get("_owner_reconsider") or None,
                 "research_retry": bool(item.get("_research_retry")),
+                "identity_correction": writer_memory.latest_identity_failure(self.con, [candidate_id]),
                 "haiku_preparation": ({
                     key: self.preparations[candidate_id].get(key)
                     for key in ("event_summary", "bitcoin_relevance", "freshness_note",
@@ -1445,6 +1461,9 @@ class NewsroomSession:
                 "assignment": (V2_ASSIGNMENT if config.EDITORIAL_ENGINE == "v2" else
                     "Survey every lead, research selectively, make exact-event decisions, and write supported Bitcoin news posts without a quota."),
                 "evidence_rule": "Only inspected fetch_id receipts are evidence; all desk boards are leads or context.",
+                "identity_legend": "An exact event key identifies one event. A storyline groups different events. "
+                    "Open drafts are not confirmed publication. A new Senate development may belong to the "
+                    "CLARITY storyline without sharing the earlier Lummis event key.",
             },
             "intake_board": intake_board,
             "reference_board": reference_board,
@@ -1911,6 +1930,7 @@ class NewsroomSession:
 
     @staticmethod
     def _fetch_payload(record: FetchRecord, *, cached: bool) -> dict:
+        from . import visual_tools
         return {
             "ok": True, "cached": cached, "fetch_id": record.fetch_id,
             "requested_url": record.requested_url, "final_url": record.final_url,
@@ -1931,6 +1951,7 @@ class NewsroomSession:
             "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
             "text_truncated": record.text_truncated,
             "image_candidates": list(record.image_candidates),
+            "visual_available": visual_tools.availability(record.image_candidates),
         }
 
     def _register_native_sources(self, value: dict) -> dict[str, str]:
@@ -2007,6 +2028,9 @@ class NewsroomSession:
             row["evidence"] = [self._restore_receipt(e) for e in material]
             # Latest attempt is the current unresolved question; earlier failures stay historical.
             row["current_research_state"] = row["attempts"][-1] if row["attempts"] else None
+            latest = row["current_research_state"] or {}
+            row["current_research_state"] = writer_memory.latest_identity_failure(
+                self.con, latest.get("members") or [], after=latest.get("at") or 0) or latest
         elif row["kind"] == "receipt":
             row["material"] = self._restore_receipt(row["material"])
         return row
@@ -2698,8 +2722,9 @@ class NewsroomSession:
             research_tools.insert(-1, ASSIGN_RESEARCH_TOOL)
         finalize_after_failure = False
         finalize_after_completion = False
-        receipt_repair_used = False
+        receipt_repair_used = False  # Shared by receipt and identity correction, never additive.
         pending_dossier = None
+        frozen_story_ids = set()
         while True:
             hard_finalization = self.successful_newsdesk_calls >= max(
                 0, config.RUN_NEWSROOM_MAX_ROUNDS - 1
@@ -2747,20 +2772,37 @@ class NewsroomSession:
                 if len(blocks) != 1:
                     raise NewsroomError("invalid_dossier_batch",
                                         "dossier must be the only tool in its round")
+                if pending_dossier is not None:
+                    dossier_blocks[0].input = self._preserve_dossier_siblings(
+                        pending_dossier, dossier_blocks[0].input, frozen_story_ids)
                 repair = self._receipt_protocol_repair(dossier_blocks[0].input,
                     native_submissions.get(dossier_blocks[0].id, []))
+                preview = self._validate_and_convert_v2(dossier_blocks[0].input, persist=False)
+                identity_errors = self._identity_repairs(dossier_blocks[0].input)
+                if identity_errors:
+                    repair = {**(repair or {}), "ok": False, "kind": "dossier_identity_repair",
+                        "identity_errors": identity_errors,
+                        "message": "Correct these identity fields, keeping usable sibling stories and "
+                        "retained receipts. Exact events, broader storylines, open drafts and confirmed "
+                        "publications differ. No extra research is needed for an identity correction. "
+                        "Resubmit the whole dossier once; defer any still-ambiguous story."}
                 if (repair and self.reporter_enabled and not receipt_repair_used and
                         not hard_finalization and self.successful_newsdesk_calls < config.RUN_NEWSROOM_MAX_ROUNDS - 1 and
                         self._research_seconds_left() > 20):
                     receipt_repair_used = True
                     pending_dossier = copy.deepcopy(dossier_blocks[0].input)
-                    if finalize_after_completion:
+                    frozen_story_ids = set(preview.story_ids.values())
+                    if identity_errors:
+                        finalize_after_completion = True  # Correction only, no new research loop.
+                    elif finalize_after_completion:
                         repair["message"] = (
                             "Research is closed. Resubmit the whole dossier using the retained receipt IDs "
                             "or source-specific extracts from already observed native URLs. Do not invent "
                             "evidence; defer unsupported stories. This reference repair is offered once."
                         )
-                    observations.record(self.con, self.run_id, "receipt_protocol_repair", repair, phase="requested")
+                    observations.record(self.con, self.run_id,
+                        "identity_protocol_repair" if identity_errors else "receipt_protocol_repair",
+                        repair, phase="requested")
                     self.messages.append({"role": "user", "content": [
                         self._tool_result(dossier_blocks[0].id, repair, error=True)]})
                     continue
@@ -2836,7 +2878,56 @@ class NewsroomSession:
             candidate = f"{base[:132].rstrip('-')}-review-{suffix}-{counter}"
         return candidate[:180]
 
-    def _validate_and_convert_v2(self, dossier: dict) -> NewsroomOutcome:
+    @staticmethod
+    def _preserve_dossier_siblings(previous: dict, revised: dict, frozen: set) -> dict:
+        """A correction may only change unresolved work, including its membership."""
+        revised = copy.deepcopy(revised if isinstance(revised, dict) else {})
+        siblings = [s for s in previous.get("stories", []) if s.get("story_id") in frozen]
+        members = {m for s in siblings for m in s.get("member_candidate_ids", [])}
+        revised["stories"] = siblings + [s for s in revised.get("stories", [])
+            if isinstance(s, dict) and s.get("story_id") not in frozen
+            and not members.intersection(s.get("member_candidate_ids") or [])]
+        revised["decisions"] = [d for d in previous.get("decisions", []) if d.get("candidate_id") in members] + [
+            d for d in revised.get("decisions", []) if isinstance(d, dict) and d.get("candidate_id") not in members]
+        # Storyline proposals are context from the original desk, not a repair side channel.
+        revised["storyline_updates"] = copy.deepcopy(previous.get("storyline_updates", []))
+        return revised
+
+    def _identity_repairs(self, dossier: dict) -> list[dict]:
+        """Read-only diagnostics; no aliases, notebook acceptance or run checkpoints."""
+        result = []
+        for story in dossier.get("stories", []) if isinstance(dossier.get("stories"), list) else []:
+            if not isinstance(story, dict):
+                continue
+            members = story.get("member_candidate_ids") or []
+            if not members or any(m not in self.by_hash for m in members):
+                continue  # Structural membership remains a per-story validation failure.
+            families = {store.canonical_story_key(self.con, str(self.by_hash[m].get("story_key") or "")) for m in members}
+            families.discard("")
+            supplied = _clean_text(story.get("existing_cluster_key"), 180)
+            relation = story.get("coverage_relation") or ("same_event" if supplied or families else "distinct")
+            allowed = self.supplied_cluster_keys | families
+            key = next(iter(families)) if len(families) == 1 else (
+                store.canonical_story_key(self.con, supplied) if supplied in allowed else "")
+            output = store.canonical_output_state(self.con, key) if key else {}
+            failure, field = "", "coverage_relation"
+            if supplied and supplied not in allowed:
+                failure, field = "defer:invalid_existing_cluster_key", "existing_cluster_key"
+            elif relation not in {"distinct", "same_event", "material_update"} or (
+                    relation == "distinct" and (supplied or families)) or (
+                    relation in {"same_event", "material_update"} and not (supplied or families)):
+                failure = "defer:incoherent_coverage_relation"
+            elif relation == "material_update" and len(families) <= 1 and output.get("state") not in {"reader_visible", "open_draft"}:
+                failure = "defer:material_update_has_no_visible_base"
+            if failure:
+                result.append({"story_id": story.get("story_id"), "candidate_ids": members,
+                    "failure": failure, "field": field, "supplied_value": story.get(field),
+                    "allowed_exact_event_keys": sorted(allowed), "member_event_keys": sorted(families),
+                    "current_output_state": output.get("state", "no_output"),
+                    "objective": _failure_objective(failure)})
+        return result
+
+    def _validate_and_convert_v2(self, dossier: dict, *, persist: bool = True) -> NewsroomOutcome:
         """Validate stories independently; one malformed row cannot sink the run."""
         dossier = copy.deepcopy(dossier if isinstance(dossier, dict) else {})
         dossier.pop("desk_feedback", None)  # Never reaches editor, workbench or later runs.
@@ -2901,6 +2992,7 @@ class NewsroomSession:
         story_keys: dict[str, str] = {}
         story_attempts: list[dict] = []
         story_commits: dict[str, dict] = {}
+        identity_errors = {r["story_id"]: r for r in self._identity_repairs(dossier)}
 
         story_id_counts: dict[str, int] = {}
         member_counts: dict[str, int] = {}
@@ -2942,6 +3034,9 @@ class NewsroomSession:
                 "same_event" if supplied_key or existing_families else "distinct"
             )
             identity_valid = not failure
+            if not failure and story_id in identity_errors:
+                failure = identity_errors[story_id]["failure"]
+                identity_valid = False
             key = ""
             warnings: list[str] = []
             force_draft_reason = ""
@@ -3173,7 +3268,13 @@ class NewsroomSession:
             "submitted": len(raw_storyline_updates), "validated": len(storyline_updates),
             "ignored_before_persistence": storyline_ignored,
         }
-        store.validate_newsroom_run(self.con, self.run_id, dossier, digest, self.counters())
+        if persist:
+            from . import observations
+            for error in identity_errors.values():
+                for member in error["candidate_ids"]:
+                    observations.record(self.con, self.run_id, "candidate_identity_failure", error,
+                                        ref=member, phase="deferred")
+            store.validate_newsroom_run(self.con, self.run_id, dossier, digest, self.counters())
         return NewsroomOutcome(
             self.run_id, dossier, digest, verdicts, resolutions, drafts,
             dict(self.fetches), self.counters(), self, story_ids, story_attempts,

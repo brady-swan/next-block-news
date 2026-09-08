@@ -2657,7 +2657,8 @@ def save_newsroom_story_attempt(con, canonical_key: str, state: str, attempt: di
 
 
 def save_newsroom_editor_feedback(con, canonical_key: str, *, verdict: str, reason: str,
-                                  post: str | None, now: float | None = None) -> None:
+                                  post: str | None, now: float | None = None,
+                                  origin: str = "initial", receipt_url: str = "") -> None:
     """Attach the independent editor's bounded decision without making it a gate."""
     key = canonical_story_key(con, str(canonical_key or "")[:180])
     if not key:
@@ -2666,6 +2667,8 @@ def save_newsroom_editor_feedback(con, canonical_key: str, *, verdict: str, reas
     payload = json.dumps({
         "at": round(stamp, 3), "verdict": str(verdict or "")[:40],
         "reason": str(reason or "")[:500], "post": _utf8_prefix(post, 8192),
+        "origin": str(origin)[:40], "receipt_url": str(receipt_url)[:2000],
+        "review_completed": origin in {"initial", "recovery"},
     }, separators=(",", ":"), ensure_ascii=False)
     state = "dropped" if verdict == "drop" else "editor_feedback"
     con.execute(
@@ -4006,6 +4009,20 @@ def resolution_for_item(con, item_hash: str):
     ).fetchone()
 
 
+def accepted_reader_context(con, post_id: int) -> dict:
+    """Only a confirmed mutation backing the current post can supersede a run's old receipt."""
+    row = con.execute("SELECT m.materialization_json FROM posts p JOIN publisher_mutations m "
+        "ON m.mutation_id=p.mutation_id WHERE p.id=? AND m.state='confirmed'", (post_id,)).fetchone()
+    data = _safe_json_object(row[0]) if row else {}
+    pointer = data.get("reader_context") or {}
+    if pointer.get("kind") not in {"editor_applied", "visual_reader_receipt"}:
+        return {}
+    observation = con.execute("SELECT payload_json FROM run_observations WHERE run_id=? "
+        "AND kind=? AND ref=? AND expired=0 ORDER BY id DESC LIMIT 1",
+        (pointer.get("run_id"), pointer["kind"], pointer.get("ref"))).fetchone()
+    return {"reader_receipt": _safe_json_object(observation[0]).get("reader_receipt")} if observation else {}
+
+
 def evidence_for_item(con, item_hash: str) -> list:
     return con.execute(
         "SELECT * FROM source_evidence WHERE item_hash=? ORDER BY id", (item_hash,)
@@ -4447,6 +4464,7 @@ def finalize_publisher_mutation(
             "at": round(stamp, 3), "mode": str(mode)[:40],
             "backend_ref": str(provider_ref or "")[:300],
             "reader_covered": mode in {"IMMEDIATE", "UNCERTAIN"},
+            "receipt_url": str(data.get("receipt_url") or "")[:2000],
         }, separators=(",", ":"))
         con.execute(
             "UPDATE newsroom_story_memory SET state='delivered',delivery_json=?,updated_at=?,"

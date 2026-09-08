@@ -650,6 +650,10 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             operation, target_draft = "replace_draft", output_state["drafts"][0]
         elif relation == "material_update":
             reason = "defer:material_update_has_no_visible_base"
+            for attempt in outcome.story_attempts:
+                if attempt.get("story_id") == story_id:
+                    store.save_newsroom_story_attempt(con, resolution.story_key, "research_pending",
+                        {**attempt, "failure": reason, "objective": newsroom._failure_objective(reason)})
             for member in members:
                 store.defer_item(
                     con, member["url_hash"], reason,
@@ -808,6 +812,15 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             from . import writer_memory
             writer_memory.link(con, pipeline_run_id, [m["url_hash"] for m in members],
                                resolution.story_key, [e["fetch_id"] for e in additions])
+        reader_record = editor.inspected_reader_record(decision or {}, outcome.fetches) if verdict != "drop" else None
+        if reader_record is not None:
+            selected = reader_record
+            candidate["selected"] = selected
+            resolution = editor.reader_resolution(resolution, selected)
+            candidate["resolution"] = resolution
+            for member in members:
+                outcome.resolutions[member["url_hash"]] = editor.reader_resolution(
+                    outcome.resolutions[member["url_hash"]], selected)
         if (verdict != "drop" and candidate["coverage_relation"] == "material_update"
                 and candidate["base_post_id"] is not None):
             post = _normalize_update_label(con, pipeline_run_id, story_id, post, phase="after_editor")
@@ -830,9 +843,13 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             "visual_review": visual_review,
             "canonical_key": resolution.story_key,
             "additional_evidence_refs": decision.get("additional_evidence_refs", []) if decision else [],
+            "additional_evidence": additions,
+            "reader_receipt": editor.receipt_card(selected),
+            "reader_receipt_ref": decision.get("reader_receipt_ref") if decision else None,
         }, ref=story_id, phase="applied")
         store.save_newsroom_editor_feedback(
             con, resolution.story_key, verdict=verdict, reason=reason, post=post,
+            origin=editor_origin, receipt_url=selected.final_url,
         )
         store.set_newsroom_story_state(
             con, pipeline_run_id, story_id, "pending",
@@ -944,6 +961,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 ),
             } for member in members],
             "klass": klass, "body": str(post), "receipt_url": selected.final_url,
+            "reader_context": {"run_id": pipeline_run_id, "ref": story_id, "kind": "editor_applied"},
             "editor_note": f"{verdict}: {reason}"[:300],
             "resolution_id": members[0]["url_hash"],
             "publisher_backend": publisher.backend_name(),

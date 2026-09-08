@@ -136,6 +136,8 @@ def run_detail(con, row):
         post = con.execute("SELECT "+POST_FIELDS+" FROM posts p WHERE p.nuelink_id=? AND "+desk.LIVE_POST+" ORDER BY p.id DESC LIMIT 1", (m["provider_ref"],)).fetchone() if m["provider_ref"] else None
         deliveries[sid] = {"operation_now": {k: m[k] for k in ("state", "operation", "created_at", "updated_at")},
                            "submitted_copy": mat.get("body") or mat.get("post") or "",
+                           "submitted_receipt_url": mat.get("receipt_url"),
+                           "accepted_reader_receipt": store.accepted_reader_context(con, post["id"]).get("reader_receipt") if post else None,
                            "now": output_card(dict(post)) if post else None}
     decisions = {d.get("candidate_id"): d for d in dossier.get("decisions", []) if isinstance(d, dict)}
     delivered = list(packet_rows) if packet_obs else [h for h in inventory if not (
@@ -175,7 +177,9 @@ def run_detail(con, row):
                         "source": cards[members[0]]["source"] if members else "Merged story", "members": members,
                         "writer": s.get("post"), "writer_reason": s.get("reader_value"), "story_key": s.get("story_key"),
                         "effective_key": (applied.get(sid, {}).get("payload") or {}).get("canonical_key"),
-                        "selected_fetch_id": s.get("selected_fetch_id"), "evidence_fetch_ids": s.get("evidence_fetch_ids") or [],
+                        "selected_fetch_id": (editor or {}).get("reader_receipt", {}).get("fetch_id") or s.get("selected_fetch_id"),
+                        "reader_receipt": (deliveries.get(sid) or {}).get("accepted_reader_receipt") or (editor or {}).get("reader_receipt"),
+                        "evidence_fetch_ids": s.get("evidence_fetch_ids") or [],
                         "editor": editor, "delivery": deliveries.get(sid), "outcome": outcome, "reason": reason,
                         "commit_at": commit.get("updated_at"), "validation": details.get("validation")})
         from . import visual_choices

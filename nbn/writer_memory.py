@@ -16,6 +16,24 @@ TTL = 30 * 86400
 PAGE = 40
 
 
+def latest_identity_failure(con, members, *, after=0):
+    """Candidate-scoped diagnostics survive unsafe event IDs without inventing a notebook."""
+    members = list(dict.fromkeys(str(m) for m in members))[:25]
+    if not members:
+        return None
+    marks = ",".join("?" for _ in members)
+    row = con.execute(
+        "SELECT o.at,o.payload_json FROM run_observations o JOIN items i ON i.url_hash=o.ref "
+        f"WHERE o.kind='candidate_identity_failure' AND o.ref IN ({marks}) AND o.at>? "
+        "AND o.expired=0 AND i.status IN ('new','held') "
+        "AND instr(COALESCE(i.note,''),json_extract(o.payload_json,'$.failure'))>0 "
+        "ORDER BY o.at DESC LIMIT 1", (*members, after)).fetchone()
+    if not row:
+        return None
+    payload = store._safe_json_object(row["payload_json"])
+    return {**payload, "at": row["at"], "use": "code_identity_diagnostic_not_editorial_rejection"}
+
+
 def save(con, run_id, ref, kind, payload, *, candidate_ids=(), title=""):
     if kind not in {"receipt", "research_step"}:
         raise ValueError("Not a reporting artifact")
@@ -51,7 +69,7 @@ def publication(con, key):
         "SELECT alias_key FROM story_key_aliases WHERE canonical_key=?", (key,))]
     where = "p.story_key IN (" + ",".join("?" for _ in family) + ") AND " + LIVE_POST
     where += " AND p.mode IN ('DRAFT','IMMEDIATE','UNCERTAIN') AND COALESCE(p.publisher_status,'') NOT IN ('deleted','inactive')"
-    fields = "p.id,p.mode,p.body,p.publisher_status,p.confirmed_at,p.created,p.public_url"
+    fields = "p.id,p.mode,p.body,p.receipt_url,p.publisher_status,p.confirmed_at,p.created,p.public_url"
     row = con.execute("SELECT " + fields + " FROM posts p WHERE " + where +
                       " ORDER BY p.created DESC,p.id DESC LIMIT 1", family).fetchone()
     if not row:
@@ -105,7 +123,8 @@ def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
             headlines = latest.get("headlines") or []
             if headlines and isinstance(headlines[0], str) and not re.fullmatch(r"(?:X\s+)?@[\w_]+", headlines[0].strip()):
                 r["title"] = headlines[0][:160]
-            r["unresolved_question"] = str(latest.get("objective") or "")[:200]
+            failure = latest_identity_failure(con, latest.get("members") or [], after=latest.get("at") or 0)
+            r["unresolved_question"] = str((failure or latest).get("objective") or "")[:200]
             output = publication(con, key)
             r["current_output"] = {k: output.get(k) for k in
                 ("publisher_status", "reader_covered", "duplicate_risk")} if output else None

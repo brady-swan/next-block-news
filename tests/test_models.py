@@ -199,14 +199,16 @@ class ModelsTests(unittest.TestCase):
             self.assertEqual(kinds, {"direct_fetch", "provider_reported_extract"})
             self.assertTrue(any("A test policy changed." in r["text"] for r in result["inspected_evidence"]))
 
-    def test_editor_parse_failure_is_not_a_second_billable_call(self):
+    def test_editor_parse_failure_gets_one_accounted_recovery(self):
         with temporary_store() as con, patch("nbn.brain._create", return_value=models.normalize(
                 raw_response([{"type": "message", "content": [{"type": "output_text", "text": "bad"}]}]),
                 provider="xai", effort="medium")):
             result = editor.review_newsroom_batch([{"story_id": "s", "post": "Policy",
                 "inspected_evidence": [], "selected_receipt": {}}], con, run_id="r")
-            self.assertFalse(result["ok"])
-            self.assertEqual(con.execute("SELECT count(*) FROM model_usage").fetchone()[0], 1)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["decisions"], {})
+            self.assertEqual(result["recovery"]["attempted"], 1)
+            self.assertEqual(con.execute("SELECT count(*) FROM model_usage").fetchone()[0], 2)
 
 
 if __name__ == "__main__":

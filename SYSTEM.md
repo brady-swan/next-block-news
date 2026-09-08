@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-07. This is the owner-facing description of production behavior.*
+*Current as of 2026-09-08, Plan 0068. This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
@@ -9,7 +9,7 @@ story desk every 15 minutes when prepared candidates exist, sends the resulting 
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
 
-## Model roster — unchanged in Plan 0066
+## Model roster — unchanged in Plan 0068
 
 | Role | Model | Effort |
 | --- | --- | --- |
@@ -22,6 +22,39 @@ Brady reviews drafts.
 Production seats have explicit environment overrides. `NBN_MODEL` remains the Anthropic
 legacy-stack setting; `NBN_NEWSROOM_MODEL` selects the v2 writer. Unconfigured installations
 keep the previous Anthropic defaults. Intake is intentionally still Haiku, not Luna.
+
+### Reporting execution — Plan 0068
+
+Exact event keys, broader storylines, open drafts and confirmed reader coverage are labeled
+separately. Invalid event/output relationships can use one code-described correction, sharing
+the existing receipt-repair allowance and six-response/360-second writer budget. Preview
+validation has no state effects; valid sibling stories survive correction. Unresolved failures
+are retained against known candidate IDs and appear in later eligible retry context without
+inventing an event notebook. Empty editor feedback is not a completed review.
+
+Text-only editor requests omit image-review fields. Visual/mixed requests require an explicit
+image verdict and asset/hash fields; prose approval is insufficient. Received malformed JSON
+and invalid references use the existing one omitted-only recovery. Transport failures/refusals
+do not gain a new retry loop. Remaining fallback copy is labeled **Needs human review — editor
+response failed** in the Desk; current human-draft fallback and autopost protections remain.
+
+The editor may select the final reader source by exact inspected evidence reference, including
+an explicitly selected relevant research-appendix receipt. Null keeps the writer's choice. The
+same source follows into the first reply, provenance, memory and Desk. Delivery stores compact
+pointers to retained exact evidence, not duplicated article bodies. Later visual changes use
+the last confirmed delivery's source context; a proposed or uncertain mutation cannot replace
+it. If retained evidence no longer matches an owner-changed source, the old action stops.
+
+Preparation may advance relevant later-outcome evidence even when it does not justify a second
+post. Writers selectively check whether a requested action was approved or another outcome
+changed, distinguish disclosure/outcome/reporting-period/article dates, and favor the meaningful
+Bitcoin development over a promotional headline. This adds no mandatory research checklist.
+
+Relevant cards now point to available images; post/article media precedes avatars and duplicate
+thumbnails. Existing visual guidance includes valid chart examples and explains at-a-glance
+comprehension and potential reach. Images remain optional and require actual pixel review.
+Nano Banana is parked by owner; the saved Gemini key is unused. No new model, worker, quota,
+cadence or budget was introduced. See SPRINT-0068-FINDINGS.md for measured results and limits.
 
 Each desk receives the exact reader-visible post copy from the preceding 48 hours, newest
 first, with publication time, event key, class, and receipt. This is distinct from the compact

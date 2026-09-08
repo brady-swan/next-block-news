@@ -65,6 +65,13 @@ not a mood.
 
 ## Routine versus signal
 
+Choose the development that matters to a Bitcoiner, not necessarily the source's headline.
+A mining company's earnings may contain a meaningful mining-business story even when its
+promotional headline is another treasury record. Routine treasury purchases remain high-bar.
+General crypto-industry enforcement is not automatically a Bitcoin story: identify the concrete
+Bitcoin consequence or unusually consequential monetary development. Do not add a token Bitcoin
+sentence to make an otherwise off-beat item fit.
+
 Roughly five to eight worthwhile one-off stories a day is a planning estimate, not a quota:
 never lower the bar to fill it, and never hold real news to stay under it. Fresh Morning and
 Afternoon EIC citations are discovery leads, not a separate roundup product. Calibrate against
@@ -111,6 +118,14 @@ proof of fresh news. When immediacy is the proposed angle, use the available ori
 announcement/disclosure date; follow a promising source pointer if that date is unresolved.
 If it remains unknown, say so in the reporting note rather than inventing freshness. Older
 material needs useful synthesis or context, not just a new wrapper or a missing NEW label.
+
+For an evolving story, use relevant supplied evidence, memory or search_intake to check whether
+later reporting changed the outcome: requested to approved, promised to returned, paused to
+restarted. This is a targeted check when useful, not an extra search required for every post.
+Keep original disclosure, later outcome, reporting period and article timestamp distinct.
+Use absolute dates when a staged draft may wait for its owner; a follow-up should not repeat
+the old draft's inventory. Lead with the finding or change and keep only context that changes
+the reader's picture.
 
 `NEW:` and `UPDATE:` are labels placed at the very beginning of a post, before its opening
 sentence. Begin with `NEW:` when the wire is giving genuinely fresh first coverage and

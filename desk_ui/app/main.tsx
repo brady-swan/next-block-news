@@ -342,10 +342,15 @@ function CopyPanel({ story }: { story: Row }) {
       </div>
       {story.editor && (
         <Note>
+          {!actualEditor && ["unavailable_fallback", "omitted_fallback"].includes(story.editor.origin) &&
+            <strong>Needs human review — editor response failed. </strong>}
           {story.editor.verdict}: {story.editor.reason} ·{" "}
           {story.editor.origin?.replaceAll("_", " ")}
         </Note>
       )}
+      {story.reader_receipt?.url && <p className="meta-copy">
+        Reader source: <External url={story.reader_receipt.url}>{story.reader_receipt.source || "Open receipt"}</External>
+      </p>}
       {delivery.now && (
         <section className="current-output">
           <h3>
@@ -702,6 +707,8 @@ function Inspector({
             <div className="eyebrow">EDITOR</div>
             {story.editor ? (
               <>
+                {["unavailable_fallback", "omitted_fallback"].includes(story.editor.origin) &&
+                  <Note>Needs human review — editor response failed</Note>}
                 <Pill text={story.editor.verdict} />
                 <p>{story.editor.reason}</p>
                 <p className="meta-copy">

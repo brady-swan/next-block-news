@@ -9,6 +9,29 @@ OFF, track the work, preserve rollback, and reserve systemic changes for owner r
 
 ## Automatically investigate
 
+### Plan 0068 reporting/visual execution watches
+
+- Trace identity holds through exact event, broader storyline and actual output state. Check
+  the shared one-correction allowance, preserved valid siblings and latest candidate retry
+  objective. Do not count a proposal as publication or an empty feedback row as editor review.
+- Track initial/recovered/malformed/omitted editor decisions separately. Visual prose approval
+  without exact structured asset approval is not approval. Human fallback drafts remain explicit.
+- Compare the inspected original, selected reader source, submitted first reply, provenance,
+  notebook and Desk. Later confirmed visual mutations must preserve or explicitly replace that
+  source consistently. Proposed/uncertain mutations and owner edits are not accepted revisions.
+- Review meaningful Bitcoin selection, concise one/two-sentence paragraphs, and missed later
+  outcomes. AUSTRAC and Metaplanet replay weaknesses remain live tuning questions, not solved
+  by passing contract tests. Brady's Treasury brief is the recent $4B→$8B→$12.5B sequence:
+  establish comparable operation type, dates and scheduled-versus-actual amounts before charting.
+- Count natural list/inspect/render calls, useful original charts, pixel reviews and confirmed
+  image-bearing deliveries separately. Check sources, units, dates, alt text, readability and
+  added reader value. Deliberately requested replay charts are capability proof, not adoption.
+  Compare costs/latency and flag repeated unnecessary visual work; text-only remains normal.
+- Nano Banana is **parked by owner**, not queued for autonomous implementation. The Google key
+  is saved and unused. Existing useful charts do not automatically authorize reopening that plan.
+
+These checks supplement, not replace, all standing authority and notification boundaries below.
+
 - Reproduce errors and inspect production health, logs, decisions, intake, model behavior,
   Typefully state, timing, cost, and peer coverage.
 - Trace suspicious droughts, bursts, duplicates, weak drafts, missed candidates, retries, and
