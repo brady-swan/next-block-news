@@ -78,6 +78,12 @@ returned 200; missing authorization returned 403 and nonexistent visual returned
 natural intake cycle completed at 02:20 UTC with healthy process state and unchanged roster /
 autopost OFF. Schema contains all three visual tables. No forced newsroom call was made.
 
+The first scheduled v2.23 slot, `cycle:1788834460:fbed1989`, completed at 02:27:52 UTC:
+preparation considered one lead, assigned it Background, and correctly made zero writer/editor
+calls. No fail-open or worker error. Nine process cycles had completed by 02:28:57 UTC.
+This is a healthy empty-desk path, not proof of a natural writer image-tool call; the next
+eligible newsroom run and first natural image delivery remain audit follow-through items.
+
 One isolated **unpublished** Typefully draft **10673284**, created 02:21:37 UTC, is titled
 `IMAGE CAPABILITY TEST — DO NOT PUBLISH`. It used the real renderer and resumable uploader;
 the first pass persisted processing, the second confirmed the same intent after ready status.
