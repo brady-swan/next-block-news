@@ -34,7 +34,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.26-dense-desk"
+PROMPT_VERSION = "editorial-core-v2.27-dense-fallbacks"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -751,7 +751,8 @@ def _compact_candidate_density(row: dict, full: dict) -> dict:
     """Remove mechanical repetition, never real preparation or control context."""
     compact = dict(row)
     preparation = full.get("haiku_preparation") or {}
-    if preparation.get("outcome") == "batch_fail_open":
+    if preparation.get("outcome") in {
+            "batch_fail_open", "budget_fail_open", "overflow_fail_open", "validation_fail_open"}:
         # This is code-generated fallback text, not a model's editorial judgment.
         # Its repeated headline/objective remains in the full candidate context.
         compact["haiku_preparation"] = {
@@ -1716,8 +1717,8 @@ class NewsroomSession:
                     for row in packet["intake_board"]
                 ]
                 packet["run_brief"]["compaction_note"] = (
-                    "Empty optional candidate fields are omitted. batch_fail_open preparation "
-                    "was unavailable; no model judgment was supplied. Full candidate details "
+                    "Empty optional candidate fields are omitted. Code-generated fail-open "
+                    "preparation contains no model judgment. Full candidate details "
                     "remain available via candidate_context_id."
                 )
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:

@@ -31,7 +31,7 @@ receipt metadata/full capture behind existing context IDs under pressure, preser
 control hints and all in-scope open-draft identities/ledes, and records section sizes on true
 overflow. The initial 64 KiB and optional retrieval budgets are unchanged. Excerpts are honestly
 fingerprinted and full retained receipts remain unchanged. See SPRINT-0069-FINDINGS.md.
-The v2.26 follow-up removes remaining mechanical fail-open preparation repetition and empty
+The v2.27 follow-up removes remaining mechanical fail-open preparation repetition and empty
 optional fields only at the final density tier. Real preparation, source evidence, controls
 and every coverage key/lede are unchanged. See AUDIT-FIX-2026-09-08-DENSE-PACKET.md for the
 distinct residual failure, reproduction, independent review and release status.

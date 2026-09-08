@@ -65,3 +65,27 @@ All **585 working-tree tests passed**. This includes two unrelated evaluator tes
 will not be included in the clean release. Independent implementation review approved
 with no blockers. The production target remains the existing single Railway service;
 autopost is OFF and the audit is temporarily PAUSED for release verification.
+
+## Release-smoke extension: cover every mechanical failure outcome
+
+The initial narrow candidate 25d9e69 / v2.26 deployed successfully, with seven file
+hashes verified, health 200/autopost OFF, and 583 clean-release tests passed. Before
+resuming the audit, a read-only reconstruction of the more recent failed run
+cycle:1788878541:41a9d5f5 found 25 **budget_fail_open** cards and six receipts still
+overflowed at 70,157 bytes: the same mechanical boilerplate under a different label.
+This is incomplete case coverage, not a different design issue. No audit checkpoint
+was advanced and the audit remained paused during this release check.
+
+The final candidate explicitly covers the four outcomes produced by desk_prep._synthetic:
+batch_fail_open, budget_fail_open, overflow_fail_open and validation_fail_open. Keep each
+exact outcome plus protection reason. Protected, successful or unknown outcomes are not
+treated as failures. Tests cover all four plus genuine/unknown preparation and False/0.
+No further prose clipping, budget change or new subsystem is needed. Version becomes
+editorial-core-v2.27-dense-fallbacks. Final review/release proof follows below.
+
+Final projections through the implemented helper: batch-failure reconstruction
+**73,313 → 62,724 bytes**, budget-failure reconstruction **70,157 → 64,016 bytes**.
+Both retain all 25 candidates and all coverage/receipt data unchanged (five and six
+receipts respectively). Both are re-materialized diagnostics, not paid writer replays.
+All 59 focused tests passed. Independent final review approved the four-outcome set,
+truthful packet note and regressions; eight compact-desk tests passed independently.

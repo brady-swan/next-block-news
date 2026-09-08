@@ -56,7 +56,7 @@ class CompactDeskTests(unittest.TestCase):
                 if index:
                     item.pop("_owner_reconsider", None)
                 desk.preparations[item["url_hash"]] = {
-                    "outcome": "batch_fail_open", "event_summary": item["title"][:200],
+                    "outcome": "budget_fail_open", "event_summary": item["title"][:200],
                     "bitcoin_relevance": "Preparation was unavailable; advanced to newsroom.",
                     "research_objective": "Let Sonnet inspect and make the editorial call.",
                     "source_leads": [], "protection_reason": "guide_account",
@@ -81,7 +81,7 @@ class CompactDeskTests(unittest.TestCase):
             self.assertIn("no model judgment", packet["run_brief"]["compaction_note"])
             for row in packet["intake_board"]:
                 self.assertEqual(row["haiku_preparation"], {
-                    "outcome": "batch_fail_open", "protection_reason": "guide_account"})
+                    "outcome": "budget_fail_open", "protection_reason": "guide_account"})
                 original = baseline[row["candidate_id"]]
                 for key, value in original.items():
                     if key != "haiku_preparation" and value not in (None, "", [], {}):
@@ -95,7 +95,7 @@ class CompactDeskTests(unittest.TestCase):
             full = desk._read_desk_context([first["candidate_context_id"]])["rows"][0]
             self.assertEqual(full["haiku_preparation"]["event_summary"],
                              desk.preparations[first["candidate_id"]]["event_summary"])
-            self.assertEqual(full["haiku_preparation"]["outcome"], "batch_fail_open")
+            self.assertEqual(full["haiku_preparation"]["outcome"], "budget_fail_open")
             self.assertEqual(first["owner_override"], full["owner_override"])
             self.assertEqual(first["prior_item_state_untrusted_context"],
                              full["prior_item_state_untrusted_context"])
@@ -118,10 +118,16 @@ class CompactDeskTests(unittest.TestCase):
             self.assertEqual(model[key], original[key])
         for key in ("empty_optional", "empty_list", "empty_text", "empty_object"):
             self.assertNotIn(key, model)
-        full["haiku_preparation"]["outcome"] = "batch_fail_open"
-        fallback = newsroom._compact_candidate_density(row, full)
-        self.assertEqual(fallback["haiku_preparation"], {
-            "outcome": "batch_fail_open", "protection_reason": "guide_account"})
+        for outcome in ("batch_fail_open", "budget_fail_open", "overflow_fail_open", "validation_fail_open"):
+            with self.subTest(outcome=outcome):
+                full["haiku_preparation"]["outcome"] = outcome
+                fallback = newsroom._compact_candidate_density(row, full)
+                self.assertEqual(fallback["haiku_preparation"], {
+                    "outcome": outcome, "protection_reason": "guide_account"})
+        for outcome in ("protected", "unrecognized_fail_open"):
+            full["haiku_preparation"]["outcome"] = outcome
+            self.assertEqual(newsroom._compact_candidate_density(row, full)["haiku_preparation"],
+                             original["haiku_preparation"])
         self.assertEqual(row, original)
         self.assertEqual(full["haiku_preparation"]["event_summary"], "Useful actual judgment.")
 

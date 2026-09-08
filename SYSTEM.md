@@ -209,7 +209,7 @@ retry, owner-override and visual hints survive compaction, with full candidate/r
 retrievable. Every in-scope open draft retains its exact key and a short lede rather than
 disappearing behind a three-row cap. Full storyline cards can likewise move behind indexes.
 A final density tier removes only empty optional card fields and repetitive code-generated
-preparation-failure boilerplate. It retains an explicit `batch_fail_open` outcome and protection
+preparation-failure boilerplate. It retains the exact fail-open outcome and protection
 reason, rather than presenting fallback prose as model judgment. Real preparation and all
 nonempty control fields remain intact; original full cards stay retrievable. This adds no
 model calls and does not change the packet or retrieval limits.
