@@ -2,7 +2,8 @@
 
 September 7, 2026. Owner approved the afternoon follow-through package and requested the
 independent lead-coder playbook. Status: plan and implementation independently approved;
-536 working-tree tests pass; clean release/deployment verification in progress.
+536 working-tree / 534 clean-release tests pass. Runtime `02c864d` deployed and smoke-tested;
+existing audit restored, autopost OFF. See SPRINT-0065-FINDINGS.md for proof and limits.
 
 ## Objective and evidence
 

@@ -1,8 +1,7 @@
 # Sprint 0065 — evidence to reader
 
 September 7, 2026. Owner-approved afternoon follow-through. Independent plan and implementation
-reviews approved. Release verification in progress; the section below records actual deployment
-and smoke results when complete.
+reviews approved; clean release deployed and smoke-tested. Existing audit restored.
 
 ## What the afternoon taught us
 
@@ -72,6 +71,7 @@ boundaries, original-copy fallback, native rehydration, memory reads/aliases, Me
 ambiguous/blank Bitcoin Magazine bodies. Existing extraction fixtures now include its body marker.
 
 - Working-tree offline suite: **536 tests passed**, Python 3.12, 16.765 seconds.
+- Clean archive offline suite: **534 tests passed**, Python 3.12, 16.297 seconds.
 - Two unrelated dirty evaluator tests are intentionally excluded from the clean release.
 - Independent implementation review: **approved**, no remaining concrete blockers.
 - No live model replay, forced worker run, manual Typefully edit/dismissal or publication was used
@@ -79,9 +79,26 @@ ambiguous/blank Bitcoin Magazine bodies. Existing extraction fixtures now includ
 
 ## Release and observation
 
-Pending clean archive verification, Railway deployment and read-only smoke. Autopost remains OFF.
-The existing rolling audit was paused for the build; it will resume with its standing authority
-and full-audit cutoff 2026-09-07T23:26:34.834Z preserved for backfill.
+- Runtime commit: `02c864d`, pushed to `origin/main` and deployed from its clean archive.
+- Railway deployment: `d8e6c4bf-b951-4103-b60a-345746823fc2`, **SUCCESS**.
+- Existing production project/service/environment verified; one replica, persistent `/data`.
+- Online SQLite backup: `/data/backups/nbn-pre-source-policy-20260908T002030Z.db`, integrity OK.
+- Read-only smoke at 2026-09-08 00:24:33 UTC / September 7 7:24 PM Central: health, status, Desk,
+  Intake, Outputs, System and Review returned 200; all four workspace API views returned valid 200
+  JSON; unauthenticated API access returned 403. Public Railway health also returned 200.
+- SHA-256 comparison matched all seven changed runtime/prompt files. Production DB quick check OK.
+- Real read-only memory projections succeeded: five storyline index entries, four full cards,
+  seven compact caveats and a 40-entry catalog page, without writes.
+- The first normal intake cycle completed under v2.22 with no worker error. It was waiting for
+  the persisted editorial deadline; this initial smoke did not claim a completed new-model run.
+- Roster, six responses / 360 seconds, 24 shared tool calls, 15-minute cadence and four retrieval
+  calls / 48 KiB total confirmed unchanged. Autopost confirmed **OFF**.
+- Existing `audit-nbn-production` heartbeat restored **ACTIVE**, every 15 minutes. New outcome
+  watches added; standing authority unchanged. Full-audit cutoff **2026-09-07T23:26:34.834Z**
+  preserved so the build window is backfilled rather than silently skipped.
+
+The archive contains the release plan/findings as they stood before deployment; this final
+release-proof update is a documentation-only follow-up, not another worker restart.
 
 Watch natural runs for actual appendix selection, preserved reader context, honest event timing,
 and current outcome caveats. Static tests prove the handoff mechanics, not that future copy is

@@ -197,6 +197,14 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
+Plan 0065 shipped as `02c864d`, Railway deployment `d8e6c4bf-b951-4103-b60a-345746823fc2`
+(SUCCESS). Working-tree suite: 536 tests; clean release: 534. Seven runtime/prompt hashes,
+Desk/health/API access, read-only production memory projections and a normal intake cycle
+verified. Autopost OFF; model roster/budgets/cadence unchanged. The original rolling audit is
+ACTIVE with Plan 0065 watches and its full-audit cutoff preserved for backfill. Initial smoke
+preceded the first full v2.22 newsroom run; the audit must evaluate natural output, not infer
+editorial improvement from passing tests. See SPRINT-0065-FINDINGS.md for backup and limits.
+
 Plan 0064 shipped reporting follow-through as `c5c9096`; production smoke exercised the real
 writer/editor handoff and exposed an older intake-variable shadowing bug after successful draft
 replacement. Independently reviewed repair `c7887fd` preserves the intake list for decision
