@@ -1,8 +1,8 @@
 # Evidence URL collision — new audit follow-up
 
-## Current disposition — September 8, 2026, 19:32 UTC
+## Current disposition — deployed and smoked September 8, 2026, 19:43 UTC
 
-Implemented locally and independently approved; release/deployment smoke remains. Only runtime
+Implemented, independently approved, deployed and smoked. Only runtime
 change is `nbn/store.py`: project the URL-keyed qualification table to one intact candidate per
 exact URL, preferring the authoritative selected capture without merging flags. Immutable writer/
 editor evidence, notebook captures, source choice and upstream text remain untouched. No schema,
@@ -15,7 +15,7 @@ Verification:
 - 79 focused evidence/resolver/store tests passed after correcting a test-only existing `www`
   normalization expectation. The helper did not change for that correction.
 - Full working-tree suite: 590 tests passed in 23.253 seconds. Unrelated uncommitted evaluation
-  work is excluded from the release; the clean archive receives its own complete test run.
+  work is excluded from the release. Clean archive: 588 tests passed in 25.894 seconds.
 - Independent lead approved code and ran 21 focused evidence/materialization/rollback tests,
   plus temporary duplicate-capture rollback and first-exact-match tie checks. Both reader
   variants retain four notebook captures while storing two URL rows. Reviewer made no edits
@@ -24,11 +24,29 @@ Verification:
   runtime still `684fd39`/v2.27, no current worker error. Railway target is the existing production
   service, one replica, `/data` volume, previous deployment `ac251388-dd31-4dd9-aeb9-da3b20eaa134`.
 
-Next: commit only this repair/runtime regression, test a clean archive, online DB backup, deploy
-that archive, verify live source hash and read-only Desk/health, then observe a natural run. No
-manual Typefully mutation, paid replay or forced run. Rollback is previous clean runtime
-`684fd39`, not DB restoration. Full editorial coverage remains through 12:20 UTC; this repair
-does not review or advance that gap.
+Release evidence:
+
+- Runtime commit `ab7529e`, clean archive `/tmp/nbn-evidence-url.kbpuR7`; only store.py runtime
+  diff plus regression tests and this repair record. No unrelated dirty evaluation code shipped.
+- Online backup `/data/backups/nbn-pre-source-policy-20260908T193313Z.db` passed integrity check.
+- Railway deployment `f97615a4-7de1-44a4-ab67-6d49f37c681c` SUCCESS, existing service/environment,
+  one replica and `/data` volume. No credential or autopost change.
+- Live store.py SHA256 `f076ef4f0ca8984166ae1622a5f5adda2fd9de9630e21a9e98180308a08f110b` matches
+  the archive. Newsroom v2.27/hash unchanged (storage fix, not a prompt change).
+- Initial19:35:31.593UTC and later19:42:32.147UTC smoke: health200/autopostOFF/no last_error,
+  authenticated newsroom/intake/outputs/system Desk JSON200, unauthenticated403.
+- Natural run `cycle:1788896426:eb16ca42` completed19:41:06.371UTC: five candidates, two successful
+  writer responses, four prepared receipts. All five dropped; no story/editor/delivery produced.
+  This confirms normal worker operation, not a production replay of the collision. The exact
+  duplicate-URL materialization branch is covered by the mocked regression/independent tests.
+- Read-only19:43:16.898UTC: no post or publisher mutation since deployment, no publication-sync
+  error. No paid replay, forced worker run, DB repair or manual draft/content mutation.
+
+Rollback: deploy a clean archive of previous runtime `684fd39` (prior successful Railway
+`ac251388-dd31-4dd9-aeb9-da3b20eaa134`); do not restore DB absent demonstrated corruption.
+Audit stayed ACTIVE; no need to resume/rebuild it. Continue monitoring natural resolutions,
+without requiring a test draft. The separately completed12:20–12:50 editorial interval and two
+authorized advisory comment writes are recorded in the audit/tuning ledgers, not release tests.
 
 ## Historical plan approval and implementation delta
 
