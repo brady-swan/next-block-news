@@ -3941,8 +3941,30 @@ def last_briefing_ts(con) -> float:
     return row["t"] or 0.0
 
 
+def _resolution_evidence_by_url(result):
+    """Project captures onto source_evidence's URL key without merging qualifications.
+
+    Direct and native captures of one URL legitimately coexist in the immutable result,
+    observations and notebook. Prefer the selected capture's exact qualification here;
+    otherwise retain the first candidate intact. A fingerprint alone is not provenance.
+    """
+    selected = (result.selected, result.content_fingerprint, result.originality,
+                result.supported, result.receipt_eligible, result.corroboration_eligible)
+
+    def is_selected(ev):
+        return (ev.ref, ev.content_fingerprint, ev.originality, ev.supported,
+                ev.receipt_eligible, ev.corroboration_eligible) == selected
+
+    by_url = {}
+    for ev in result.evidence:
+        previous = by_url.get(ev.ref.url)
+        if previous is None or (is_selected(ev) and not is_selected(previous)):
+            by_url[ev.ref.url] = ev
+    return by_url.values()
+
+
 def persist_resolution(con, result, mode: str):
-    """Persist one immutable resolver result and its eligible evidence candidates."""
+    """Persist the resolver result and one intact qualification candidate per URL."""
     now = time.time()
     original, selected = result.original, result.selected
     story_key = canonical_story_key(con, result.story_key)
@@ -3983,7 +4005,7 @@ def persist_resolution(con, result, mode: str):
              result.selected_text, result.earliest_coverage_date, result.note),
         )
         con.execute("DELETE FROM source_evidence WHERE item_hash=?", (result.item_hash,))
-        for ev in result.evidence:
+        for ev in _resolution_evidence_by_url(result):
             con.execute(
                 "INSERT INTO source_evidence("
                 " item_hash, story_key, observed_at, url, source_id, source_name, tier, category,"
