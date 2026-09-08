@@ -490,11 +490,12 @@ def _article_markup(body: str) -> str:
     receipt budget before the article starts. Keep the existing fallback for pages
     without a single identifiable body (including X and multi-article indexes).
     """
-    if not re.search(r"articleBody|RichTextStoryBody|article-body", body):
+    if not re.search(r"articleBody|RichTextStoryBody|article-body|td-post-content", body):
         return body
     try:
         soup = BeautifulSoup(body, "html.parser")
-        for selector in ('[itemprop~="articleBody"]', '.RichTextStoryBody', '.article-body'):
+        for selector in ('[itemprop~="articleBody"]', '.RichTextStoryBody', '.article-body',
+                         '.td-post-content'):
             matches = soup.select(selector)
             if len(matches) == 1 and matches[0].get_text(strip=True):
                 return str(soup.title or "") + "\n" + str(matches[0])
@@ -582,6 +583,7 @@ def fetch_article(url: str, limit: int = 8000, *, deadline: float | None = None)
         text = re.sub(r"\s+", " ", text).strip()[:limit]
         shell = len(text) < 200 and bool(re.search(
             r"data loading|enable javascript|just a moment|checking your browser", text, re.I))
+        shell = shell or bool(re.fullmatch(r"mempool\s*[-–—]\s*Bitcoin Explorer", text, re.I))
         return {"text": text,
                 "final_url": str(resp.url), "canonical_url": canonical or str(resp.url),
                 "byline": byline, "published_at": published_at, "links": links,

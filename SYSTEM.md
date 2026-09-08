@@ -9,7 +9,7 @@ story desk every 15 minutes when prepared candidates exist, sends the resulting 
 separate Grok editor, and delivers approved work through Typefully. Autopost is OFF while
 Brady reviews drafts.
 
-## Model roster — unchanged in Plan 0064
+## Model roster — unchanged in Plan 0065
 
 | Role | Model | Effort |
 | --- | --- | --- |
@@ -193,7 +193,9 @@ Actual counts and reported charges remain authoritative. Direct fetch bounds rem
 Article links, byline, publication metadata and limitations survive extraction. Loading shells
 are failed material, not useful source text. Explicitly marked HTML article bodies are selected
 before text/link caps so long navigation menus cannot crowd out the story; ambiguous or unmarked
-pages retain the existing whole-page fallback. This does not read video or unlock blocked pages.
+pages retain the existing whole-page fallback. Bitcoin Magazine's `.td-post-content` is included;
+an empty Mempool explorer title shell is failed material, not a citable receipt. This does not
+read video or unlock blocked pages.
 Text-based PDF responses use local Poppler extraction in the same fetch route. At most the first
 20 pages are parsed, within 10 seconds and the caller's remaining deadline; parser inputs over
 10 MiB are rejected. The existing HTTP download happens before that parser-input check. Returned
@@ -210,8 +212,18 @@ not merely the selected reader link. A nullable 800-character `reporting_note` c
 freshness checks and limitations into the editor and event notebook as untrusted context, never
 evidence or instructions. Equal text at different URLs/authorship/dates is not deduplicated into
 one source identity in the editor's evidence catalog. No extra model turn is added for this note.
-V2.21 repeats that contract at the four dossier field descriptions: retaining native extracts
-alone does not attach them to a story. No automatic attachment, source upgrade or routing change.
+V2.22 keeps that primary handoff and adds an optional unassigned run-research appendix to the
+batch editor. It contains only eligible current-run fetched/native receipts, excluding restored
+historical memory: at most eight records, 2,000 characters each and 24 KiB total, inside the existing
+256 KiB editor payload. It yields to the already-fitted candidates, selected evidence and feed.
+These excerpts are not automatically story support. The editor can explicitly select relevant
+`additional_evidence_refs`, with eight total receipts per story. Invalid ref lists reject only that
+decision into the existing one omitted-only recovery; unresolved cases use original-copy draft
+fallback with no additions. The exact delivered excerpt, its fingerprint, original fingerprint,
+clipping status and unmodified source limitations reach final rails and the event notebook.
+Unseen text never expands quote support. Native paraphrases remain native; the reader link is
+unchanged. Existing observations store the appendix and the chosen refs. No research call is added;
+editor input can grow by the bounded appendix. Actual costs remain in the usage ledger.
 
 Plan 0059 tested stronger selective research-routing prompts but did not demonstrate reliable
 native assignment. Those experimental instructions and turn-budget fields were not shipped.
@@ -260,6 +272,12 @@ new lines per run or update a line whose full revisioned card it actually read. 
 checks prevent a stale run from overwriting newer memory. Storyline writes happen independently
 before publisher materialization; any failure drops the optional link and delivery continues.
 Exact-event keys, receipts, output lifecycle, and Typefully reconciliation remain authoritative.
+Read-time cards now label writer summaries as context, not editor-approved facts. Event dispositions
+are writer intentions; a separate current exact-event outcome supplies the latest editor reason/time,
+unresolved work and publisher state. It may postdate the originating run, and missing/expired notebook
+state is unknown. Compact caveats also appear in the preparation index and writer memory catalog.
+A relevance drop is not proof that all summary facts are false. Original summaries/revisions are not
+rewritten. Confirmed reader publication remains separate from a newer open draft.
 
 When research is incomplete, v2 retains the canonical key, proposed post, inspected evidence,
 and a code-mapped objective such as “find one independent second report.” The next fresh desk

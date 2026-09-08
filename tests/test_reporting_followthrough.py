@@ -17,7 +17,7 @@ class ReportingFollowthroughTests(unittest.TestCase):
         schema = newsroom.V2_DOSSIER_TOOL["input_schema"]["properties"]
         fields = schema["stories"]["items"]["properties"]
         self.assertIn("Must also appear in evidence_fetch_ids", fields["selected_fetch_id"]["description"])
-        self.assertIn("only these receipts reach its editor", fields["evidence_fetch_ids"]["description"])
+        self.assertIn("these are its primary editor handoff", fields["evidence_fetch_ids"]["description"])
         self.assertIn("exclude unrelated sources", fields["evidence_fetch_ids"]["description"])
         self.assertIn("not evidence", fields["reporting_note"]["description"])
         self.assertIn("does not attach evidence to a story", schema["native_sources"]["description"])

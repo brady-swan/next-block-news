@@ -91,6 +91,10 @@ def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
                                         params + [limit, offset])]
     for r in rows:
         r["title"] = r["title"][:160]
+        if r["kind"] == "storyline":
+            key = r["context_id"].removeprefix("storyline:")
+            r["summary_status"] = "writer_context_not_editor_approved_facts"
+            r["outcome_caveats"] = store.newsroom_storyline_caveats(con, key, now=now)
         if r["kind"] == "notebook":
             key = r["context_id"].removeprefix("notebook:")
             r["event_key"] = key

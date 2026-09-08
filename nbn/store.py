@@ -2675,6 +2675,19 @@ def save_newsroom_editor_feedback(con, canonical_key: str, *, verdict: str, reas
     con.commit()
 
 
+def add_newsroom_story_evidence(con, canonical_key: str, evidence: list[dict]) -> None:
+    """Retain explicitly selected editor excerpts without inventing a writer attempt."""
+    key = canonical_story_key(con, str(canonical_key or "")[:180])
+    row = con.execute("SELECT evidence_pool_json FROM newsroom_story_memory WHERE canonical_key=?",
+                      (key,)).fetchone()
+    if not row:
+        return
+    pool = _merge_memory_evidence(_safe_json_array(row["evidence_pool_json"]), evidence)
+    con.execute("UPDATE newsroom_story_memory SET evidence_pool_json=? WHERE canonical_key=?", (pool, key))
+    _enforce_story_memory_row_bound(con, key)
+    con.commit()
+
+
 _STORYLINE_KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+){0,15}$")
 _STORYLINE_LIFECYCLES = {"open", "closed"}
 _STORYLINE_RELATIONSHIPS = {
@@ -2692,6 +2705,83 @@ def _storyline_watch_for(value) -> list[str]:
     if not isinstance(value, list) or len(value) > 3:
         return []
     return [str(row).strip()[:240] for row in value if str(row).strip()][:3]
+
+
+def newsroom_event_outcome(con, key: str, *, now: float | None = None) -> dict:
+    """Current exact-event state, not a verdict retroactively assigned to an old run."""
+    from . import writer_memory
+    stamp = time.time() if now is None else now
+    key = canonical_story_key(con, str(key or "")[:180])
+    row = con.execute(
+        "SELECT state,editor_json,attempts_json,updated_at FROM newsroom_story_memory"
+        " WHERE canonical_key=? AND expires_at>?", (key, stamp),
+    ).fetchone() if key else None
+    edit = _safe_json_object(row["editor_json"]) if row else {}
+    attempts = _safe_json_array(row["attempts_json"]) if row else []
+    latest = attempts[-1] if attempts and isinstance(attempts[-1], dict) else {}
+    output = writer_memory.publication(con, key) if key else None
+    confirmed = (output or {}).get("confirmed_output")
+    return {
+        "exact_event_key": key, "scope": "latest_exact_event_state_not_original_run_verdict",
+        "state": row["state"] if row else "unknown",
+        "editor": {"verdict": str(edit.get("verdict") or "")[:40],
+                   "reason": str(edit.get("reason") or "")[:240], "at": edit.get("at")}
+                  if edit else None,
+        "unresolved_question": str(latest.get("objective") or "")[:200]
+                               if row and row["state"] == "research_pending" else "",
+        "state_recorded_at": row["updated_at"] if row else None,
+        "reader_covered": bool(confirmed),
+        "confirmed_at": confirmed["confirmed_at"] if confirmed else None,
+        "open_draft": bool(output and output["mode"] == "DRAFT"
+                           and output.get("publisher_status") in {None, "", "draft"}),
+        "latest_publisher_status": output.get("publisher_status") if output else None,
+    }
+
+
+def newsroom_storyline_caveats(con, key: str, *, now: float | None = None) -> list[dict]:
+    """Small current-outcome overlay for every summary/index route; raw prose stays intact."""
+    events = con.execute(
+        "SELECT canonical_event_key FROM newsroom_storyline_events WHERE storyline_key=?"
+        " ORDER BY observed_at DESC,id DESC LIMIT 8", (key,),
+    ).fetchall()
+    out, seen = [], set()
+    for event in events:
+        canonical = canonical_story_key(con, str(event["canonical_event_key"] or ""))
+        if not canonical or canonical in seen:
+            continue
+        seen.add(canonical)
+        current = newsroom_event_outcome(con, canonical, now=now)
+        if (current["state"] in {"dropped", "research_pending", "unknown"} or
+                (current.get("editor") or {}).get("verdict") == "drop"):
+            out.append({k: current[k] for k in
+                        ("exact_event_key", "state", "editor", "unresolved_question", "scope")})
+        if len(out) >= 3:
+            break
+    return out
+
+
+def _storyline_output(con, key: str) -> dict:
+    from .desk import LIVE_POST
+    where = ("p.storyline_key=? AND " + LIVE_POST +
+             " AND p.mode IN ('DRAFT','IMMEDIATE','UNCERTAIN')"
+             " AND COALESCE(p.publisher_status,'') NOT IN ('deleted','inactive')")
+    latest = con.execute(
+        "SELECT p.mode,p.body,p.publisher_status FROM posts p WHERE " + where +
+        " ORDER BY p.created DESC,p.id DESC LIMIT 1", (key,),
+    ).fetchone()
+    confirmed = con.execute(
+        "SELECT p.body,p.confirmed_at FROM posts p WHERE " + where +
+        " AND p.publisher_status='published' AND p.confirmed_at IS NOT NULL"
+        " ORDER BY p.confirmed_at DESC,p.id DESC LIMIT 1", (key,),
+    ).fetchone()
+    return {
+        "open_draft": bool(latest and latest["mode"] == "DRAFT"
+                           and latest["publisher_status"] in {None, "", "draft"}),
+        "reader_covered": bool(confirmed),
+        "latest_output_lede": str(latest["body"] or "").split("\n", 1)[0][:400] if latest else "",
+        "confirmed_output_lede": str(confirmed["body"] or "").split("\n", 1)[0][:400] if confirmed else "",
+        "confirmed_at": confirmed["confirmed_at"] if confirmed else None,
+    }
 
 
 def newsroom_storyline_index(con, *, limit: int = 80,
@@ -2713,13 +2803,7 @@ def newsroom_storyline_index(con, *, limit: int = 80,
             " WHERE storyline_key=? ORDER BY observed_at DESC,id DESC LIMIT 1",
             (row["storyline_key"],),
         ).fetchone()
-        output = con.execute(
-            "SELECT mode,body,publisher_status,confirmed_at FROM posts WHERE storyline_key=?"
-            " AND mode IN ('DRAFT','IMMEDIATE','UNCERTAIN')"
-            " AND NOT (mode='DRAFT' AND COALESCE(publisher_status,'') IN ('deleted','inactive'))"
-            " ORDER BY created DESC,id DESC LIMIT 1",
-            (row["storyline_key"],),
-        ).fetchone()
+        output = _storyline_output(con, row["storyline_key"])
         out.append({
             "storyline_key": row["storyline_key"],
             "title": str(row.get("title") or "")[:160],
@@ -2730,8 +2814,9 @@ def newsroom_storyline_index(con, *, limit: int = 80,
                 row.get("last_signal_at") or stamp)) / 3600, 1),
             "last_exact_event_key": str(events["canonical_event_key"] or "")[:180]
             if events else "",
-            "open_draft": bool(output and output["mode"] == "DRAFT"),
-            "reader_covered": bool(output and output["publisher_status"] == "published" and output["confirmed_at"] is not None),
+            "open_draft": output["open_draft"], "reader_covered": output["reader_covered"],
+            "summary_status": "writer_context_not_editor_approved_facts",
+            "outcome_caveats": newsroom_storyline_caveats(con, row["storyline_key"], now=stamp),
         })
         if len(json.dumps(out, separators=(",", ":"), ensure_ascii=False).encode()) > 24 * 1024:
             out.pop()
@@ -2758,16 +2843,13 @@ def newsroom_storyline_cards(con, keys: list[str], *, events_limit: int = 8) -> 
             " ORDER BY e.observed_at DESC,e.id DESC LIMIT ?",
             (key, max(1, min(int(events_limit), 8))),
         ).fetchall()]
-        output = con.execute(
-            "SELECT mode,body,created,publisher_status,confirmed_at FROM posts WHERE storyline_key=?"
-            " AND mode IN ('DRAFT','IMMEDIATE','UNCERTAIN')"
-            " AND NOT (mode='DRAFT' AND COALESCE(publisher_status,'') IN ('deleted','inactive'))"
-            " ORDER BY created DESC,id DESC LIMIT 1", (key,),
-        ).fetchone()
+        output = _storyline_output(con, key)
         out.append({
             "storyline_key": key, "revision": int(row.get("revision") or 1),
             "title": str(row.get("title") or "")[:160],
             "state_summary": str(row.get("summary") or "")[:800],
+            "summary_status": "writer_context_not_editor_approved_facts",
+            "outcome_caveats": newsroom_storyline_caveats(con, key),
             "lifecycle": row.get("lifecycle"),
             "watch_for": _storyline_watch_for(_safe_json_array(row.get("watch_for_json"))),
             "update_reason": str(row.get("update_reason") or "")[:400],
@@ -2778,16 +2860,13 @@ def newsroom_storyline_cards(con, keys: list[str], *, events_limit: int = 8) -> 
                 "exact_event_key": str(event.get("canonical_event_key") or "")[:180],
                 "run_id": str(event.get("run_id") or "")[:120],
                 "disposition": event.get("disposition"),
+                "disposition_scope": "writer_intention_not_final_editor_or_publication",
+                "current_event_outcome": newsroom_event_outcome(con, event.get("canonical_event_key")),
                 "relationship": event.get("relationship"),
                 "observed_at_epoch": float(event.get("observed_at") or 0),
                 "headline": str(event.get("title") or "")[:300],
             } for event in events],
-            "output_state": {
-                "open_draft": bool(output and output["mode"] == "DRAFT"),
-                "reader_covered": bool(output and output["publisher_status"] == "published" and output["confirmed_at"] is not None),
-                "latest_output_lede": str(output["body"] or "").split("\n", 1)[0][:400]
-                if output else "",
-            },
+            "output_state": output,
             "status": "untrusted_editorial_memory_not_evidence",
         })
     return out

@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-07 for Plan 0064 and bounded PDF reading. This index separates how NBN works now from how earlier
+Updated 2026-09-07 for Plan 0065. This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
 
@@ -26,6 +26,8 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | SPRINT-0063-FINDINGS.md | Bounded live replays, limitations, verification and release proof |
 | PLAN-0064-REPORTING-FOLLOW-THROUGH.md | Reporting handoff, usable coverage memory, finalization and UPDATE presentation repairs |
 | SPRINT-0064-FINDINGS.md | Isolated prompt probes, verification, release evidence and unresolved judgments |
+| PLAN-0065-EVIDENCE-TO-READER.md | Bounded editor research, article extraction, outcome-aware memory and reader-value guidance |
+| SPRINT-0065-FINDINGS.md | Afternoon evidence, regression tests, independent review and release/smoke record |
 | AUDIT-IMPROVEMENT-2026-09-07-PDF-READING.md | Bounded PDF extraction, evidence limitations, tests and release proof |
 
 The runtime orientation is prompts/orientation-brief-v2.md, text after its separator.

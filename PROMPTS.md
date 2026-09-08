@@ -50,10 +50,13 @@ The orientation teaches short, simple sentences, one- or two-sentence paragraphs
 lines, consequence-led ledes, and selective detail. NEW: and UPDATE: are optional leading
 labels whose use must match event freshness or material development. Historical examples
 illustrate craft, not current facts or fixed templates. The current prompt version is
-editorial-core-v2.21-evidence-handoff. The dossier field descriptions distinguish the selected
+editorial-core-v2.22-evidence-to-reader. The dossier field descriptions distinguish the selected
 reader link from the complete story-specific evidence sent to the editor. Retaining native
 extracts alone or describing them in a reporting note does not attach them to a story; the
-writer cites their exact URLs in the same dossier. No automatic attachment or extra turn.
+writer cites their exact URLs in the same dossier. A small optional unassigned research appendix
+lets the editor explicitly select already-inspected current-run excerpts omitted by the writer.
+It is not automatic support or another research turn. The exact delivered excerpts and provenance
+follow selected refs into final rails and memory; malformed refs use existing omitted-only recovery.
 Writer and editor preserve each statistic's category, unit
 and reporting period when focusing a story on Bitcoin; all-digital-asset totals are not
 Bitcoin-only totals. This is a wording/accuracy clarification, not an extra search requirement
@@ -76,9 +79,15 @@ every lead, and no primary-only standard or publication quota is added.
 
 Each story may carry a nullable reporting_note (800 characters), distinct from optional human-only
 desk_feedback. The former reaches the editor and notebook as untrusted reporting context; the
-latter remains excluded. The editor sees only the story's referenced inspected evidence, with
-source provenance preserved even for equal wording. Plain completion without native work now
+latter remains excluded. The editor sees the story's referenced inspected evidence plus the bounded
+unassigned appendix, with source provenance preserved even for equal wording. Plain completion without native work now
 forces a dossier next; early closure can still repair receipt references once without research.
+
+Plan 0065 reinforces original-disclosure timing versus guide-to-draft speed, reader takeaways
+instead of measurement inventories, and preserving useful context/warnings when replacing an open
+draft. Statistic populations stay intact (blocks versus outputs; expectations versus actual inflation).
+Current memory caveats are not retroactive editor approval or evidence. These are judgment/craft
+instructions, not freshness gates, precision vetoes, quotas or a new research ritual.
 
 ## Retained legacy paths - not the active v2 funnel
 

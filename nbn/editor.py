@@ -4,11 +4,14 @@ import json
 import logging
 import time
 
-from . import config, lint, store
+from . import config, lint, source_policy, store
 
 log = logging.getLogger("nbn.editor")
 
 EDITOR_PAYLOAD_MAX_BYTES = 256 * 1024
+EDITOR_RESEARCH_MAX_BYTES = 24 * 1024
+EDITOR_RESEARCH_MAX_RECORDS = 8
+EDITOR_RESEARCH_EXCERPT_CHARS = 2000
 BATCH_EDITOR_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {"decisions": {"type": "array", "items": {
@@ -17,6 +20,9 @@ BATCH_EDITOR_SCHEMA = {
             "story_id": {"type": "string"},
             "verdict": {"type": "string", "enum": ["publish", "revise", "draft", "drop"]},
             "post": {"type": ["string", "null"]}, "reason": {"type": "string"},
+            "additional_evidence_refs": {"type": "array", "maxItems": 8,
+                "items": {"type": "string"}, "description":
+                "Optional: exact refs from unassigned_run_research that you inspected and find relevant to THIS story. Empty otherwise. Writer evidence plus additions may total at most eight. Never select unrelated research."},
         },
         "required": ["story_id", "verdict", "post", "reason"],
     }}},
@@ -121,6 +127,9 @@ For each candidate, use practical editorial judgment:
 - keep each statistic's scope, unit and reporting period intact when focusing a story on Bitcoin.
   An all-digital-asset product-flow total is not a Bitcoin-only total. Use the source's category
   or an explicitly reported Bitcoin subtotal; correct the wording rather than discard useful news;
+- preserve the measured population: blocks are not necessarily qualifying outputs, and inflation
+  expectations are not realized inflation. Prefer the clear supported takeaway over an expendable
+  denominator, rather than escalating harmless precision differences;
 - test apparent contradictions across actor, place or facility, time, and scope. A newer
   facility-specific action is not contradicted by an older statement of general company
   intent. When current evidence supports a narrower accurate version, revise to that scope
@@ -148,7 +157,9 @@ For each candidate, use practical editorial judgment:
   the opening sentence; mentioning it in sentence two is still a buried lede. For research, lead
   with the finding and put sample size, dates, and partners afterward unless methodology is news;
 - preserve strong concise drafts rather than rewriting them for taste. Do not add facts absent
-  from evidence.
+  from evidence. For replace_draft, compare with output_continuity.current_accepted_thread:
+  preserve still-current useful context and warnings. New source detail is not automatically a
+  better post. Drop a proposed replacement with no net reader benefit; the existing draft remains.
 
 The payload stores receipt bodies once in evidence_catalog. Each candidate names its
 receipt IDs. A provider_reported_extract is a source-specific native-search paraphrase, not a
@@ -159,13 +170,22 @@ Each candidate also names its
 selected_evidence_ref and inspected_evidence_refs; use those references to inspect every
 receipt available to that story. Never treat an absent catalog body as inspected evidence.
 
+unassigned_run_research is a small appendix of reporting already retrieved this run but not
+assigned by the writer. It is not automatically evidence for any candidate. If an excerpt
+actually supports or qualifies THIS story, list its exact evidence_ref in additional_evidence_refs.
+Then you may use that supplied excerpt alongside the writer's receipts to revise useful copy.
+Use [] when none is relevant. Writer receipts plus additions may total at most eight. Do not
+infer support from a title, URL, reporting note, reputation or an unseen clipped remainder.
+Multiple extracts repeating one report are still not independent corroboration. The selected
+reader link stays unchanged. No new lookup or research round is required.
+
 Every publish, revise, or draft decision MUST repeat the complete final post in the `post`
 field. Use `publish` only when that text is unchanged from the candidate. Use `revise` whenever
 you change it. Only `drop` may return a null post.
 
 Return ONLY JSON:
 {"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
-"post":"final copy or null","reason":"brief newsroom explanation"}]}"""
+"post":"final copy or null","reason":"brief newsroom explanation","additional_evidence_refs":[]}]}"""
 
 
 def review(post: str, item: dict, con) -> dict:
@@ -265,7 +285,89 @@ def review_newsroom(post: str, item: dict, con, *, source_text: str,
     }
 
 
-def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[dict, list[str]]:
+def receipt_card(record) -> dict:
+    """One source-specific representation for cited and unassigned editor material."""
+    return {
+        "fetch_id": record.fetch_id, "source": record.source.display_name,
+        "tier": record.source.tier, "receipt_role": record.source.receipt_role,
+        "official": record.source.official, "evidence_capability": record.evidence_capability,
+        "independent_report": record.independent_report,
+        "content_fingerprint": record.content_fingerprint,
+        "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
+        "text_truncated": record.text_truncated or len(record.text) > 8000,
+        "retrieval_kind": record.retrieval_kind, "inspected_at": record.inspected_at,
+        "published_at": record.published_at, "byline": record.byline,
+        "adapter_provenance": record.adapter_provenance, "limitations": record.limitations,
+        "url": record.final_url, "text": record.text[:8000],
+    }
+
+
+def _payload_bytes(value) -> int:
+    return len(json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode())
+
+
+def _add_run_research(payload: dict, research: list[dict]) -> None:
+    """Optional material yields to an already-fitted baseline; never evict a candidate."""
+    assigned = {r.get("fetch_id") for r in payload["evidence_catalog"]}
+    rows, seen = [], set()
+    for record in research:
+        fid = record.get("fetch_id")
+        if not fid or fid in assigned or fid in seen or not str(record.get("text") or "").strip():
+            continue
+        seen.add(fid)
+        rows.append(record)
+    if not rows or not payload["candidates"]:
+        return
+    appendix = {"receipts": [], "omitted": len(rows),
+                "use": "Inspected run research, NOT assigned support. Select relevant refs explicitly; unrelated material stays unassigned."}
+    # Space for the metadata itself is optional too.
+    if _payload_bytes({**payload, "unassigned_run_research": appendix}) > EDITOR_PAYLOAD_MAX_BYTES:
+        return
+    for raw in rows:
+        if len(appendix["receipts"]) >= EDITOR_RESEARCH_MAX_RECORDS:
+            break
+        text = raw["text"][:EDITOR_RESEARCH_EXCERPT_CHARS]
+        clipped = bool(raw.get("text_truncated") or text != raw["text"])
+        row = {**raw, "text": text, "text_truncated": clipped,
+               "original_content_fingerprint": raw.get("original_content_fingerprint") or raw.get("content_fingerprint"),
+               "content_fingerprint": source_policy.content_fingerprint(text)}
+        if text != raw["text"]:
+            row["excerpt_note"] = "Editor appendix excerpt clipped; unseen remainder is not supplied evidence."
+        identity = json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        row["evidence_ref"] = "research_" + hashlib.sha256(identity.encode()).hexdigest()[:24]
+        appendix["receipts"].append(row)
+        appendix["omitted"] -= 1
+        if (_payload_bytes(appendix) > EDITOR_RESEARCH_MAX_BYTES or
+                _payload_bytes({**payload, "unassigned_run_research": appendix}) > EDITOR_PAYLOAD_MAX_BYTES):
+            appendix["receipts"].pop()
+            appendix["omitted"] += 1
+    payload["unassigned_run_research"] = appendix
+
+
+def _editor_decision(row: dict, payload: dict, card: dict, origin: str) -> dict | None:
+    """Validate one decision against exactly what this API request exposed."""
+    verdict = row.get("verdict")
+    final = row.get("post")
+    if not isinstance(verdict, str) or verdict not in {"publish", "revise", "draft", "drop"}:
+        return None
+    if verdict != "drop" and (not isinstance(final, str) or not final.strip()):
+        return None
+    refs = row.get("additional_evidence_refs", [])
+    available = {r["evidence_ref"]: r for r in
+                 (payload.get("unassigned_run_research") or {}).get("receipts", [])}
+    if (not isinstance(refs, list) or len(refs) > 8 or
+            any(not isinstance(ref, str) or ref not in available for ref in refs)):
+        return None  # Existing omitted-only recovery; never keep copy after discarding bad refs.
+    refs = list(dict.fromkeys(refs))
+    if card.get("evidence_records_used", len(card["inspected_evidence_refs"])) + len(refs) > 8:
+        return None
+    return {"verdict": verdict, "post": final, "reason": str(row.get("reason") or "")[:500],
+            "origin": origin, "additional_evidence_refs": refs,
+            "additional_evidence": [dict(available[ref]) for ref in refs] if verdict != "drop" else []}
+
+
+def _batch_editor_payload(candidates: list[dict], recent: list[dict], *,
+                          research: list[dict] | None = None) -> tuple[dict, list[str]]:
     """Build one bounded evidence-deduplicated editor desk.
 
     Selected evidence and warnings are never silently truncated. Candidates that cannot fit
@@ -302,6 +404,7 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[d
             "selected_receipt": candidate.get("selected_receipt", {}),
             "selected_evidence_ref": selected_ref,
             "inspected_evidence_refs": refs,
+            "evidence_records_used": len(list(candidate.get("inspected_evidence") or [])[:8]),
             "elevated_claim": bool(candidate.get("elevated_claim")),
             "mechanical_rails_to_fix": candidate.get("mechanical_rails_to_fix", []),
             "editorial_warnings": candidate.get("editorial_warnings", []),
@@ -346,19 +449,21 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict]) -> tuple[d
     ) > EDITOR_PAYLOAD_MAX_BYTES:
         deferred.append(active.pop()["story_id"])
         payload = assemble(active)
+    _add_run_research(payload, research or [])
     return payload, deferred
 
 
 def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
-                          reservation: str | None = None) -> dict:
-    """One clean Sonnet editor call for the complete run; outage stages safe drafts."""
+                          reservation: str | None = None,
+                          research: list[dict] | None = None) -> dict:
+    """One independent editor call for the run; outage stages safe original drafts."""
     from . import brain, newsroom, observations
     recent = store.recent_feed_posts(
         con, hours=config.DESK_RECENT_FEED_HOURS,
         limit=config.DESK_RECENT_FEED_LIMIT,
         modes=("IMMEDIATE", "DRAFT", "UNCERTAIN"),
     )
-    payload, payload_deferred = _batch_editor_payload(candidates, recent)
+    payload, payload_deferred = _batch_editor_payload(candidates, recent, research=research)
     observations.record(con, run_id, "editor_input", {
         "payload": payload, "payload_deferred": payload_deferred,
         "model": config.EDITOR_MODEL, "effort": config.EDITOR_EFFORT,
@@ -372,7 +477,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         resp = brain._create(
             config.EDITOR_MODEL,
             BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n" + newsroom.ORIENTATION_BRIEF,
-            json.dumps(payload),
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
             max_tokens=8000, effort=config.EDITOR_EFFORT, reservation=reservation,
             schema=BATCH_EDITOR_SCHEMA,
         )
@@ -387,22 +492,17 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
         rows = out.get("decisions")
         if not isinstance(rows, list):
             raise ValueError("editor omitted decisions")
-        allowed = {row["story_id"] for row in payload["candidates"]}
+        allowed = {row["story_id"]: row for row in payload["candidates"]}
         decisions = {}
         for row in rows:
+            if not isinstance(row, dict):
+                continue
             story_id = str(row.get("story_id") or "")
-            verdict = str(row.get("verdict") or "")
-            if story_id not in allowed or story_id in decisions \
-                    or verdict not in {"publish", "revise", "draft", "drop"}:
+            if story_id not in allowed or story_id in decisions:
                 continue
-            final = row.get("post")
-            if verdict in {"publish", "revise", "draft"} and not str(final or "").strip():
-                continue
-            decisions[story_id] = {
-                "verdict": verdict, "post": final,
-                "reason": str(row.get("reason") or "")[:500],
-                "origin": "initial",
-            }
+            decision = _editor_decision(row, payload, allowed[story_id], "initial")
+            if decision is not None:
+                decisions[story_id] = decision
         omitted = [row for row in payload["candidates"]
                    if row["story_id"] not in decisions]
         recovery = {"attempted": 0, "recovered": 0, "omitted": len(omitted)}
@@ -420,6 +520,19 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                     "draft IDs supplied in candidate continuity context."
                 ),
             }
+            if "unassigned_run_research" in payload:
+                appendix = payload["unassigned_run_research"]
+                recovery_payload["unassigned_run_research"] = {
+                    **appendix, "receipts": list(appendix["receipts"])}
+                appendix = recovery_payload["unassigned_run_research"]
+                while appendix["receipts"] and _payload_bytes(recovery_payload) > EDITOR_PAYLOAD_MAX_BYTES:
+                    appendix["receipts"].pop()
+                    appendix["omitted"] += 1
+                if _payload_bytes(recovery_payload) > EDITOR_PAYLOAD_MAX_BYTES:
+                    recovery_payload.pop("unassigned_run_research")
+            # Recovery instructions are optional if even the baseline fills the budget.
+            if _payload_bytes(recovery_payload) > EDITOR_PAYLOAD_MAX_BYTES:
+                recovery_payload.pop("recovery_constraint")
             recovery_started = time.monotonic()
             observations.record(con, run_id, "editor_recovery_input", recovery_payload, phase="delivered")
             recovery_logged = False
@@ -429,7 +542,7 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                     config.EDITOR_MODEL,
                     BATCH_EDITOR_PROMPT + "\n\nSHARED EDITORIAL ORIENTATION\n"
                     + newsroom.ORIENTATION_BRIEF,
-                    json.dumps(recovery_payload), max_tokens=5000,
+                    json.dumps(recovery_payload, separators=(",", ":"), ensure_ascii=False), max_tokens=5000,
                     effort=config.EDITOR_EFFORT, reservation=reservation,
                     schema=BATCH_EDITOR_SCHEMA,
                 )
@@ -444,19 +557,15 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
                 retry_rows = retry_rows if isinstance(retry_rows, list) else []
                 allowed_omitted = {row["story_id"] for row in omitted}
                 for row in retry_rows:
+                    if not isinstance(row, dict):
+                        continue
                     story_id = str(row.get("story_id") or "")
-                    verdict = str(row.get("verdict") or "")
-                    final = row.get("post")
-                    if story_id not in allowed_omitted or story_id in decisions \
-                            or verdict not in {"publish", "revise", "draft", "drop"}:
+                    if story_id not in allowed_omitted or story_id in decisions:
                         continue
-                    if verdict in {"publish", "revise", "draft"} and not str(final or "").strip():
+                    decision = _editor_decision(row, recovery_payload, allowed[story_id], "recovery")
+                    if decision is None:
                         continue
-                    decisions[story_id] = {
-                        "verdict": verdict, "post": final,
-                        "reason": str(row.get("reason") or "")[:500],
-                        "origin": "recovery",
-                    }
+                    decisions[story_id] = decision
                     recovery["recovered"] += 1
             except Exception as recovery_exc:  # noqa: BLE001 - preserve first-pass decisions
                 if not recovery_logged:

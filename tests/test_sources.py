@@ -149,7 +149,8 @@ class SourceFetchSafetyTests(unittest.TestCase):
 
     def test_article_body_precedes_navigation_before_text_and_link_caps(self):
         for marker in ('class="RichTextStoryBody RichTextBody"',
-                       'class="article-body"', 'itemprop="articleBody"'):
+                       'class="article-body"', 'itemprop="articleBody"',
+                       'class="td-post-content tagdiv-type"'):
             with self.subTest(marker=marker):
                 url = "https://example.com/news/hearing"
                 # Real AP/Fox pages put long div-based menus before their story body.

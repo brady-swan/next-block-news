@@ -148,6 +148,19 @@ unnecessarily narrow legislative/monetary scope. Keep throughput/speed/cost comp
 one-step diagnostic choices are not evidence that full reporting or a source upgrade succeeded.
 The sprint changes no standing audit authority, model budget, cadence or Typefully permissions.
 
+Plan 0065 checks: distinguish writer-cited receipts, optional unassigned run excerpts, and the
+editor's explicitly selected additions. Compare exact delivered text/provenance with final copy
+and saved notebook evidence; never treat omitted/clipped text or native paraphrases as direct
+captures. Watch invalid-reference recovery and optional appendix input cost, not just success
+counts. Verify current editor drops/unresolved work are visible beside old storyline summaries
+in index/catalog/full-card views, without confusing a relevance drop with factual falsity or a
+new draft with confirmed publication. Inspect Bitcoin Magazine body links and empty dynamic
+pages. Compare source disclosure → first sight → draft clocks; owner feedback that Lam was old
+and AnchorWatch added no value supersedes the earlier favorable audit reading. Evaluate whether
+copy leads with a useful finding and whether replacements preserve still-current warnings/context.
+Do not demand another lookup or more detail merely to prove the new capability was exercised.
+The image sprint and systemic changes remain outside this release; autopost stays OFF.
+
 Typefully drafts whose titles begin `REPLAY` are owner-requested historical review copies,
 not normal wire deliveries. Exclude them from production throughput, freshness/latency,
 duplicate-delivery incidents, and evidence that a current lead was covered. Their writing may

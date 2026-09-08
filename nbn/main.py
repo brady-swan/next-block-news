@@ -677,22 +677,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                                  "receipt_role": selected.source.receipt_role,
                                  "official": selected.source.official,
                                  "evidence_capability": selected.evidence_capability},
-            "inspected_evidence": [{"fetch_id": record.fetch_id,
-                                    "source": record.source.display_name,
-                                    "tier": record.source.tier,
-                                    "receipt_role": record.source.receipt_role,
-                                    "official": record.source.official,
-                                    "evidence_capability": record.evidence_capability,
-                                    "independent_report": record.independent_report,
-                                    "content_fingerprint": record.content_fingerprint,
-                                    "retrieval_kind": record.retrieval_kind,
-                                    "inspected_at": record.inspected_at,
-                                    "published_at": record.published_at,
-                                    "byline": record.byline,
-                                    "adapter_provenance": record.adapter_provenance,
-                                    "limitations": record.limitations,
-                                    "url": record.final_url,
-                                    "text": record.text[:8000]} for record in fetches],
+            "inspected_evidence": [editor.receipt_card(record) for record in fetches],
             "elevated_claim": bool(draft.get("needs_second_source")),
             "mechanical_rails_to_fix": hard_errors,
             "editorial_warnings": list(dict.fromkeys(editorial_warnings))[:16],
@@ -723,6 +708,10 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
 
     editorial = editor.review_newsroom_batch(
         candidates, con, run_id=pipeline_run_id, reservation=reservation,
+        research=[editor.receipt_card(record) for record in outcome.fetches.values()
+                  if record.eligible and record.outcome == "ok"
+                  and not record.fetch_id.startswith("memory_")
+                  and record.adapter_provenance not in {"newsroom_story_memory", "reporting_memory"}],
     ) if candidates else {"ok": True, "decisions": {}}
     recovery = editorial.get("recovery") or {}
     if recovery.get("attempted") and candidate_rows:
@@ -758,6 +747,45 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
+        additions = decision.get("additional_evidence", []) if decision and verdict != "drop" else []
+        retained = []
+        for evidence in additions:
+            original = outcome.fetches[evidence["fetch_id"]]
+            # The editor saw this bounded excerpt, not the unseen remainder of the capture.
+            record = replace(original, text=evidence["text"],
+                content_fingerprint=evidence["content_fingerprint"],
+                original_content_fingerprint=evidence["original_content_fingerprint"],
+                text_truncated=evidence["text_truncated"], limitations=evidence.get("limitations", ""))
+            candidate["fetches"].append(record)
+            retained.append({
+                "inspected_at": record.inspected_at, "requested_url": record.requested_url,
+                "final_url": record.final_url, "canonical_url": record.canonical_url,
+                "source_label": record.source.display_name, "byline": record.byline,
+                "text": record.text, "content_fingerprint": record.content_fingerprint,
+                "original_content_fingerprint": record.original_content_fingerprint,
+                "truncated": record.text_truncated, "retrieval_kind": record.retrieval_kind,
+                "published_at": record.published_at, "limitations": record.limitations,
+            })
+        if retained:
+            from . import verify
+            combined = "\n\n".join(
+                f"[{r.fetch_id} · {r.source.display_name} · {r.final_url}]\n{r.text}"
+                for r in candidate["fetches"])
+            resolution = replace(resolution, selected_text=combined,
+                evidence=resolution.evidence + tuple(verify.EvidenceCandidate(
+                    ref=r.source, originality=newsroom._record_originality(r), supported=True,
+                    receipt_eligible=True, corroboration_eligible=r.independent_report,
+                    content_fingerprint=r.content_fingerprint)
+                    for r in candidate["fetches"][-len(retained):]))
+            candidate["resolution"] = resolution
+            for member in members:
+                outcome.resolutions[member["url_hash"]] = replace(
+                    outcome.resolutions[member["url_hash"]], selected_text=combined,
+                    evidence=resolution.evidence)
+            store.add_newsroom_story_evidence(con, resolution.story_key, retained)
+            from . import writer_memory
+            writer_memory.link(con, pipeline_run_id, [m["url_hash"] for m in members],
+                               resolution.story_key, [e["fetch_id"] for e in additions])
         if (verdict != "drop" and candidate["coverage_relation"] == "material_update"
                 and candidate["base_post_id"] is not None):
             post = _normalize_update_label(con, pipeline_run_id, story_id, post, phase="after_editor")
@@ -768,13 +796,15 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         observations.record(con, pipeline_run_id, "editor_applied", {
             "verdict": verdict, "post": post, "reason": reason, "origin": editor_origin,
             "canonical_key": resolution.story_key,
+            "additional_evidence_refs": decision.get("additional_evidence_refs", []) if decision else [],
         }, ref=story_id, phase="applied")
         store.save_newsroom_editor_feedback(
             con, resolution.story_key, verdict=verdict, reason=reason, post=post,
         )
         store.set_newsroom_story_state(
             con, pipeline_run_id, story_id, "pending",
-            details={"editor": {"verdict": verdict, "reason": reason, "origin": editor_origin},
+            details={"editor": {"verdict": verdict, "reason": reason, "origin": editor_origin,
+                                "additional_evidence_refs": decision.get("additional_evidence_refs", []) if decision else []},
                      "force_draft_reason": (
                          candidate["draft"].get("force_draft_reason") or
                          ("editor_payload_capacity" if payload_deferred else "")
@@ -819,6 +849,11 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                         "byline": record.byline,
                         "content_fingerprint": record.content_fingerprint,
                         "text": record.text,
+                        "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
+                        "truncated": record.text_truncated,
+                        "retrieval_kind": record.retrieval_kind,
+                        "published_at": record.published_at,
+                        "limitations": record.limitations,
                     } for record in candidate["fetches"][:8]],
                 },
             )

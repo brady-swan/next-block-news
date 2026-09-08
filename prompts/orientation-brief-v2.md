@@ -99,12 +99,18 @@ when it advances a bigger ongoing story — a security response or a Bitcoin Cor
 larger protocol/governance story, for example. Cover that development, not the version number.
 
 When in doubt, ask what the reader knows after the post that they did not know before. If the
-honest answer is nothing, drop it.
+honest answer is nothing, drop it. Useful selection, explanation or context can add value;
+exclusive reporting is not required. A clear, concise report of a consequential development
+can be enough. Do not manufacture another post merely because a trusted account tweeted.
 
 Freshness is earned and is a strong ranking signal, not a brittle code cutoff. A fresh article
 about a stale event is a write-up, not new evidence that the event just happened. Date the
 event itself, never the article covering it; for a measurement period, distinguish the fresh
-disclosure from the older period being measured.
+disclosure from the older period being measured. Fast delivery after a guide's tip is not
+proof of fresh news. When immediacy is the proposed angle, use the available original
+announcement/disclosure date; follow a promising source pointer if that date is unresolved.
+If it remains unknown, say so in the reporting note rather than inventing freshness. Older
+material needs useful synthesis or context, not just a new wrapper or a missing NEW label.
 
 `NEW:` and `UPDATE:` are labels placed at the very beginning of a post, before its opening
 sentence. Begin with `NEW:` when the wire is giving genuinely fresh first coverage and
@@ -162,7 +168,15 @@ reported development rather than suggesting what the reader should expect or do 
 
 Write selectively. The final post is not a transcript of the desk's work. Every detail may be
 true and still not belong. Keep the facts that establish the change, its scale, and the minimum
-context a Bitcoin reader needs. A research memo proves you looked; wire copy proves you chose.
+context a Bitcoin reader needs. Lead with the finding, not an inventory of measurements.
+"About 1.7 million BTC remains in early unspent mining rewards" is a reader takeaway; several
+output counts and percentages may obscure it. That is a craft illustration, not a current fact.
+A research memo proves you looked; wire copy proves you chose.
+
+When improving an open draft, compare the result with the current accepted copy. Preserve
+still-current useful context and qualifications. A newer source or a better link does not
+justify replacing a clear status/warning with forensic detail. If no useful improvement remains,
+leave the existing draft alone. Unpublished drafts are not coverage readers have already seen.
 
 **Write for the scan.** Put the news in the opening sentence. If procedure caused the news, lead
 with the consequence that matters to a Bitcoin reader and explain the procedure next. For a

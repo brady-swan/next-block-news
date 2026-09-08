@@ -33,7 +33,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.21-evidence-handoff"
+PROMPT_VERSION = "editorial-core-v2.22-evidence-to-reader"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -71,6 +71,8 @@ class FetchRecord:
     links: tuple = ()
     published_at: str = ""
     limitations: str = ""
+    original_content_fingerprint: str = ""
+    text_truncated: bool = False
 
     @property
     def direct_primary(self) -> bool:
@@ -292,6 +294,9 @@ HOW TO WORK
 - For each publishable story, cite inspected fetch IDs, choose the best receipt, and write the
   strongest useful post those receipts collectively support. Mark elevated_claim true for
   allegations, hacks, crime, disputed claims, or consequential legal assertions.
+- Hand off the supporting and qualifying receipts you actually used, separately from the one
+  reader link. The editor has a small unassigned-research fallback, not your entire context;
+  do not rely on it to reconstruct missing evidence or on reporting_note to prove a claim.
 
 FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
 - Write the finished X post, not a compressed research memo. A post routed to human review must
@@ -305,6 +310,9 @@ FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
 - Keep each statistic's scope, unit and reporting period intact when focusing a story on Bitcoin.
   An all-digital-asset product-flow total is not a Bitcoin-only total. Use the source's category
   or an explicitly reported Bitcoin subtotal; correct the wording rather than discard useful news.
+  Check the population too: block counts are not automatically counts of qualifying outputs,
+  and inflation expectations are not realized inflation. Drop an expendable confusing statistic
+  rather than guess a denominator or turn the post into a methodological aside.
 - Use single sentences or two-sentence short paragraphs with blank lines between each. Do not
   mistake whitespace for clarity. Split or cut the underlying ideas when a paragraph remains
   dense.
@@ -337,7 +345,10 @@ FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
 - existing_cluster_key may name only an exact key supplied by coverage_board or
   continuity_board. Use it when this is the same exact event; do not use a broad theme ID.
 - storyline_board is broader operational memory selected by Haiku. It can help recognize an
-  ongoing subject, but cannot prove a fact, establish novelty, or force coverage. Reuse an existing
+  ongoing subject, but cannot prove a fact, establish novelty, or force coverage. Read its
+  summary with its current outcome_caveats: writer intentions are not editor approvals, a drop
+  for relevance does not prove facts false, and current exact-event outcomes can postdate an older
+  run. Do not turn rejected or unresolved claims into established background. Reuse a supplied
   storyline only when its full card was supplied. Create a new storyline only for a durable named
   subject likely to receive distinct future developments—not a generic beat, broad category, or
   renamed exact event. At most three new storylines may be proposed in one run. Echo base_revision
@@ -390,7 +401,7 @@ V2_DOSSIER_TOOL = {
                     "selected_fetch_id": {"type": "string", "description":
                         "Best reader-facing receipt, not the whole evidence list. Must also appear in evidence_fetch_ids. Use its returned receipt ID, or exact native source URL when submitted in this dossier."},
                     "evidence_fetch_ids": {"type": "array", "minItems": 1,
-                                           "description": "Inspected sources supporting or qualifying THIS story; only these receipts reach its editor. Include relevant new native sources by exact URL when submitted in this dossier. Include selected_fetch_id; exclude unrelated sources.",
+                                           "description": "Inspected sources supporting or qualifying THIS story; these are its primary editor handoff. Do not rely on the optional unassigned run appendix. Include relevant new native sources by exact URL when submitted in this dossier. Include selected_fetch_id; exclude unrelated sources.",
                                            "items": {"type": "string"}},
                     "elevated_claim": {"type": "boolean"},
                     "reader_value": {"type": "string", "maxLength": 800},
@@ -913,6 +924,8 @@ class NewsroomSession:
                     retrieval_kind=str(raw.get("retrieval_kind") or "direct_fetch"),
                     published_at=str(raw.get("published_at") or "")[:160],
                     limitations=str(raw.get("limitations") or "")[:500],
+                    original_content_fingerprint=str(raw.get("original_content_fingerprint") or fingerprint),
+                    text_truncated=bool(raw.get("truncated") or raw.get("text_truncated")),
                 )
                 self.fetches[fetch_id] = record
                 # Archival evidence must never satisfy a request for a fresh URL fetch.
@@ -926,6 +939,8 @@ class NewsroomSession:
                     "evidence_capability": record.evidence_capability,
                     "published_at": record.published_at,
                     "limitations": record.limitations,
+                    "text_truncated": record.text_truncated or len(text) > (8192 if exact else 1200),
+                    "original_content_fingerprint": record.original_content_fingerprint,
                 })
             editor = memory.get("editor") or {}
             delivery = writer_memory.publication(self.con, key) or memory.get("delivery") or {}
@@ -1411,7 +1426,7 @@ class NewsroomSession:
             if record.adapter_provenance != "desk_prefetch":
                 continue
             payload = self._fetch_payload(record, cached=True)
-            payload["text_truncated"] = len(record.text) > 4000
+            payload["text_truncated"] = record.text_truncated or len(record.text) > 4000
             payload["text"] = record.text[:4000]
             prepared_evidence.append(payload)
         packet = {
@@ -1857,6 +1872,7 @@ class NewsroomSession:
             links=tuple(fetched.get("links") or []),
             published_at=str(fetched.get("published_at") or "")[:160],
             limitations=str(fetched.get("limitations") or "")[:500],
+            text_truncated=bool(fetched.get("text_truncated")),
         )
         self.fetches[fetch_id] = record
         self.fetch_by_url[normalized] = fetch_id
@@ -1888,6 +1904,8 @@ class NewsroomSession:
             "inspected_at": record.inspected_at,
             "links": list(record.links), "published_at": record.published_at,
             "limitations": record.limitations,
+            "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
+            "text_truncated": record.text_truncated,
         }
 
     def _register_native_sources(self, value: dict) -> dict[str, str]:
@@ -1982,7 +2000,9 @@ class NewsroomSession:
             adapter_provenance="reporting_memory", inspected_at=float(raw.get("inspected_at") or 0),
             retrieval_kind=str(raw.get("retrieval_kind") or "direct_fetch"),
             links=tuple(raw.get("links") or []), published_at=str(raw.get("published_at") or ""),
-            limitations=str(raw.get("limitations") or ""))
+            limitations=str(raw.get("limitations") or ""),
+            original_content_fingerprint=str(raw.get("original_content_fingerprint") or raw["content_fingerprint"]),
+            text_truncated=bool(raw.get("truncated") or raw.get("text_truncated")))
         self.fetches[fid] = record  # Never put archival evidence in the fresh URL cache.
         return self._fetch_payload(record, cached=True)
 
@@ -2989,6 +3009,8 @@ class NewsroomSession:
                         "retrieval_kind": record.retrieval_kind,
                         "published_at": record.published_at,
                         "limitations": record.limitations,
+                        "original_content_fingerprint": record.original_content_fingerprint or record.content_fingerprint,
+                        "truncated": record.text_truncated,
                     } for record in evidence if record is not None and record.eligible][:8],
                 })
             if failure:

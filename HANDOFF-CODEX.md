@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-07 for Plan 0064. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-07 for Plan 0065. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -81,6 +81,19 @@ V2.21 clarifies the existing evidence handoff at the four dossier fields: a reta
 source or reporting note is not automatically a story citation. The writer lists relevant
 sources for the editor separately from its reader-facing link. No auto-attachment or extra
 turn; see AUDIT-TUNING-2026-09-07-EVIDENCE-HANDOFF.md.
+
+Plan 0065 / v2.22 adds a bounded unassigned current-run research appendix to the editor; only
+explicit valid refs attach its exact delivered excerpts to a story. Eight total receipts/story;
+eight optional records, 2,000 characters each, 24 KiB appendix within the existing 256 KiB request.
+It yields before baseline evidence/candidates. Invalid refs use existing omitted-only recovery;
+unresolved fallback gets original copy and no additions. Clipping/native provenance and original
+caveats survive final rails and memory. The reader-facing link and publishing safeguards do not
+change. Read-time storyline cards/indexes add current exact-event editor/publication caveats
+without rewriting old summaries or conflating intentions with approvals. Bitcoin Magazine body
+selection and Mempool empty-shell handling are repaired. Orientation tuning emphasizes original
+disclosure time, useful findings, and preserving valuable context during draft replacement.
+See PLAN-0065-EVIDENCE-TO-READER.md and SPRINT-0065-FINDINGS.md. Natural behavior remains an audit
+question, not something offline plumbing tests can establish.
 
 Packet-pressure repair: optional full storyline cards become retrievable index entries before
 an oversized compact desk is refused. The 64 KiB limit, candidate identity, source receipts,
