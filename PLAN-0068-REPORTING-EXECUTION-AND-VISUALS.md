@@ -1,6 +1,7 @@
 # Plan 0068 — finish the reporting, deliver the useful post
 
-September 8, 2026. **OWNER + INDEPENDENT LEAD APPROVED — implemented; release proof in SPRINT-0068-FINDINGS.md.**
+September 8, 2026. **SHIPPED — 58baaf6; independent review approved, production smoke passed, audit resumed.**
+Release evidence and remaining editorial questions are in SPRINT-0068-FINDINGS.md.
 Brady approved implementation, deployment and smoke through the established review playbook,
 with the at-a-glance comprehension/reach rationale added to the visual guidance below.
 Based on the overnight audit and Brady's Typefully comments; Nano Banana remains parked.

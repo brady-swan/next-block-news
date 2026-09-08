@@ -75,7 +75,28 @@ already verified the unchanged image upload, alt text and first-reply delivery p
 - Full working-tree Python suite: **577 passing tests**, including 11 new reporting-execution tests.
 - Desk type check/build and browser-independent polling tests passed.
 - Two unrelated owner evaluator tests/changes are excluded from the clean release.
-- Clean-release test results, backup, deployment, live smoke and audit resumption: pending below.
+- Clean archived release: **575 Python tests passed**. Clean npm install, type check, build and
+  polling tests passed; generated asset hashes match the committed artifacts. Existing build-only
+  dependency advisory remains outside this focused release; no lockfile/dependency change.
+
+Runtime commit **58baaf6**, pushed to origin/main and explicitly deployed from its clean archive.
+Railway deployment **73773e75-534b-4e2a-8261-5942fa170478**: SUCCESS, one replica and `/data` mount.
+Online SQLite backup passed integrity check:
+`/data/backups/nbn-pre-source-policy-20260908T123420Z.db`.
+
+Live smoke at **2026-09-08T12:36:30Z** matched all 12 checked source/prompt/compiled-Desk hashes.
+Runtime reports editorial-core-v2.24-reporting-execution and assignment-desk-v2.6-related-outcomes;
+writer/editor model and medium effort are unchanged, autopost false. HTTP health, Desk shell,
+compiled JS and all four authenticated workspace views (newsroom/intake/outputs/system) returned
+200. Unauthenticated Desk returned 403. The restarted process had completed two natural worker
+cycles with a current success timestamp and no error; no paid run was forced. Its first full
+v2.24 editorial session was not yet observed at this smoke, so the audit will follow it.
+
+The existing **audit-nbn-production** monitor was restored **ACTIVE**, same 15-minute cadence,
+full authority and quiet-notification boundaries. Plan 0068 watches and the explicit parked-Nano
+decision were added. Its full editorial cutoff remains unchanged for build-window backfill.
+Unrelated owner evaluation changes and the cumulative local tuning record were preserved and
+excluded from deployment. Parked Nano planning documents were recorded, with no implementation.
 
 ## What the resumed audit must measure
 

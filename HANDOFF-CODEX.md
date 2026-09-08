@@ -226,7 +226,10 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
-Plan 0068 release verification is recorded in SPRINT-0068-FINDINGS.md. Its full editorial audit
+Plan 0068 runtime **58baaf6** is live on Railway deployment
+**73773e75-534b-4e2a-8261-5942fa170478** (SUCCESS). 575 clean-release tests, compiled-asset parity,
+12 live runtime hashes, authenticated Desk views and natural worker cycles passed. Autopost OFF;
+same audit ACTIVE. Full release verification is recorded in SPRINT-0068-FINDINGS.md. Its full editorial audit
 checkpoint is 2026-09-08T11:15:56.744Z; build/smoke observations do not advance that cutoff.
 The same monitor must backfill the build interval when resumed. Organic visual adoption and
 editorial quality remain observation questions, not conclusions from a deliberate tool replay.
