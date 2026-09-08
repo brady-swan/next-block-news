@@ -25,10 +25,21 @@ render_visual takes a JSON spec plus existing evidence_fetch_ids. Common spec: s
 date, color (blue/red/yellow/green/orange/purple). Data: headline, optional eyebrow, unit, period,
 points [{label,value (number or null for missing),date,source_fetch_id}], metric (none/sum/change/last).
 Code calculates geometry and summary figures. Preserve signs/units and distinguish missing from zero.
+Line charts default to x_axis=time: use distinct, increasing YYYY-MM-DD dates. Use x_axis=category
+explicitly for equally spaced categories or trading sessions. Close labels may be omitted for
+legibility while every point stays plotted at its true date; describe the observations in alt_text.
+Use image text for source attribution, dates/periods, units and useful data qualifications such as
+estimated, preliminary or seasonally adjusted. Do not add internal production/test labels such as
+"illustrative data", "not news" or "test graphic" to the image. Keep fixture status in internal
+metadata or development notes. Preserve literal source passages and meaningful data qualifications.
+Keep Next Block News branding in the bottom-right lockup only; do not repeat it as a bottom-left
+label. Retain actual external source attribution there. The renderer suppresses a duplicate NBN name.
 Quotes/excerpts: source_fetch_id, passage (contiguous verbatim source text), highlights (exact spans),
 document_title, location; quotes also speaker. Native paraphrases cannot supply literal quotations.
 No hidden truncation: shorten a faithful passage if it cannot fit. Add alt_text and a short purpose.
 Use blank lines between natural paragraphs in an excerpt; they affect layout, never its words.
+Excerpt cards enlarge the selected passage to fill the content area. Choose the relevant passage
+and useful surrounding context; prefer larger type to padding it with copy that adds no context.
 For source-image reuse, inspect_visual accepts reuse_status plus reuse_fetch_id/reuse_quote:
 an exact directly fetched permission/license statement, accurate alt_text and credit are required.
 The editor judges whether that permission actually applies. External-image credit goes in the source
@@ -36,6 +47,11 @@ reply. inspect_pdf_page is available for the first 20 pages of an already fetche
 page inspection alone does not establish reuse permission.
 Choose visual_required only if the final copy cannot stand without the image; otherwise write useful
 standalone copy. An independent editor reviews the exact image, data/quote evidence, alt and credits.
+Whenever image pixels support your reporting, include their inspected asset IDs in the story's
+visual_evidence_ids (at most four), even when visual_asset_id is null. Evidence is separate from
+attachment permission. Do not claim literal image text is a directly fetched textual quotation.
+There are four inspection returns and four new renders per run, within the shared time/tool/image
+byte limits. Cached source/PDF inspection still counts toward two external inspections per candidate.
 
 Two render_visual examples (illustrative values only: replace with exact sourced facts and
 returned candidate/receipt IDs, never reuse these as news). spec_json is JSON-encoded:
@@ -135,10 +151,10 @@ def dispatch(session, block):
                 "SELECT asset_id FROM visual_assets WHERE run_id=? AND candidate_id=? ORDER BY created_at DESC LIMIT 6",
                 (session.run_id,cid))]
             return session._tool_result(block.id,{"candidates":candidates,"assets":assets})
-        if state["inspections"]>=4: raise ValueError("run visual inspection budget used")
+        external=False
+        if block.name!="render_visual" and state["inspections"]>=4: raise ValueError("run visual inspection budget used")
         if block.name=="render_visual":
             if state["renders"]>=4: raise ValueError("run render budget used")
-            state["renders"]+=1
             refs=v.get("evidence_fetch_ids",[])
             if not refs or any(fid not in session.fetches for fid in refs): raise ValueError("unknown evidence receipt")
             evidence=[session._fetch_payload(session.fetches[fid],cached=True) for fid in refs]
@@ -150,7 +166,7 @@ def dispatch(session, block):
             if not receipt or receipt.retrieval_kind!="direct_fetch" or "[PDF page " not in receipt.text:
                 raise ValueError("fetch the text PDF first")
             if state["by_story"].get(cid,0)>=2: raise ValueError("story external inspection budget used")
-            state["by_story"][cid]=state["by_story"].get(cid,0)+1
+            external=True
             data,metadata=visuals.pdf_page(receipt.final_url,v["page"],deadline=time.monotonic()+session._research_seconds_left())
             asset=visuals.save(session.con,run_id=session.run_id,candidate_id=cid,kind="pdf_page",data=data,
                 metadata={**metadata,"evidence":[session._fetch_payload(receipt,cached=True)],
@@ -160,6 +176,8 @@ def dispatch(session, block):
             ident=v.get("visual_id","")
             if ident.startswith("visual_"):
                 asset=visuals.get(session.con,ident)
+                external=asset["kind"] in {"source_image","pdf_page"}
+                if external and state["by_story"].get(cid,0)>=2: raise ValueError("story external inspection budget used")
                 if asset["run_id"]!=session.run_id or asset["candidate_id"]!=cid:
                     # Reuse is a new candidate/run proposal, preserving old evidence and dates.
                     asset=visuals.save(session.con,run_id=session.run_id,candidate_id=cid,kind=asset["kind"],
@@ -168,7 +186,7 @@ def dispatch(session, block):
                 found=state["candidates"].get(ident)
                 if not found or found[0]!=cid: raise ValueError("list the image first")
                 if state["by_story"].get(cid,0)>=2: raise ValueError("story external inspection budget used")
-                state["by_story"][cid]=state["by_story"].get(cid,0)+1
+                external=True
                 data,url=visuals.download(found[1]["url"],deadline=time.monotonic()+session._research_seconds_left())
                 metadata={**found[1],"final_image_url":url,"purpose":"Source image under review",
                     "alt_text":str(v.get("alt_text") or found[1].get("alt_text") or "Source image awaiting an accessible description.")[:1000],
@@ -194,7 +212,8 @@ def dispatch(session, block):
         if state["image_bytes"]+visuals.image_bytes(pixels)>visuals.MAX_IMAGE_CONTEXT:
             raise ValueError("image context budget used")
         state["image_bytes"] += visuals.image_bytes(pixels)
-        state["inspections"]+=1
+        state["renders" if block.name=="render_visual" else "inspections"]+=1
+        if external: state["by_story"][cid]=state["by_story"].get(cid,0)+1
         writer_memory.save(session.con,session.run_id,asset["asset_id"],"research_step",
             {"visual_asset_id":asset["asset_id"],"content_hash":asset["content_hash"]},
             candidate_ids=[cid],title="Visual: "+asset["kind"])

@@ -34,7 +34,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.27-dense-fallbacks"
+PROMPT_VERSION = "editorial-core-v2.29-visual-evidence"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -417,12 +417,14 @@ V2_DOSSIER_TOOL = {
                     "storyline_key": {"type": ["string", "null"]},
                     "visual_asset_id": {"type": ["string", "null"], "description": "An exact asset you inspected this run, or null for text-only."},
                     "visual_required": {"type": "boolean", "description": "Does this copy depend on its visual to be useful/accurate?"},
+                    "visual_evidence_ids": {"type":"array","maxItems":4,"items":{"type":"string"},
+                        "description":"Inspected image asset IDs supporting this story, even without an attachment. Empty when no image evidence was used."},
                 },
                 "required": ["story_id", "story_key", "existing_cluster_key",
                              "coverage_relation",
                              "member_candidate_ids", "post",
                              "selected_fetch_id", "evidence_fetch_ids", "elevated_claim",
-                             "reader_value", "reporting_note", "reason", "storyline_key", "visual_asset_id", "visual_required"],
+                             "reader_value", "reporting_note", "reason", "storyline_key", "visual_asset_id", "visual_required", "visual_evidence_ids"],
             }},
             "storyline_updates": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False,
@@ -3176,6 +3178,15 @@ class NewsroomSession:
                                 or not self.fetches[selected_id].eligible):
                 failure = "defer:uninspected_or_ineligible_receipt"
             qualified = [record for record in evidence if record and record.eligible]
+            visual_evidence=[]
+            if not failure:
+                from . import visuals
+                try:
+                    visual_evidence=visuals.evidence_refs(self.con,raw.get("visual_evidence_ids",[]),
+                        run_id=self.run_id,members=members)
+                except (ValueError,OSError,KeyError,TypeError) as exc:
+                    failure="defer:invalid_visual_evidence"
+                    warnings.append(str(exc)[:300])
             for record in qualified:
                 capability = record.evidence_capability
                 if capability not in {
@@ -3293,6 +3304,9 @@ class NewsroomSession:
                 except (ValueError, OSError) as exc:
                     # Never silently discard a requested, possibly essential visual.
                     draft["visual"] = {"error": str(exc), "asset_id": str(raw["visual_asset_id"]), "required": True}
+            if visual_evidence:
+                draft["visual_evidence"]=visual_evidence
+                draft["visual_evidence_scope"]={"run_id":self.run_id,"candidate_ids":members}
             for member in members:
                 item = self.by_hash[member]
                 resolutions[member] = replace(

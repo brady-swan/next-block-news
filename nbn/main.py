@@ -684,6 +684,8 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         row = {
             "story_id": story_id, "post": post,
             **({"visual": draft["visual"]} if draft.get("visual") else {}),
+            **({"visual_evidence":draft["visual_evidence"],
+                "visual_evidence_scope":draft.get("visual_evidence_scope",{})} if draft.get("visual_evidence") else {}),
             "reader_value": draft.get("reader_value", ""),
             "reporting_note": draft.get("reporting_note"),
             "selected_receipt": {"fetch_id": selected.fetch_id,
@@ -764,6 +766,15 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
         visual_review = decision.get("visual_review") if decision else None
+        if candidate["draft"].get("visual_evidence") and verdict!="drop" and (
+                payload_deferred or not editorial["ok"] or decision is None):
+            for member in members:
+                store.defer_item(con,member["url_hash"],"defer:visual_evidence_review_required",
+                    story_key=resolution.story_key,stage="editor",category="visual_review")
+            store.set_newsroom_story_state(con,pipeline_run_id,story_id,"held",
+                details={"reason":"visual_evidence_review_required","editor_reason":reason})
+            result["held"]+=len(members)
+            continue
         if candidate["draft"].get("visual") and verdict != "drop" and (
                 not visual_review or visual_review.get("verdict") == "hold"):
             for member in members:

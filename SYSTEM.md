@@ -490,6 +490,32 @@ passage, with whitespace-only normalization. Native paraphrases cannot supply li
 Source dates, units, signed/missing values, highlights, source context and transformations are
 retained. Numerical interpretation and visual usefulness remain editorial judgments.
 
+Plan 0070 includes the owner-requested visual style:
+generated images omit internal production/test labels such as "illustrative data" and "not news".
+Real source attribution, dates, units and material data qualifications remain. Excerpt cards
+enlarge the selected passage to fill the content area in each preset; added copy must provide
+useful context. Writer/editor guidance reflects this, and template version nbn-visuals-4 fits
+the unchanged excerpt within doubled outer padding and readable-size/footer bounds. Duplicate
+bottom-left NBN branding is suppressed; actual external sources and dates remain. Fixture status lives in
+the proof directory's README rather than the pixels. See docs/planning/visual-style-2026-09-08.md.
+
+A writer story lists visual_evidence_ids separately from its optional visual_asset_id attachment.
+Normalization verifies the original run, story members, inspection and immutable bytes; existing
+saved dossiers without image evidence remain valid. Evidence-only assets reach the editor even
+with unknown reuse rights. They never receive attachment authority just by being evidence.
+If required image evidence cannot reach the editor, or the editor is unavailable/omits the story,
+the affected story is held rather than staged as an unreviewed text-only fallback. Usable siblings
+remain eligible. Per-candidate image admission is atomic; repeated asset/hash pairs are sent once.
+Retained Desk reviews preserve the original evidence ownership despite their new invocation ID.
+
+Quote/excerpt source URLs follow the actual source_fetch_id. Data graphics retain source_urls
+from the receipts actually referenced by their points, independently of evidence-list order.
+Excerpt highlights honor all six approved colors and default to yellow. Line recipes default to
+x_axis=time with distinct increasing YYYY-MM-DD dates and elapsed-day geometry. Explicit
+x_axis=category means equally spaced observations. Closely spaced labels may be omitted for
+legibility, but points and missing-observation gaps remain; complete data stays in the recipe
+and the writer supplies an accurate alt description. Existing immutable assets are preserved.
+
 Both writer and editor receive the exact immutable image bytes. Captions and metadata do not
 count as inspection. The independent editor approves, omits or holds an image and separately
 considers standalone text fallback. Approval binds final copy, asset hash, alt text and credits.
@@ -499,7 +525,8 @@ evidence are required before attachment. External-image credit is included in th
 Text-only remains normal; there is no visual quota or new mandatory model turn.
 
 Bounds: six shortlist pointers; two external inspections per story; four inspections and four
-renders per run within the existing writer calls/deadline. Static PNG/JPEG/WebP is limited to
+successful renders per run within the existing writer calls/deadline. Rendering does not spend
+inspection returns; cached source/PDF reinspection still spends the per-story inspection limit. Static PNG/JPEG/WebP is limited to
 4 MiB / 12 million pixels; downloads to ten seconds. Original-layout PDFs use the first 20 pages,
 10 MiB input and ten-second combined download/render bound, without OCR or arbitrary crop.
 Editor image context is separately limited to four images / 12 MiB base64; ordinary 256 KiB text

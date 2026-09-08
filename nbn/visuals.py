@@ -247,10 +247,28 @@ def render_asset(con, *, run_id,candidate_id,kind,preset,spec,evidence,alt_text,
     purpose=visual_render.short(purpose,500,"visual purpose")
     validated=visual_render.validate(kind,spec,evidence)
     data,size=visual_render.render(kind,preset,validated)
+    sources={r["fetch_id"]:r["final_url"] for r in evidence}
+    refs=([validated["source_fetch_id"]] if kind in {"quote","excerpt"} else
+          [p["source_fetch_id"] for p in validated["points"]])
+    source_urls=list(dict.fromkeys(sources[ref] for ref in refs))
     return save(con,run_id=run_id,candidate_id=candidate_id,kind=kind,data=data,metadata={
         "spec":validated,"preset":preset,"template_version":visual_render.VERSION,"evidence":evidence,
         "alt_text":alt,"purpose":purpose,"parent_asset_id":parent,"reuse_status":"nbn_original",
-        "credit":validated["source"],"source_url":evidence[0]["final_url"],"emphasis":"NBN added"})
+        "credit":validated["source"],"source_url":source_urls[0],"source_urls":source_urls,"emphasis":"NBN added"})
+
+
+def evidence_refs(con,asset_ids,*,run_id,members):
+    """Reporting evidence has ownership/inspection requirements, never attachment permission."""
+    if not isinstance(asset_ids,list) or len(asset_ids)>4 or any(not isinstance(v,str) or not v for v in asset_ids):
+        raise ValueError("visual evidence must be an array of at most four asset IDs")
+    result=[]
+    for ident in dict.fromkeys(asset_ids):
+        asset=get(con,ident)
+        if asset["run_id"]!=run_id or asset["candidate_id"] not in members or not asset["writer_inspected_at"]:
+            raise ValueError("visual evidence was not inspected for this story in its original run")
+        bytes_for(asset)
+        result.append(manifest(asset))
+    return result
 
 
 def proposal(con,asset_id,*,run_id,members,required=False):

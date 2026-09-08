@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ from unittest.mock import patch
 
 from nbn import config, models, store, visual_render, visuals
 import httpx
+from PIL import Image, ImageChops
 
 
 class VisualTests(unittest.TestCase):
@@ -57,6 +59,29 @@ class VisualTests(unittest.TestCase):
             data,size=visual_render.render("excerpt",preset,spec)
             self.assertGreater(len(data),1000)
             self.assertEqual(size,(1600,1600 if preset=="square" else 900))
+
+    def test_short_excerpt_fills_each_preset_without_touching_footer(self):
+        spec=visual_render.validate("excerpt",self.spec(),self.evidence)
+        for preset in ("landscape","square"):
+            with self.subTest(preset=preset):
+                data,(w,h)=visual_render.render("excerpt",preset,spec)
+                im=Image.open(io.BytesIO(data)).convert("RGB")
+                footer_y=h-164
+                body=im.crop((0,0,w,footer_y))
+                bounds=ImageChops.difference(body,Image.new("RGB",body.size,visual_render.BG)).getbbox()
+                self.assertIsNotNone(bounds)
+                self.assertGreaterEqual(bounds[0],100)
+                self.assertGreaterEqual(bounds[1],92)
+                self.assertLessEqual(bounds[2],w-100)
+                self.assertGreater(bounds[3],footer_y*.9)
+                self.assertLessEqual(bounds[3],footer_y-24)
+
+    def test_expanding_excerpt_still_rejects_an_unreadable_word(self):
+        passage="w"*300
+        spec=visual_render.validate("excerpt",{**self.spec(),"passage":passage,"highlights":[]},
+            [{**self.evidence[0],"text":passage}])
+        with self.assertRaises(ValueError):
+            visual_render.render("excerpt","landscape",spec)
 
     def test_data_signed_missing_and_computed(self):
         s={"source":"Illustrative data","headline":"A week of flows","date":"", "unit":"USD millions",

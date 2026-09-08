@@ -1,6 +1,6 @@
 # Next Block News prompt inventory
 
-Current 2026-09-08, Plan 0069. This is an index, not a duplicated prompt snapshot.
+Current 2026-09-08, Plan 0070. This is an index, not a duplicated prompt snapshot.
 Live editorial orientation: prompts/orientation-brief-v2.md, body after its separator.
 The draft v3 brief and tuning examples are not loaded. The wire_voice charter is retained
 for legacy paths; its old "source of truth" heading does not make it current v2 authority.
@@ -91,6 +91,16 @@ orientation itself was unchanged in 0066. Plan 0068 adds the owner-approved sele
 later-outcome and date guidance; visual guidance adds relevant image pointers, valid chart
 examples and the at-a-glance comprehension/potential-reach rationale. Source quotes remain exact; rendered data remains subject
 to editorial support/units/period checks. Text-only is normal, not a failed visual quota.
+
+Plan 0070 uses editorial-core-v2.29-visual-evidence. The strict story dossier includes bounded
+visual_evidence_ids; writer/editor guidance separates evidence inspection from attachment and
+reuse permission. Image-only words do not become direct-text quotation receipts. Guidance also
+teaches separate inspection/render allowances, explicit calendar versus category line charts,
+source/date/unit qualifications, no added internal fixture labels, and larger excerpt type within
+the approved margins. See docs/planning/visual-style-2026-09-08.md. The combined release includes
+the separately reviewed v2.28 appendix-reference schema repair: only IDs in the request's actual
+appendix are valid, and an absent appendix permits an empty array only. No extra model call,
+new model, effort change or larger shared budget is introduced.
 
 Plan 0064 clarifies original-statement lookup, exact prior facts versus new developments,
 matching periods/transaction direction, and practical Bitcoin/monetary scope. Preparation uses

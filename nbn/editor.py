@@ -196,9 +196,23 @@ Every publish, revise, or draft decision MUST repeat the complete final post in 
 field. Use `publish` only when that text is unchanged from the candidate. Use `revise` whenever
 you change it. Only `drop` may return a null post.
 
+visual_evidence contains inspected images used for THIS story's reporting, separately from any
+proposed attachment. Inspect their actual supplied pixels and provenance. Unknown reuse rights
+do not prevent evidence review and do not permit attachment. Image facts must be independently
+supported; a writer's description is not proof. Image-only words are not a directly fetched text
+receipt, so preserve the existing exact-quotation checks. Evidence-only stories require no image
+attachment verdict. Only the candidate's visual field can propose an attachment.
+
 For a candidate with a visual, the actual image follows its manifest. Inspect those pixels,
 not just the alt/caption. Check mobile readability, dates/units/signs, exact quote wording and
 context, highlighting, provenance and visible credit. The typed recipe is not proof of data.
+For NBN-generated graphics, source/date/unit labels and useful data qualifications (estimated,
+preliminary, seasonally adjusted) belong in the image. Do not approve added internal production/test
+labels such as "illustrative data", "not news" or "test graphic"; omit with standalone copy or hold
+for visual revision as appropriate. This applies to NBN-added labels, not verbatim source passages.
+Excerpt text should fill the content area with larger type; additional copy must add useful context.
+Keep NBN branding in the bottom-right lockup; the bottom-left is for actual source/date details,
+without repeating Next Block News there.
 Approve only that exact asset/hash, with accurate alt text and supported facts. Unknown reuse
 rights cannot be approved for upload. Use visual_verdict=omit and a separately approved
 standalone text_fallback when the story works without the image; hold when it depends on an
@@ -217,6 +231,15 @@ def _batch_contract(payload: dict) -> tuple[str, dict]:
     """Text-only requests do not ask the provider to fill irrelevant visual fields."""
     schema = copy.deepcopy(BATCH_EDITOR_SCHEMA)
     prompt = BATCH_EDITOR_PROMPT
+    # Constrain syntax to the appendix actually sent in this request, including recovery.
+    # Counts and reader-source ownership remain validated below; relevance is editorial judgment.
+    additions = schema["properties"]["decisions"]["items"]["properties"]["additional_evidence_refs"]
+    refs = sorted({row["evidence_ref"] for row in
+                   (payload.get("unassigned_run_research") or {}).get("receipts", [])})
+    if refs:
+        additions["items"]["enum"] = refs
+    else:
+        additions["maxItems"] = 0  # Empty enums are rejected by the provider.
     if any(card.get("visual") for card in payload["candidates"]):
         schema["properties"]["decisions"]["items"]["required"].extend(
             ["visual_verdict", "visual_asset_id", "visual_content_hash", "text_fallback"])
@@ -531,6 +554,8 @@ def _batch_editor_payload(candidates: list[dict], recent: list[dict], *,
             "editorial_warnings": candidate.get("editorial_warnings", []),
             "output_continuity": candidate.get("output_continuity", {}),
             **({"visual": candidate["visual"]} if candidate.get("visual") else {}),
+            **({"visual_evidence":candidate["visual_evidence"],
+                "visual_evidence_scope":candidate.get("visual_evidence_scope",{})} if candidate.get("visual_evidence") else {}),
         })
     feed = [{
         "hours_ago": round((time.time() - r["effective_at"]) / 3600, 1),
@@ -594,30 +619,53 @@ def review_newsroom_batch(candidates: list[dict], con, *, run_id: str,
     # Resolve immutable pixels once. Initial and omitted-only recovery share these exact bytes.
     from . import visuals
     pixels = {}
+    card_images = {}
     total = 0
     for card in list(payload["candidates"]):
-        visual = card.get("visual")
-        if not visual: continue
         try:
-            if visual.get("error"): raise ValueError("unavailable visual")
-            asset = visuals.get(con, visual["asset_id"])
-            if asset["content_hash"] != visual.get("content_hash"): raise ValueError("asset mismatch")
-            block = visuals.image_block(asset)
-            if len(pixels)>=4 or total+visuals.image_bytes(block)>visuals.MAX_IMAGE_CONTEXT:
+            evidence=card.get("visual_evidence",[])
+            scope=card.get("visual_evidence_scope",{})
+            if not isinstance(evidence,list) or len(evidence)>4:
+                raise ValueError("invalid image evidence")
+            if evidence and (not isinstance(scope,dict) or
+                    not isinstance(scope.get("candidate_ids"),list)):
+                raise ValueError("invalid image evidence scope")
+            refs=[(ref,"reporting evidence") for ref in evidence]
+            if card.get("visual"): refs.append((card["visual"],"proposed attachment"))
+            staged={}; labels=[]
+            for ref,role in refs:
+                if not isinstance(ref,dict) or ref.get("error"): raise ValueError("unavailable visual")
+                asset=visuals.get(con,ref["asset_id"])
+                if asset["content_hash"]!=ref.get("content_hash"): raise ValueError("asset mismatch")
+                if role=="reporting evidence" and (
+                        asset["run_id"]!=scope.get("run_id") or
+                        asset["candidate_id"] not in scope.get("candidate_ids",[]) or
+                        not asset["writer_inspected_at"]):
+                    raise ValueError("image evidence ownership or inspection mismatch")
+                key=(asset["asset_id"],asset["content_hash"])
+                labels.append((key,role))
+                if key not in pixels and key not in staged:
+                    staged[key]=visuals.image_block(asset)
+            added=sum(visuals.image_bytes(block) for block in staged.values())
+            if len(pixels)+len(staged)>4 or total+added>visuals.MAX_IMAGE_CONTEXT:
                 raise ValueError("image review capacity")
-            pixels[card["story_id"]] = block
-            total += visuals.image_bytes(block)
-        except (ValueError, OSError, KeyError):
+            # Commit capacity only when every required image for this candidate is available.
+            pixels.update(staged); total+=added
+            card_images[card["story_id"]]=labels
+        except (ValueError, OSError, KeyError, TypeError):
             payload["candidates"].remove(card)
             payload_deferred.append(card["story_id"])
     def content(packet):
         text = json.dumps(packet, separators=(",", ":"), ensure_ascii=False)
-        selected = [c for c in packet["candidates"] if c["story_id"] in pixels]
+        selected={}
+        for card in packet["candidates"]:
+            for key,role in card_images.get(card["story_id"],[]):
+                selected.setdefault(key,[]).append(role+" for story "+card["story_id"])
         if not selected: return text
         blocks = [{"type":"text", "text":text}]
-        for card in selected:
-            blocks.extend([{"type":"text", "text":"Exact visual for story " + card["story_id"]},
-                {k:v for k,v in pixels[card["story_id"]].items() if not k.startswith("_")}])
+        for key,roles in selected.items():
+            blocks.extend([{"type":"text", "text":"Exact image "+key[0]+": "+"; ".join(roles)},
+                {k:v for k,v in pixels[key].items() if not k.startswith("_")}])
         return blocks
     observations.record(con, run_id, "editor_input", {
         "payload": payload, "payload_deferred": payload_deferred,
