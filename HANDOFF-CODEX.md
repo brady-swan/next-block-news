@@ -238,7 +238,17 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
-Plan 0068 runtime **58baaf6** is live on Railway deployment
+Current runtime **684fd39 / editorial-core-v2.27-dense-fallbacks** is live on Railway
+**ac251388-dd31-4dd9-aeb9-da3b20eaa134** (SUCCESS). 583 clean-release tests, seven file
+hashes, health and four authenticated workspace views passed. A natural 25-candidate
+run completed with a 63,856-byte packet and all20 open-draft cards preserved. Its writer
+finished; the editor separately timed out and used the existing fallback, which the
+audit must inspect rather than count as editor approval. Autopost OFF; same15-minute
+audit ACTIVE. The full editorial cutoff remains11:15:56.744 UTC for backfill. See
+AUDIT-FIX-2026-09-08-DENSE-PACKET.md. Plans0068/0069 and this follow-up are complete;
+do not restart them from stale action notes or a carried-forward summary.
+
+Earlier Plan 0068 runtime **58baaf6** shipped on Railway deployment
 **73773e75-534b-4e2a-8261-5942fa170478** (SUCCESS). 575 clean-release tests, compiled-asset parity,
 12 live runtime hashes, authenticated Desk views and natural worker cycles passed. Autopost OFF;
 same audit ACTIVE. Full release verification is recorded in SPRINT-0068-FINDINGS.md. Its full editorial audit

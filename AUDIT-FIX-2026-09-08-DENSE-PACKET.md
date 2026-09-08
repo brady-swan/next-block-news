@@ -89,3 +89,44 @@ Both retain all 25 candidates and all coverage/receipt data unchanged (five and 
 receipts respectively). Both are re-materialized diagnostics, not paid writer replays.
 All 59 focused tests passed. Independent final review approved the four-outcome set,
 truthful packet note and regressions; eight compact-desk tests passed independently.
+
+## Final release verification
+
+- Final runtime **684fd39**, pushed to origin/main and deployed from clean archive
+  `/tmp/nbn-dense-final.RMJ7Vt`. **585 working-tree / 583 clean-release tests passed**;
+  two unrelated evaluator tests and all unrelated dirty work are excluded from release.
+- Railway **ac251388-dd31-4dd9-aeb9-da3b20eaa134**, created 14:56:23 UTC, reached SUCCESS.
+  All seven changed file hashes match the archive. Newsroom SHA-256:
+  `fcfe1278d116aa7458cca5579c0b0dbf4e046574a103c39eb1a08e711ede28d5`.
+- Online SQLite backup `/data/backups/nbn-pre-source-policy-20260908T145535Z.db` passed
+  its integrity check. No migration, database rewrite, configuration or credential change.
+- Health HTTP 200, autopost OFF, no worker error. Newsroom, Intake, Outputs and System
+  authenticated workspace views all returned 200 / JSON; unauthenticated access returned403.
+  An initial smoke request used invalid view=runs (400); corrected view=newsroom returned200.
+  This was a diagnostic request error, not a dashboard regression.
+- Natural-run and audit-resumption evidence follows. No forced paid model run or manual
+  Typefully mutation was used. The full editorial cutoff remains unchanged until backfill.
+
+Rollback: redeploy bb900b3 / editorial-core-v2.25-compact-desk. Its original Plan0069
+repair remains valid; no database restore or credential/config change is needed.
+
+The first natural v2.27 run, **cycle:1788879499:20338a88**, delivered an actual
+**63,856-byte** writer packet with **25 candidates, five prepared receipts and all
+20 in-scope open-draft cards**. All25 preparation rows were batch_fail_open; the new
+packet note and fallback labels are present. This exercises the repaired path in
+normal production, not a manually forced replay. Writer completion is checked next.
+
+The run **completed at15:01:33.893 UTC**, with two successful writer responses and a
+returned writer result. No packet overflow. The independent editor separately hit
+**ReadTimeout** (observation1894); four applied fallback decisions were recorded.
+That is not editor approval or proof of an all-model-success run. The resumed audit
+must inspect actual resulting drafts and monitor recurrence; this packet repair
+does not change editor timeout, model or fallback policy.
+
+The existing **audit-nbn-production** automation is now **ACTIVE every15minutes**, on
+the same task with all prior autonomy and notification boundaries preserved. Its
+prompt marks this follow-up and Plans0068/0069 complete, adds the precise fallback/
+overflow and editor-timeout watches, and preserves the full11:15:56.744 UTC editorial
+checkpoint for chronological backfill. Diagnostic reads are not counted as completed
+audits. Autopost remains OFF. This repair is complete; any further fix needs new
+current-version evidence rather than repeating this work.
