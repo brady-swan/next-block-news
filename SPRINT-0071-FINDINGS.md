@@ -1,7 +1,7 @@
 # Sprint0071 — Perception reporting integration
 
 September9,2026. Owner-authorized turn01a0846d; pooling follow-up incorporated. **Code review
-APPROVED; release tests/deployment/smoke in progress. Not yet a production success claim.**
+APPROVED; runtime ad864ff deployed successfully and live adapter/health/Desk smoke passed.**
 
 ## Built
 
@@ -19,15 +19,16 @@ bounded request duration and honest timeout wording. Stable source versions use 
 without implicit transaction commits. Reviewer independently passed75focused tests and approved
 release. No extra transport framework/agent/memory graph added.
 
-## Verification so far
+## Verification
 
 -22focused Perception regression tests pass: real SSE/JSON/markdown contracts, unsafe pointers,
   publication precision, stable versions, duplicate state, partial-storage replay, cache hit,
   failure accounting, quota scope/routing, survey retries/pending replay, Writer budgets and
   actual Editor receipt-card/catalog provenance.
 -49existing browser checks pass across320–2560px; no console errors. TypeScript/build pass.
--First full working-tree suite647tests had only the deliberately updated prompt-version
-  expectation; rerun and clean-release suite recorded below when complete.
+-654 working-tree tests passed; clean committed archive passed652tests in27.299seconds.
+  The two additional working-tree tests belong to unrelated, uncommitted evaluator work and
+  were not shipped. The updated prompt-version expectation is covered in the clean suite.
 -Railway authenticated REST and MCP probes succeeded using the existing key. PlainLummis
   searches returned the same6sourceURLs; multiword/entity/regulatory semantics are not assumed
   equivalent. Live regulatory/entity fixtures caught and covered the distinct document-list format.
@@ -36,10 +37,32 @@ release. No extra transport framework/agent/memory graph added.
 
 ## Release proof
 
-Pending clean-archive tests, online SQLite backup, explicit Railway deploy, runtime/health/Desk
-verification, bounded provider/cache smoke and natural-run observation. No forced model replay
-or test Typefully draft. Audit currently PAUSED; restart same15-minute automation after smoke,
-using updated canonical prompt and preserving18:20UTC historical editorial checkpoint.
+- Runtime: `ad864ff`, `editorial-core-v2.30-perception-reporting`; pushed to origin/main.
+- Railway: `fd4f02bb-3b24-4e79-82ac-5983e495dd6c`, created04:52:21.454UTC, SUCCESS.
+  Deployed the clean archive, not the dirty working directory; existing single replica and/data.
+- Online SQLite backup with integrity check:
+  `/data/backups/nbn-pre-source-policy-20260909T045135Z.db`.
+- Live04:55–04:57UTC smoke: exact perception.py/newsroom.py/workspace.js hashes matched the
+  archive; health200/no last_error/autopostOFF. Authenticated System HTML, System workspace
+  JSON and both compiled assets returned200. New Perception projection present.
+- Natural intake: REST feed50records in1.319s; MCP mining/pools survey4pointers in1.417s.
+  Fifty Perception source artifacts retained. Feed explicitly partial: page1of11,505provider
+  records, truncated=true, nextpage2. This is not a claim of50new stories or complete capture.
+- Railway adapter smoke, tagged `purpose=smoke`: MCP Lummis search returned6pointers in1.675s;
+  identical repeat hit cache with zero additional attempts. One MCP article lookup took9.606s,
+  retained399characters under `artifact_perception_062e37fdb519005846110918`; repeated local
+  read returned the same artifact with zero additional attempts. Bitcoin Magazine identity,
+  September8publication date/day precision and unknown-completeness warning survived.
+  Only two smoke requests; no forced model replay, test candidate, Typefully draft or publication.
+- REST response reported70remaining without a reset timestamp. Retain the observed header in
+  telemetry, but do not invent a current daily balance; MCP headers described the shared minute
+  window. This confirms access, not account-wide quota availability.
+
+Several normal worker cycles completed onv2.30 with no error. No newv2.30Writer session had yet
+started at04:56UTC; organic tool adoption/editorial benefit are audit observations, not inferred
+from adapter smoke. The existing15-minute audit was restored ACTIVE04:57:44UTC with the
+canonical Perception checks; exact saved-prompt equality, same task and cadence verified.
+Its full historical editorial coverage remainsSeptember8,18:20UTC, not the smoke time.
 
 ## Known limitations
 

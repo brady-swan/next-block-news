@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-08 for the completed Plan 0070 visual correctness release. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-09 for the completed Sprint0071 Perception integration. Start here, then read SYSTEM.md and DOCUMENTATION.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -238,12 +238,14 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
-Sprint0071 Perception integration supersedes the implementation description below. See
+Current runtime **ad864ff / editorial-core-v2.30-perception-reporting** is live on Railway
+**fd4f02bb-3b24-4e79-82ac-5983e495dd6c** (SUCCESS). Independent review approved;652clean-release
+tests,49browser checks and live provider/cache/health/Desk smoke passed. See
 PERCEPTION.md for current tools/storage/quota semantics and SPRINT-0071-FINDINGS.md for the
 release status, reviewed commit and production smoke. The dated older release evidence below
 is history, not instructions to redeploy it. Models, Writer budgets and autopostOFF are unchanged.
 
-Current runtime **ccea9a0 / editorial-core-v2.29-visual-evidence** is live on Railway
+Earlier runtime **ccea9a0 / editorial-core-v2.29-visual-evidence** shipped on Railway
 **451d51c7-c9c9-4ef8-8ab8-32b07b96200e** (SUCCESS). All five visual correctness priorities and
 approved style changes are implemented, along with the separately reviewed appendix-reference
 contract repair. Independent plan/code reviews approved; 628 local/clean-archive tests, 11 runtime
