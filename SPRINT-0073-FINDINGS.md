@@ -62,5 +62,7 @@ Do not claim production recall-quality gains from this partial-index smoke.
 
 No forced Writer or synthetic production story was created. The next natural editorial
 deadline was14:32:47CT; no v2.35 letter/watch yet at smoke. Required/no-post/due-only behavior
-is regression-tested; actual use and quality belong to the next audit passes. Audit restart
-requested in its dedicated lane with new continuity/interaction/retrieval watches.
+is regression-tested; actual use and quality belong to the next audit passes. The SAME
+audit-nbn-production automation is verified ACTIVE in its dedicated NBN Audit task, unchanged
+15-minute cadence/autonomy/quiet intent, with new continuity/interaction/retrieval watches.
+Index progression subsequently verified8documents/16vectors; deployed Desk asset hash matches.
