@@ -48,6 +48,121 @@ def crowded_desk(con, *, candidates=25, receipts=6):
 
 
 class CompactDeskTests(unittest.TestCase):
+    def test_metadata_pressure_preserves_sources_controls_and_retrieval(self):
+        from nbn import perception
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            desk = crowded_desk(con)
+            desk.recent_clusters = [{
+                "canonical_key": f"covered-event-{i}", "draft_open": True,
+                "draft_post_leads": ["Earlier accepted Bitcoin reporting. " * 10],
+            } for i in range(50)]
+            desk.continuity_cards = [{
+                "event_key": f"earlier-event-{i}", "state": "deferred",
+                "matches_current_item": False, "unresolved_gate": "Needs dated source.",
+                "research_objective": "Check the original disclosure and prior accepted copy.",
+            } for i in range(12)]
+            for item in desk.inventory:
+                item.pop("_owner_reconsider", None)
+                item["story_key"] = None
+                item["note"] = "defer:newsdesk_unavailable:initial_context_overflow"
+                desk.preparations[item["url_hash"]] = {
+                    "outcome": "batch_fail_open", "event_summary": item["title"],
+                    "bitcoin_relevance": "Preparation unavailable; advanced to newsroom.",
+                    "research_objective": "Let the Writer inspect and decide.",
+                    "source_leads": [], "protection_reason": None,
+                }
+            desk.inventory[0]["_owner_reconsider"] = {"requested_by": "Brady", "prior_skip": "Already covered"}
+            before_fetches = copy.deepcopy(desk.fetches)
+
+            def hint(_con, url):
+                return {"url": url, "artifact_id": "artifact_perception_" + "a" * 24,
+                        "published_at": "2026-09-09T14:05:25+00:00", "captured_at": 1788965380.5,
+                        "characters": 443, "completeness": "unknown",
+                        "use": "Available dated text, not yet read in this session; use perception_article if useful."}
+
+            with patch.object(perception, "candidate_hint", side_effect=hint):
+                with patch.object(newsroom, "_compact_packet_repetition"):
+                    with self.assertRaises(newsroom.NewsroomError) as raised:
+                        desk._initial_packet()
+                    self.assertEqual(raised.exception.kind, "initial_context_overflow")
+                packet = desk._initial_packet()
+            self.assertLessEqual(newsroom._json_bytes(packet), 65536)
+            self.assertEqual(len(packet["intake_board"]), 25)
+            self.assertEqual(len(packet["prepared_evidence"]), 6)
+            self.assertEqual(len(packet["coverage_board"]["open_drafts"]), 50)
+            self.assertEqual(len(packet["continuity_board"]["index"]), 12)
+            self.assertNotIn("continuity", packet["retrievable_context_index"])
+            defaults = packet["run_brief"]["compact_display_defaults"]
+            self.assertIn("not yet read", defaults["available_perception_text.use"])
+            self.assertIn("not_instruction", defaults["prior_item_state_untrusted_context.use"])
+            for row in packet["intake_board"]:
+                full = desk.context_rows[row["candidate_context_id"]]
+                self.assertEqual(row["candidate_id"], full["candidate_id"])
+                self.assertEqual(row.get("owner_override"), full.get("owner_override"))
+                self.assertEqual(row["haiku_preparation"]["outcome"], "batch_fail_open")
+                self.assertEqual(row["available_perception_text"]["artifact_id"],
+                                 full["available_perception_text"]["artifact_id"])
+                self.assertEqual(row["intake_url"], full["available_perception_text"]["url"])
+                self.assertEqual(row["prior_item_state_untrusted_context"]["note"],
+                                 full["prior_item_state_untrusted_context"]["note"])
+            for row in packet["prepared_evidence"]:
+                full = desk.context_rows[row["context_id"]]
+                self.assertEqual(row["content_fingerprint"], source_policy.content_fingerprint(row["text"]))
+                self.assertEqual(row["original_content_fingerprint"], full["original_content_fingerprint"])
+                self.assertEqual(row["excerpt_of_content_fingerprint"], full["content_fingerprint"])
+                self.assertEqual(row["limitations"], full["limitations"])
+                self.assertEqual(row["inspectable_evidence"], full["inspectable_evidence"])
+                self.assertEqual(row["visual_available"]["count"], full["visual_available"]["count"])
+            self.assertEqual(desk.fetches, before_fetches)
+            # Retrieval is still the full original, not the deduplicated display.
+            cid = packet["prepared_evidence"][0]["context_id"]
+            full = desk._read_desk_context([cid])["rows"][0]
+            if "section_ids" in full:
+                ids, sections = full["section_ids"], []
+                while ids:
+                    result = desk._read_desk_context(ids[:config.COMPACT_DESK_RETRIEVAL_ROWS])
+                    self.assertTrue(result["ok"])
+                    self.assertTrue(result["rows"])
+                    sections.extend(result["rows"])
+                    read = {row["context_id"] for row in result["rows"]}
+                    ids = [value for value in ids if value not in read]
+                full = json.loads("".join(row["text"] for row in sorted(sections, key=lambda row: row["part"])))
+            self.assertIn("requested_url", full)
+            self.assertIn("canonical_url", full)
+            self.assertIn("redirect_chain", full)
+            for key, value in desk._fetch_payload(next(iter(before_fetches.values())), cached=True).items():
+                self.assertEqual(full[key], value, key)
+
+    def test_metadata_dedup_is_exact_and_preserves_distinct_context(self):
+        original = {
+            "run_brief": {},
+            "prepared_evidence": [{
+                "fetch_id": "receipt", "final_url": "https://example.com/news",
+                "requested_url": "https://example.com/news/", "canonical_url": "https://origin.example/report",
+                "redirect_chain": ["https://example.com/news", "https://example.com/news"],
+                "text": "Evidence", "content_fingerprint": "literal-fingerprint",
+                "original_content_fingerprint": "distinct-original", "excerpt_of_content_fingerprint": "distinct-capture",
+                "byline": "Reporter", "published_at": "2026-09-08", "limitations": "Partial capture",
+                "official": False, "inspectable_evidence": False,
+                "visual_available": {"count": 0, "tool": "different tool", "purpose": "different purpose"},
+            }],
+            "intake_board": [{"candidate_id": "c", "intake_url": "https://example.com/news",
+                "available_perception_text": {"url": "https://example.com/news/", "use": "Distinct warning"},
+                "prior_item_state_untrusted_context": {"story_key": "real-event", "use": "Distinct history"},
+                "haiku_preparation": {"outcome": "model", "protection_reason": False},
+                "research_retry": False, "first_seen_at": 0, "owner_override": {"by": "Brady"},
+                "identity_correction": {"failure": "wrong event"}}],
+            "continuity_board": {"index": [{"context_id": "a"}]},
+            "retrievable_context_index": {"continuity": [{"context_id": "b"}]},
+        }
+        packet = copy.deepcopy(original)
+        newsroom._compact_packet_repetition(packet)
+        for key in ("prepared_evidence", "intake_board", "continuity_board", "retrievable_context_index"):
+            self.assertEqual(packet[key], original[key])
+        once = copy.deepcopy(packet)
+        newsroom._compact_packet_repetition(packet)
+        self.assertEqual(packet, once)
+
     def test_dense_fail_open_desk_removes_only_mechanical_repetition(self):
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
             desk = crowded_desk(con, receipts=5)

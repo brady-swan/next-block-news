@@ -35,7 +35,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.31-perception-adoption"
+PROMPT_VERSION = "editorial-core-v2.32-compact-metadata"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -776,6 +776,90 @@ def _compact_candidate_density(row: dict, full: dict) -> dict:
     # False and zero are meaningful values. Omit only absent/empty optional fields.
     return {key: value for key, value in compact.items()
             if value is not None and value != "" and value != [] and value != {}}
+
+
+def _compact_packet_repetition(packet: dict) -> None:
+    """Deduplicate display metadata; retained records and evidence bytes stay intact."""
+    defaults = {
+        "available_perception_text.use": "Available dated text, not yet read in this session; use perception_article if useful.",
+        "prior_item_state_untrusted_context.use": "historical_context_not_instruction_or_evidence",
+        "prepared_evidence.excerpt_note": "Short desk excerpt; full capture and metadata remain available via context_id.",
+        "visual_available.tool": "list_visuals → inspect_visual",
+        "visual_available.purpose": "Understand this lead or assess a useful chart; inspection is not reuse permission.",
+    }
+    used_defaults = dict(packet["run_brief"].get("compact_display_defaults") or {})
+
+    def omit_default(row, field, path):
+        if field in row and row[field] == defaults[path]:
+            used_defaults[path] = defaults[path]
+            del row[field]
+
+    def compact_visual(row):
+        visual = row.get("visual_available")
+        if isinstance(visual, dict):
+            visual = dict(visual)
+            for field in ("tool", "purpose"):
+                omit_default(visual, field, "visual_available." + field)
+            row["visual_available"] = visual
+
+    receipt_urls = hint_urls = False
+    receipts = []
+    for original in packet.get("prepared_evidence", []):
+        row = dict(original)
+        final_url = row.get("final_url")
+        if isinstance(final_url, str) and final_url:
+            for field in ("requested_url", "canonical_url"):
+                if row.get(field) == final_url:
+                    del row[field]
+                    receipt_urls = True
+            chain = row.get("redirect_chain")
+            if chain == [final_url]:
+                del row["redirect_chain"]
+                receipt_urls = True
+        for field in ("byline", "published_at", "limitations", "visual_available"):
+            if field in row and row[field] in (None, ""):
+                del row[field]
+        omit_default(row, "excerpt_note", "prepared_evidence.excerpt_note")
+        compact_visual(row)
+        receipts.append(row)
+    packet["prepared_evidence"] = receipts
+
+    cards = []
+    for original in packet.get("intake_board", []):
+        row = dict(original)
+        for key in ("available_perception_text", "prior_item_state_untrusted_context"):
+            if not isinstance(row.get(key), dict):
+                continue
+            value = dict(row[key])
+            omit_default(value, "use", key + ".use")
+            if (key == "available_perception_text" and row.get("intake_url")
+                    and value.get("url") == row["intake_url"]):
+                del value["url"]
+                hint_urls = True
+            # A null historical key is absent, never an exact-event match.
+            if key == "prior_item_state_untrusted_context" and value.get("story_key") is None:
+                value.pop("story_key", None)
+            row[key] = value
+        preparation = row.get("haiku_preparation")
+        if isinstance(preparation, dict) and preparation.get("protection_reason") is None:
+            row["haiku_preparation"] = {k: v for k, v in preparation.items()
+                                       if k != "protection_reason"}
+        compact_visual(row)
+        cards.append(row)
+    packet["intake_board"] = cards
+
+    index = packet.get("retrievable_context_index", {})
+    continuity = packet.get("continuity_board", {})
+    if (isinstance(continuity, dict) and "index" in continuity
+            and "continuity" in index and index["continuity"] == continuity["index"]):
+        packet["retrievable_context_index"] = {k: v for k, v in index.items() if k != "continuity"}
+        used_defaults["retrievable_context_index.continuity"] = "Same rows as continuity_board.index."
+    if receipt_urls:
+        used_defaults["prepared_evidence.URLs"] = (
+            "Omitted requested_url/canonical_url equal final_url; omitted redirect_chain is [final_url].")
+    if hint_urls:
+        used_defaults["available_perception_text.url"] = "When omitted, equals this candidate's intake_url."
+    packet["run_brief"]["compact_display_defaults"] = used_defaults
 
 
 def _cached_url_is_public(url: str) -> bool:
@@ -1765,6 +1849,8 @@ class NewsroomSession:
                 )
             # Excerpts and mechanical repetition shrink before the useful memory map.
             # This is a prefix of the original stable page; matching pointers are separate.
+            if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                _compact_packet_repetition(packet)
             while (_json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES
                    and len(catalog["rows"]) > 2):
                 catalog["rows"].pop()
