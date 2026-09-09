@@ -1,7 +1,8 @@
 # Sprint 0073 — audience, reporting continuity and useful recall
 
 September 9, 2026. Owner-authorized turn `01a0877a-d077-7c02-b8de-2229b7410228`.
-Status: independently APPROVED by sprint73_lead September9; implementation underway.
+Status: independently APPROVED; implemented and production smoke-tested September9.
+Runtime2276766/v2.35. Release measurements and audit status: SPRINT-0073-FINDINGS.md.
 
 Scope authority: [agreed roll-up](docs/planning/writer-work-sprint-2026-09-09.md).
 The owner approved all five decisions and made the next-shift letter a required deliverable,

@@ -11,6 +11,13 @@ One model/parallel request and one CPU inference thread; start with modest repli
 measure real memory/cold+warm latency before enabling the caller. Model download274MB is not
 resident RAM. The official runtime image also contains unused accelerator libraries.
 
+Railway service configuration must persist dockerfilePath=Dockerfile (not just an initial
+auto-detected Docker build); otherwise a generic redeploy may use the default Railpack builder.
+Set healthcheckPath=/api/tags and port11434. Verify actual container variables after setting
+NBN's caller URL: on the release-day CLI, skip-deploy variable writes appeared in variable
+listing without reaching the deployed environment config. An explicit scoped environment
+configuration commit activated them. Never blindly commit unrelated staged changes.
+
 Indexing runs in NBN's separate background thread/SQLite connection, bounded batches, no
 network in a write transaction. A Writer query has bounded lookup/embedding deadlines.
 Missing model, bad response, service outage or pending index degrades to ranked keywords.
