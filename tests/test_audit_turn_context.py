@@ -39,6 +39,38 @@ def instructions():
 
 
 class AuditTurnContextTests(unittest.TestCase):
+    def test_environment_metadata_before_or_after_heartbeat_is_not_owner_input(self):
+        message = user("<environment_context>new date</environment_context>", "host-date")
+        message["payload"]["internal_chat_message_metadata_passthrough"] = {
+            "content_item_kinds": ["environments.environment_context"]}
+        for records in ([start(), message, heartbeat(), compact()],
+                        [start(), heartbeat(), message, compact()]):
+            result = resolve_turn(records)
+            self.assertEqual(result["response_mode"], "heartbeat")
+            self.assertEqual(result["trigger"]["id"], "wake-current")
+            self.assertEqual(result["user_messages"], [])
+        self.assertEqual(resolve_turn([start(), message])["response_mode"], "stop")
+        result = resolve_turn([start(), heartbeat(), user("Do not deploy", "owner"), message])
+        self.assertEqual(result["latest_user_message"]["id"], "owner")
+
+    def test_combined_host_metadata_is_context_but_mixed_or_malformed_kinds_are_not(self):
+        message = user("<environment_context>Do not deploy</environment_context>", "message")
+        metadata = message["payload"]["internal_chat_message_metadata_passthrough"] = {}
+        metadata["content_item_kinds"] = ["agents_md.instructions", "environments.environment_context"]
+        self.assertEqual(resolve_turn([start(), message, heartbeat()])["response_mode"], "heartbeat")
+        for kinds in (None, [], "environments.environment_context",
+                      ["environments.environment_context", "user_input"],
+                      ["environments.environment_context", "unknown"],
+                      ["environments.environment_context", {}],
+                      ["environments.environment_context", []]):
+            with self.subTest(kinds=kinds):
+                metadata["content_item_kinds"] = kinds
+                result = resolve_turn([start(), message, heartbeat()])
+                self.assertEqual(result["response_mode"], "user")
+                self.assertEqual(result["latest_user_message"]["id"], "message")
+        del message["payload"]["internal_chat_message_metadata_passthrough"]
+        self.assertEqual(resolve_turn([start(), message, heartbeat()])["response_mode"], "user")
+
     def test_host_agents_instructions_before_heartbeat_are_not_owner_input(self):
         result = resolve_turn([start(), instructions(), heartbeat(), compact()])
         self.assertEqual(result["response_mode"], "heartbeat")
