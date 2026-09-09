@@ -1,8 +1,14 @@
 # Perception reporting integration
 
 Sprint0071 integration + Sprint0072 adoption · September9,2026.
-Code/prompt `editorial-core-v2.31-perception-adoption`.
-Release status and production proof belong in SPRINT-0072-FINDINGS.md.
+Current code/prompt `editorial-core-v2.35-writer-continuity`.
+Release status and production proof belong in SPRINT-0073-FINDINGS.md.
+
+Sprint0073 keeps these tools, quotas and transport/cache contracts unchanged. Existing survey
+slots now rotate audience-aligned reporting questions around custody/privacy, mining/energy,
+payments/capital controls and central-bank policy/financial surveillance. Writer letters and
+scheduled follow-ups can point future sessions toward useful Perception searches; using one
+is not compulsory. NBN's hybrid memory finds retained dated reporting, not fresh vendor data.
 
 ## What the Writer gets
 

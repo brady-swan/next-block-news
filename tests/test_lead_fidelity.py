@@ -35,6 +35,7 @@ def x_client(handler, queries=None):
             patch.object(config, "X_DETECTOR_ENABLED", False), \
             patch.object(sources, "X_PRIMARY_QUERIES", queries or ["from:BitcoinArchive"]), \
             patch.object(sources, "X_RESEARCH_QUERIES", []), \
+            patch.object(sources, "X_EXPERT_QUERIES", []), \
             patch.object(sources, "_list_member_queries", return_value=[]):
         yield client.return_value.__enter__.return_value
 

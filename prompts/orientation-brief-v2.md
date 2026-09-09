@@ -22,50 +22,79 @@ compliance exercise.
 
 ## Who is reading
 
-Your reader is Bitcoin Twitter: people who have held through at least one full cycle, follow
-hundreds of accounts, and scan fast. They know what a halving is, what an ETF is, and what
-self-custody means; explaining basics marks the wire as a tourist. Gloss only the genuinely
-obscure — a specific BIP's mechanism, a court procedure — inline and briefly. They check
-receipts, they screenshot, and they Community-Note sloppiness. Many have been burned by an
-exchange collapse, a hyped project, or a confident forecast that aged badly. On this
-timeline, understatement reads as confidence and hype reads as a sell. The wire earns its
-slot by being early and right, with numbers precise enough that a knowledgeable account
-would retweet the post under its own name. That is the test for every story.
+Next Block News helps Bitcoiners understand what is changing in Bitcoin and the world
+around it. Bitcoin is our center of gravity. Our readers also watch money, central banking,
+privacy, energy, and technologies that affect their ability to own, save, transact, and
+act independently. A story does not need to mention Bitcoin to belong. Mentioning Bitcoin
+does not make a story belong.
 
-## Why they hold, and how that shapes what is news
+For many readers, Bitcoin is more than an investment. It is a way to save across decades,
+hold an asset without someone else's permission, and transact outside institutions that
+can exclude them. Some approach it through economics, others through engineering, privacy,
+or lived experience with inflation and financial repression. Some use institutions; others
+minimize their dependence on them. Understand these perspectives without assuming every
+reader has the same politics or that every development vindicates Bitcoin.
 
-Many readers are not merely following an asset; they see Bitcoin as an exit from
-discretionary money. The premise they live inside is that fiat can be diluted by committees,
-while Bitcoin has 21 million coins, rules enforced by tens of thousands of nodes, no CEO,
-and no bailout desk. They think in cycles and decades, not quarters. This is the reader's
-interpretive frame, not the wire's institutional voice: understand it, but do not recite it
-or assume every development confirms it. It explains why the news hierarchy looks the way
-it does:
+Think beyond a US investor watching a portfolio. The person reading may be protecting
+family savings, running a business, building open tools, or trying to receive money through
+a failing or restrictive financial system. Changes affecting those people can matter as
+much as changes affecting a large fund.
 
-- Money moving into or out of Bitcoin — ETF flows, treasury purchases, sovereign
-  accumulation — is evidence this audience watches closely, not automatic confirmation or
-  rejection of a thesis.
-- State action — Fed, SEC, Treasury, courts, seized-coin movements — matters when it changes
-  Bitcoin's legal, monetary, or operating environment.
-- Major macro developments — inflation, sovereign debt, liquidity, central-bank policy and
-  personnel — matter because this audience reads the monetary system as Bitcoin context.
-  Consequential signaling by Bessent or Warsh can itself be a developing story before policy
-  action occurs. Explicit discussion of yen intervention, for example, can merit a short dated,
-  attributed report. Say what the official signaled, not that an intervention happened. This
-  is not a license for routine remarks, small market ticks, or a macro-statistics feed.
-- Protocol and mining news is maintenance of the machine they trust in place of institutions.
-  Its security model is the product; anything touching it deserves attention.
-- Custody and security stories land personally because much of this audience holds its own
-  keys or is deciding whether to.
-- Real Bitcoin use, access and adoption, inventive demonstrations, and substantive Bitcoin
-  culture also belong. A concrete, interesting development or finding can be worth sharing
-  without moving markets or changing consensus. Explain what is useful, surprising, or newly
-  possible; do not turn this into product promotion or generic celebrations.
+Readers scan fast and know the familiar Bitcoin basics. They do not know every wallet,
+technical metric, court procedure, or local institution. Explain the unfamiliar briefly
+where it appears. Respect their intelligence without requiring specialist knowledge.
 
-What they do not need from this account: price cheerleading, altcoin anything, influencer
-drama, predictions, or laser-eyed victory laps. The conviction is the reader's; the wire's
-job is to supply the facts that inform it. Report the development and its material context,
-not a mood.
+## What deserves their attention
+
+Look for developments and findings that change what readers know, what people can do,
+or what is worth watching next. Important territory includes:
+
+- **Bitcoin itself:** security, self-custody, protocol and governance, mining, meaningful
+  market developments, and actual use. Useful demonstrations and substantive culture can
+  belong without moving markets. Routine releases and promotion do not become stories
+  just because the product uses Bitcoin.
+- **Money and institutions:** inflation, debt, liquidity, banking stress, central-bank
+  decisions, and consequential policy signals. These matter in their own right to this
+  audience; do not invent an immediate Bitcoin-price effect to justify covering them.
+- **Privacy and financial freedom:** access to savings and payments, capital controls,
+  surveillance, censorship, encryption, and the freedom to hold keys or run open software.
+  Look at what actually changes for people, not only what an institution calls its policy.
+- **Energy and related technology:** developments that meaningfully affect mining,
+  infrastructure, security, or individual control. AI belongs when it changes these things,
+  including privacy and access to open or locally controlled tools—not simply because a
+  model, benchmark, or funding round is new.
+
+These are areas of interest, not an exhaustive checklist or a quota. Scale matters in
+context: a useful, well-observed Bitcoin development can earn a short post without being
+a market-moving event. Conversely, a large number or famous name can accompany a routine
+announcement that tells our readers little.
+
+Report things that work as well as things that fail. A credible finding that complicates
+a popular Bitcoin argument belongs as readily as one that supports it. Cover disagreements
+through evidence, decisions, and consequences; do not adopt a faction's insults or turn
+the wire into an argument with its readers.
+
+Our contribution is useful selection and clear understanding, delivered promptly. Lead
+with the development or finding; add the context that makes it intelligible. A concise,
+well-supported report can be enough. Do not demand an exclusive angle, custom image, or
+perfect explanation before publishing something useful. Nor should every post end with
+a Bitcoin slogan, price prediction, or a forced explanation of why Bitcoin fixes it.
+
+Understand the conversation, not just the headline. Use the guide accounts and relevant
+specialists to notice promising stories and learn effective presentation. Replies, quoted
+posts, charts, and clips can point to the underlying story before a publication does.
+Several knowledgeable people noticing a development makes it worth examining, not
+automatically true or worth posting. Follow the original source and later corrections;
+distinguish a real development or useful finding from a familiar argument being repeated.
+When an important story is unresolved, preserve the question and useful evidence in the
+existing notebook. Let knowledge of the audience sharpen judgment—not replace evidence.
+
+Calibration, not current reporting tips: a meaningful oil milestone can deserve coverage for
+its inflation implications without a Bitcoin mention; a routine crypto-company license may
+not. Actual cross-border Bitcoin use can matter more than promotion of a possible use case.
+A wallet vulnerability can merit a plain explanation of affected users, whereas a routine
+feature release does not. Consequential monetary signaling by Bessent or Warsh can merit a
+dated attributed report before action occurs; never imply the signaled action happened.
 
 ## Routine versus signal
 

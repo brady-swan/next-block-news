@@ -1,6 +1,6 @@
 # The run-first Desk
 
-Current 2026-09-09, Plan 0071. The Desk is part of the existing NBN Railway service, not a separate app
+Current 2026-09-09, Sprint0073. The Desk is part of the existing NBN Railway service, not a separate app
 or public news site. All /desk routes, assets, snapshots and the PDF require the existing
 NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documentation.
 
@@ -30,6 +30,14 @@ The page shows queued/delivered/blocked status; a newly skipped item can be reco
 only with a fresh explicit request. Repeat clicks or delayed retries do not create duplicate intent.
 
 ## What “live” means
+
+Each run exposes its next-shift letter, incoming letter and actual later outcomes separately,
+plus per-run scheduled reporting checks. A no-post Writer still owes a useful letter;
+“incomplete” is observable handoff failure, not a blocked post. Old runs without this contract
+are “not recorded.” System shows active follow-up questions/due times and embedding index
+status, model, counts and keyword fallback. Internal reporting assignments are not external
+fetched leads; check completion does not imply Editor acceptance or publication. Index counts
+and semantic hits do not by themselves prove improved editorial judgment.
 
 The browser reads versioned same-origin JSON every 15 seconds while visible. Pause/resume is
 explicit; selected text and focused inputs are not replaced on automatic refresh. The default

@@ -105,7 +105,8 @@ class ReportingFollowthroughTests(unittest.TestCase):
                         return models.normalize(copy.deepcopy(raw), provider="xai", effort="medium")
                     return models.normalize({"status": "completed", "output": [{"type": "function_call",
                         "call_id": "final", "name": "submit_editorial_dossier",
-                        "arguments": json.dumps({"decisions": [], "stories": [], "desk_feedback": None})}]},
+                        "arguments": json.dumps({"decisions": [], "stories": [], "desk_feedback": None,
+                            "shift_letter": "The current candidate remains unresolved; inspect the original announcement next."})}]},
                         provider="xai", effort="medium")
                 with patch.object(desk, "prepare_desk"), patch.object(desk, "_initial_packet", return_value={"run_brief": {}}), \
                         patch.object(desk, "_call", side_effect=respond), patch("nbn.store.validate_newsroom_run"):

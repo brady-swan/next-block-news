@@ -57,6 +57,8 @@ try {
     path: "outputs/qa/newsroom-1728.png",
     fullPage: true,
   });
+  check((await page.locator('.handoff-panel').innerText()).includes('individual Bitcoin use'), 'Required next-shift letter visible');
+  await page.locator('.handoff-panel').screenshot({path:'outputs/qa/letter-panel.png'});
   await page.getByRole("button", { name: "Previous run", exact: true }).click();
   await ready();
   check(
@@ -180,6 +182,10 @@ try {
     "Daily audit disabled in current roster",
   );
   await page.screenshot({ path: "outputs/qa/system-1728.png", fullPage: true });
+  const continuityPanel = page.locator('.feedback-panel').filter({has: page.getByRole('heading', {name:'What the next desk is watching'})});
+  check((await continuityPanel.innerText()).includes('original dataset confirmed'), 'Active reporting question visible');
+  check((await continuityPanel.innerText()).includes('Ranked keyword fallback'), 'Embedding fallback honestly visible');
+  await continuityPanel.screenshot({path:'outputs/qa/continuity-panel.png'});
   for (const width of [390, 1024, 2560]) {
     await page.setViewportSize({ width, height: 1000 });
     await overflow("System " + width);

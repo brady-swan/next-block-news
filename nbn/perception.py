@@ -441,8 +441,12 @@ def collect(con):
             con.commit()  # At most one attempt per slot, even across failure/restart.
             index = slot % 4
             operation = "regulatory" if index == 3 else "coverage"
-            params = {"q": "bitcoin"} if index == 3 else {
-                "subject_ids": [["self-custody"], ["mining-pools"], ["merchant-payments"]][index]}
+            params = {"q": (
+                "Bitcoin self-custody security privacy encryption",
+                "Bitcoin mining energy infrastructure",
+                "Bitcoin payments capital controls financial freedom actual use",
+                "Bitcoin central banking monetary policy financial surveillance",
+            )[index]}
             result = request(con, "mcp", operation, {**params, **dates, "limit": 10}, purpose="survey", timeout=10)
             if result["ok"]:
                 batch.extend(as_items(result.get("rows", [])))

@@ -51,6 +51,7 @@ def _assert_public_http_url(url: str) -> None:
         raise UnsafeSourceURL("private, loopback, link-local, or reserved source host rejected")
 
 PILOT_FEEDS = {
+    "Peer-to-Peer": "https://p2p.coincenter.org/feed",
     "Bitcoin Core": "https://bitcoincore.org/en/rss.xml",
     "Bitcoin Optech": "https://bitcoinops.org/feed.xml",
     "BTCPay Server": "https://blog.btcpayserver.org/rss.xml",
@@ -281,13 +282,14 @@ X_PRIMARY_QUERIES = [
 ]
 X_RESEARCH_QUERIES = [
     # Tier 2 research signal monitored directly, eligible only for its own analysis.
-    '(from:KobeissiLetter OR from:Barchart) -is:retweet -is:reply',
+    '(from:Barchart) -is:retweet -is:reply',
 ]
 X_GUIDE_HANDLES = tuple(guide_context.GUIDE_HANDLES.values())
 X_GUIDE_QUERIES = [
     # Proven Bitcoin-news desks. Their posts are editorial leads: NBN still replaces
     # the receipt, but substantive claims should reach research before being judged.
-    "(" + " OR ".join(f"from:{handle}" for handle in X_GUIDE_HANDLES)
+    "(" + " OR ".join(f"from:{handle}" for handle in X_GUIDE_HANDLES
+                         if handle != "KobeissiLetter")
     + ") -is:retweet -is:reply",
 ]
 X_DETECTOR_QUERIES = [
@@ -296,8 +298,20 @@ X_DETECTOR_QUERIES = [
     '(from:WatcherGuru OR from:CoinDesk OR from:TheBlockCo OR from:Blockworks_)'
     ' -is:retweet -is:reply',
 ]
+# Explicit, approved specialist pilot. Outward interactions are attention, not authority.
+X_EXPERT_COHORT = {
+    "financial_freedom": ("gladstein", "frankcorva", "DecentraSuze", "NeerajKA"),
+    "security_open_tools": ("lopp", "callebtc", "francispouliot_", "murchandamus", "Rob1Ham", "Snyke"),
+    "conversation": ("MartyBent", "stephanlivera", "TheGuySwann", "pete_rizzo_"),
+    "monetary_energy": ("LynAldenContact", "intangiblecoins", "DSBatten", "KobeissiLetter",
+                        "EricBalchunas", "lukegromen", "biancoresearch"),
+}
+X_EXPERT_HANDLES = {h.lower(): role for role, handles in X_EXPERT_COHORT.items() for h in handles}
+X_EXPERT_QUERIES = ["(" + " OR ".join(f"from:{h}" for h in handles) + ")"
+                    for handles in X_EXPERT_COHORT.values()]
 X_STATIC_QUERIES = (
     X_PRIMARY_QUERIES + X_RESEARCH_QUERIES + X_GUIDE_QUERIES + X_DETECTOR_QUERIES
+    + X_EXPERT_QUERIES
 )
 
 _list_cache = {"members": [], "fetched": 0.0}
@@ -325,6 +339,8 @@ def _list_member_queries(client) -> list:
             _list_cache["fetched"] = _time.time()  # don't hammer on failure
     queries, chunk = [], []
     for m in _list_cache["members"]:
+        if m.lower() in X_EXPERT_HANDLES:
+            continue  # The interaction query covers their originals too.
         chunk.append(f"from:{m}")
         if len("(" + " OR ".join(chunk) + ") -is:retweet -is:reply") > 460:
             queries.append("(" + " OR ".join(chunk[:-1]) + ") -is:retweet -is:reply")
@@ -351,15 +367,25 @@ def _x_item(tweet: dict, includes: dict, query: str, captured: float) -> dict:
         host = (urlsplit(url).hostname or "").lower()
         if not any(host == h or host.endswith("." + h) for h in ("x.com", "twitter.com", "t.co")):
             outbound.append(url)
-    story_url = outbound[0] if label == "X" and len(outbound) == 1 else post["url"]
+    expert_role = X_EXPERT_HANDLES.get(uname.lower())
+    interaction = bool(material.get("referenced_posts"))
+    story_url = (outbound[0] if label == "X" and len(outbound) == 1
+                 and not interaction and not expert_role else post["url"])
     item = {
         "source": f"{label} @{uname}", "title": post["text"][:200],
         "url": story_url, "published": post.get("published_at") or "",
         "summary": post["text"][:600], "source_material": lead_material.encode(material),
     }
+    context = {}
+    if expert_role:
+        context = {"untrusted_discovery_context": True, "origin": "expert_network",
+                   "expert_signal": {"actor": uname, "role": expert_role,
+                       "post_url": post["url"], "interaction_types":
+                       [r["relation"] for r in material.get("referenced_posts", [])] or ["original"],
+                       "instruction": "Attention only, not corroboration or parent-source authority."}}
     if canonical_guide:
         metrics = post.get("engagement") or {}
-        item["discovery_context"] = json.dumps({
+        context.update({
             "untrusted_discovery_context": True, "origin": "bitcoin_news_guide_account",
             "guide_signal": guide_context.build_signal(
                 canonical_guide, post["url"], post["text"], {
@@ -367,7 +393,9 @@ def _x_item(tweet: dict, includes: dict, query: str, captured: float) -> dict:
                     "likes": metrics.get("likes"), "reposts": metrics.get("reposts"),
                     "quotes": metrics.get("quotes"),
                 }, outbound),
-        }, separators=(",", ":"))
+        })
+    if context:
+        item["discovery_context"] = json.dumps(context, separators=(",", ":"))
     return item
 
 
@@ -381,7 +409,8 @@ def fetch_x(con=None) -> list:
     out = CollectedBatch()
     headers = {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}
     with httpx.Client(timeout=15, headers=headers) as client:
-        queries = _list_member_queries(client) + X_PRIMARY_QUERIES + X_RESEARCH_QUERIES
+        queries = (_list_member_queries(client) + X_PRIMARY_QUERIES + X_RESEARCH_QUERIES
+                   + X_EXPERT_QUERIES)
         if config.X_DETECTOR_ENABLED:
             queries += X_GUIDE_QUERIES + X_DETECTOR_QUERIES
         for q in dict.fromkeys(queries):
@@ -395,7 +424,8 @@ def fetch_x(con=None) -> list:
                 legacy_since = store.kv_get(con, "x_since_" + qkey) if con is not None else ""
                 if not state:
                     state = ({"since_id": legacy_since} if legacy_since else {"start_time":
-                        (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=6))
+                        (dt.datetime.now(dt.timezone.utc) - dt.timedelta(
+                            hours=2 if q in X_EXPERT_QUERIES else 6))
                         .strftime("%Y-%m-%dT%H:%M:%SZ")})
                 lower = {k: state[k] for k in ("since_id", "start_time") if state.get(k)}
                 head = state.get("head") or ""
@@ -437,6 +467,7 @@ def fetch_x(con=None) -> list:
                     if not token:
                         break
                 group = ("Bitcoin news guides" if q in X_GUIDE_QUERIES else
+                         "Expert interactions" if q in X_EXPERT_QUERIES else
                          "Research accounts" if q in X_RESEARCH_QUERIES else
                          "Detectors" if q in X_DETECTOR_QUERIES else "Watched accounts")
                 observations.source_poll(con, "x:" + qkey, group + " · " + qkey, "x", count=count)

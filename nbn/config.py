@@ -237,6 +237,9 @@ PORT = int(os.environ.get("PORT", "8080"))
 # State
 DATA_DIR = Path(os.environ.get("NBN_DATA_DIR", "/data" if Path("/data").is_dir() else str(ROOT / "data")))
 DB_PATH = DATA_DIR / "nbn.db"
+WRITER_FOLLOWUPS_ENABLED = os.environ.get("WRITER_FOLLOWUPS_ENABLED", "true").lower() == "true"
+MEMORY_EMBED_URL = os.environ.get("MEMORY_EMBED_URL", "").rstrip("/")
+MEMORY_EMBED_MODEL = os.environ.get("MEMORY_EMBED_MODEL", "nomic-embed-text:v1.5")
 TAPE_DIR = DATA_DIR / "tapes"
 
 # Posting

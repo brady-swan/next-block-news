@@ -1200,6 +1200,25 @@ function App() {
                       <summary>Writer feedback{run.writer_feedback?.status === "provided" ? " · available" : ""}</summary>
                       <WriterFeedback record={run.writer_feedback} />
                     </details>
+                    <section className="handoff-panel">
+                      <div className="eyebrow">NEXT SHIFT</div>
+                      <h3>Letter to the next Writer</h3>
+                      {run.shift_letter ? <>
+                        <p className="meta-copy">Written {clock(run.shift_letter.written_at, true)} · Writer judgment, not verified evidence</p>
+                        <p className="letter-copy">{run.shift_letter.body}</p>
+                        <Json label="Actual later outcomes" value={{run_status: run.shift_letter.actual_run_status, stories: run.shift_letter.actual_story_outcomes, outputs: run.shift_letter.actual_outputs}} />
+                      </> : <p className="meta-copy">{run.handoff_status === "incomplete" ? "Required handoff missing. Reporting was preserved; this needs audit attention." : "No letter recorded for this run."}</p>}
+                      {run.packet?.incoming_shift_letter && <details className="payload">
+                        <summary>Incoming letter this Writer received</summary>
+                        <p className="meta-copy">{clock(run.packet.incoming_shift_letter.written_at, true)}</p>
+                        <p className="letter-copy">{run.packet.incoming_shift_letter.body}</p>
+                      </details>}
+                      {(run.followup_checks || []).map((f: Row) => <article className="followup-card" key={f.assignment_id}>
+                        <span className="tiny-label">Reporting check · {String(f.status).replaceAll("_", " ")}</span>
+                        <h4>{f.question}</h4><p>{f.note}</p>
+                        <p className="meta-copy">Internal assignment, not a fresh news arrival · {f.context_id}</p>
+                      </article>)}
+                    </section>
                     <Json label="Memory catalog delivered to this run" value={run.packet?.memory_catalog || { status: "Not recorded for this run" }} />
                     <div className="journey">
                       {[
@@ -1823,6 +1842,22 @@ function Support({
               calls. Publishing and reconciliation run in code. Historical runs
               retain their recorded models.
             </p>
+          </section>
+          <section className="feedback-panel">
+            <div className="section-heading"><div><div className="eyebrow">REPORTING CONTINUITY</div><h2>What the next desk is watching</h2></div></div>
+            <p className="meta-copy">Writer-scheduled questions, checked on the normal desk cadence. A check can find no change; it is not a commitment to publish.</p>
+            <div className="feedback-grid">
+              {(data.followups || []).map((f: Row) => <article className="research-record" key={f.followup_id}>
+                <span className="tiny-label">{f.queued_assignment ? "Check queued" : "Next check"} · {clock(f.next_check_at, true)}</span>
+                <h3>{f.question}</h3><p className="meta-copy">{f.context_id} · revision {f.revision}</p>
+                {f.last_note && <p>{f.last_note}</p>}
+                <p className="meta-copy">{(f.source_paths || []).join(" · ")}</p>
+              </article>)}
+            </div>
+            {!data.followups?.length && <Empty title="No active reporting watches" />}
+            <h3>Memory retrieval</h3>
+            <p className="meta-copy">{data.memory_retrieval?.configured ? data.memory_retrieval.model : "Ranked keyword fallback"} · {data.memory_retrieval?.documents ?? 0} indexed records · {data.memory_retrieval?.vectors ?? 0} cached chunks</p>
+            <p className="meta-copy">Index: {data.memory_retrieval?.index?.status || "Not started"}{data.memory_retrieval?.index?.at ? ` · ${clock(data.memory_retrieval.index.at, true)}` : ""}. Search always retains keyword fallback. Similarity is not proof of the same event.</p>
           </section>
           <section className="feedback-panel">
             <div className="section-heading"><div>

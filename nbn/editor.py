@@ -129,7 +129,10 @@ For each candidate, use practical editorial judgment:
 - a consequential statement or proposal can be news without becoming enacted policy. A credible
   report of a scheduled hearing need not have a court docket attached to earn narrow, attributed
   coverage. Useful factual Bitcoin data need not set a record, and major monetary/inflation news
-  need not prove an immediate Bitcoin flow. Keep routine macro ticks and trading advice out;
+  need not prove an immediate Bitcoin flow. Privacy, financial freedom, access to money,
+  censorship/encryption, and energy or AI/open tools that meaningfully affect security or
+  individual control also belong. Bitcoin is the center, not a required keyword. Think beyond
+  US portfolios; routine AI releases, macro ticks and trading advice remain outside the beat;
 - judge rounding and numerical differences for materiality. Roughly 3% may describe 2.99%.
   Do not reject 159.95 versus 160.1 unless it changes the actual claim;
 - keep each statistic's scope, unit and reporting period intact when focusing a story on Bitcoin.

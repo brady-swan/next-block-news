@@ -196,6 +196,35 @@ CREATE TABLE IF NOT EXISTS writer_artifacts (
 );
 CREATE INDEX IF NOT EXISTS idx_writer_artifacts_time ON writer_artifacts(expires_at,created_at);
 CREATE INDEX IF NOT EXISTS idx_writer_artifacts_run ON writer_artifacts(run_id);
+CREATE TABLE IF NOT EXISTS writer_handoffs (
+  run_id TEXT PRIMARY KEY, written_at REAL NOT NULL, model TEXT NOT NULL,
+  prompt_version TEXT NOT NULL, body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS writer_followups (
+  followup_id TEXT PRIMARY KEY, context_id TEXT NOT NULL, question TEXT NOT NULL,
+  sources_json TEXT NOT NULL, next_check_at REAL NOT NULL, state TEXT NOT NULL,
+  revision INTEGER NOT NULL, last_check_at REAL, last_result TEXT, last_note TEXT,
+  queued_assignment TEXT, origin_run TEXT NOT NULL, updated_run TEXT NOT NULL,
+  created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_writer_followups_due ON writer_followups(state,next_check_at);
+CREATE TABLE IF NOT EXISTS writer_followup_checks (
+  assignment_id TEXT PRIMARY KEY, followup_id TEXT NOT NULL, due_at REAL NOT NULL,
+  started_at REAL NOT NULL, completed_at REAL, run_id TEXT,
+  status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS writer_followup_attempts (
+  assignment_id TEXT NOT NULL, run_id TEXT NOT NULL, started_at REAL NOT NULL,
+  completed_at REAL, status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY(assignment_id,run_id)
+);
+CREATE TABLE IF NOT EXISTS memory_vectors (
+  cache_key TEXT PRIMARY KEY, vector_json TEXT NOT NULL, created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_documents (
+  context_id TEXT PRIMARY KEY, revision TEXT NOT NULL, model_digest TEXT NOT NULL,
+  chunks_json TEXT NOT NULL, indexed_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS perception_requests (
   request_id TEXT PRIMARY KEY, surface TEXT NOT NULL, operation TEXT NOT NULL,
   purpose TEXT NOT NULL, started_at REAL NOT NULL, completed_at REAL,
@@ -2940,7 +2969,7 @@ def apply_newsroom_storyline_updates(con, *, run_id: str, updates: list[dict],
                 reject(key, "candidate_membership_conflict")
                 continue
             item_rows = con.execute(
-                f"SELECT url_hash,story_key,first_seen FROM items WHERE url_hash IN "
+                f"SELECT url_hash,story_key,first_seen,discovery_origin FROM items WHERE url_hash IN "
                 f"({','.join('?' for _ in members)})", members,
             ).fetchall()
             if len(item_rows) != len(members):
@@ -2950,7 +2979,13 @@ def apply_newsroom_storyline_updates(con, *, run_id: str, updates: list[dict],
                 "SELECT revision,created_at,last_signal_at FROM newsroom_storylines"
                 " WHERE storyline_key=?", (key,),
             ).fetchone()
-            signal_at = max(float(row["first_seen"] or 0) for row in item_rows)
+            signal_at = max((float(row["first_seen"] or 0) for row in item_rows
+                             if row["discovery_origin"] != "followup"), default=0)
+            # Only main's validated development/evidence mapping can supply these times;
+            # they are not part of the Writer's tool schema or assignment creation time.
+            signal_at = max(signal_at, max((min(time.time(), max(0, float(
+                (raw.get("candidate_signal_times") or {}).get(row["url_hash"], 0))))
+                for row in item_rows if row["discovery_origin"] == "followup"), default=0))
             reason = str(raw.get("update_reason") or "")[:400]
             prior_same_run = con.execute(
                 f"SELECT COUNT(DISTINCT item_hash) n FROM newsroom_storyline_events"
@@ -3596,7 +3631,7 @@ def pending_items(con, limit: int) -> list:
         " i.story_key,i.note,i.decision_stage,i.decision_category,"
         " t.route AS intake_route,t.promoted_at AS intake_promoted_at"
         " FROM items i LEFT JOIN intake_triage t ON t.item_hash=i.url_hash"
-        " WHERE i.status='new' AND COALESCE(i.defer_until,0)<=?"
+        " WHERE i.status='new' AND COALESCE(i.defer_until,0)<=? AND i.discovery_origin<>'followup'"
         " ORDER BY i.first_seen",
         (time.time(),),
     ).fetchall()

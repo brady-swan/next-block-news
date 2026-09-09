@@ -21,7 +21,8 @@ poll -> RSS/EDGAR Haiku mailroom -> Luna assignment desk -> Grok 4.3 newsroom ->
 
 Production uses Luna at low effort and both Grok seats at medium effort. The newsroom owns
 native web/X research in its writing context, with six responses / six minutes and searchable
-reporting memory. Optional writer self-reports appear in Desk, for human review only. These are explicit per-seat
+reporting memory. Every completed Writer session leaves a required next-shift letter; optional
+self-reports remain a separate, human-only Desk input. These are explicit per-seat
 production overrides; conservative Anthropic defaults remain available for rollback.
 
 Perception supplies bounded feed/subject discovery plus three optional Writer tools: coverage/entity
@@ -29,6 +30,14 @@ search, regulatory search and dated article reading. REST/MCP share source artif
 separate quota/cache accounting. See [PERCEPTION.md](PERCEPTION.md) for limits and provenance.
 Retained-text hints survive crowded desks; exact-match memory and accepted-copy context help
 the Writer compare prior coverage without another search. Retrieval limits remain unchanged.
+
+Sprint0073 adds deliberately scheduled follow-up assignments at the normal desk cadence,
+dated letters with actual later Editor/publication outcomes, and hybrid keyword/semantic
+recall over NBN's own reporting memory. A private Ollama/nomic CPU companion supplies cached
+embeddings; keyword search remains usable without it. The approved expert cohort includes
+useful replies, quotes and reposts, and Peer-to-Peer joins RSS. No personal KB corpus is imported.
+See [PLAN-0073-WRITER-CONTINUITY.md](PLAN-0073-WRITER-CONTINUITY.md) and
+[SPRINT-0073-FINDINGS.md](SPRINT-0073-FINDINGS.md) for scope and release proof.
 
 Plan 0066 adds optional image inspection and five sourced NBN graphic templates. Writer and
 editor inspect the exact stored pixels; approved media travels through resumable Typefully
@@ -51,6 +60,8 @@ for the bounded diagnostics and live verification; models, budgets and cadence a
 | `nbn/desk_prep.py` | Run-scoped Luna distillation/routing; protected work and every failure advance |
 | `nbn/store.py` | SQLite deduplication, bounded exact-event workbenches and storyline memory, commit lifecycle, post log |
 | `nbn/newsroom.py` | Run-scoped Grok reporter-writer, native research, compact/retrievable context and atomic dossier |
+| `nbn/writer_continuity.py` | Required next-shift letters, scheduled checks and same-candidate retry history |
+| `nbn/memory_search.py` | NBN document projections, cached embeddings and hybrid recall with keyword fallback |
 | `nbn/reporter.py`, `nbn/writer_memory.py` | Native source protocol, isolated human feedback, dated reporting artifacts and archive lookup |
 | `nbn/brain.py` | Shared model budget plus legacy triage and single-post drafting fallback |
 | `nbn/models.py` | Small OpenAI/xAI Responses adapter, tool history, and normalized provider usage |

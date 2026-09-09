@@ -11,7 +11,7 @@ import anthropic
 from . import brain, config, store
 
 log = logging.getLogger("nbn.intake_triage")
-PROMPT_VERSION = "haiku-intake-v1.1-bitcoin-native"
+PROMPT_VERSION = "haiku-intake-v1.2-bitcoiner-audience"
 ROUTES = {"priority", "candidate", "background"}
 MODEL_CATEGORIES = {
     "bitcoin_direct", "protocol_mining", "custody_security", "policy_regulation",
@@ -31,7 +31,10 @@ ROUTES
 RELEVANT AREAS
 Direct Bitcoin; protocol, mining, custody, and security; consequential Bitcoin regulation or
 state action; material inflation, money, sovereign-debt, liquidity, and central-bank changes;
-and genuinely consequential Bitcoin-company developments. A source's authority does not make
+privacy, financial freedom, access to money, capital controls, censorship and encryption;
+energy or AI/open tools when they meaningfully change security or individual control;
+and genuinely consequential Bitcoin-company developments. Bitcoin is the center, not a required
+keyword. A source's authority does not make
 an unrelated item relevant.
 
 Concrete Bitcoin use, access/adoption, inventive demonstrations, and substantive Bitcoin
@@ -45,7 +48,7 @@ Sports, entertainment, ordinary equities and earnings, routine corporate appoint
 conferences, product promotion, unrelated enforcement and regulation, generic crypto or
 altcoin items, boilerplate EDGAR Bitcoin mentions, ordinary partnerships/listings, trading
 advice, forecasts, and price cheerleading are background. When the title/summary leaves a
-real possibility of useful Bitcoin or monetary relevance, choose candidate rather than
+real possibility of useful relevance to this Bitcoiner audience, choose candidate rather than
 inventing certainty.
 
 CATEGORIES

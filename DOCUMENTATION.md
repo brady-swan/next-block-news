@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-09: Plan 0072 Perception adoption; Plan 0067 remains parked.
+Updated 2026-09-09: Sprint0073 Writer continuity; Plan0067 and QMD remain parked.
 This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
@@ -10,6 +10,9 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | File | Role |
 | --- | --- |
 | README.md | Project entry point, module map, invariants and running/deploying |
+| PLAN-0073-WRITER-CONTINUITY.md | Approved audience, expert interactions, required letters, follow-ups and hybrid recall |
+| SPRINT-0073-FINDINGS.md | Independent review, tests, private embedding measurements and deployment evidence |
+| infra/embeddings/README.md | Private CPU embedding companion, cache, operational limits and fallback |
 | SYSTEM.md | Detailed owner-facing description of production behavior |
 | HANDOFF-CODEX.md | Current maintainer handoff and release discipline |
 | INBOUND-NEWS-FLOW.md | Every inbound lane, NBN-owned clocks and the Node API boundary |

@@ -1,0 +1,7 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+healthcheckPath = "/api/tags"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5

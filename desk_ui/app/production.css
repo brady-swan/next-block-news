@@ -991,3 +991,8 @@
 .visual-card dd { margin: 0; overflow-wrap: anywhere; }
 .visual-card details { margin-top: 16px; }
 .visual-card pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; max-height: 360px; overflow: auto; }
+/* Continuity stays readable in the existing run-first workspace. */
+.handoff-panel { padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; margin-block: 1rem; }
+.handoff-panel h3, .followup-card h4 { margin: .5rem 0; }
+.letter-copy { white-space: pre-wrap; line-height: 1.65; max-width: 78ch; overflow-wrap: anywhere; }
+.followup-card { padding: 1rem; margin-top: 1rem; border-top: 1px solid var(--border); }

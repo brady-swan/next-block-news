@@ -197,7 +197,8 @@ class PerceptionAdoptionTests(unittest.TestCase):
                         input={"decisions": [{"candidate_id": item["url_hash"], "disposition": "publish", "story_id": "sec"}],
                             "stories": [{"story_id": "sec", "story_key": "sec-policy", "member_candidate_ids": [item["url_hash"]],
                                 "post": "The SEC announced a Bitcoin policy change.", "selected_fetch_id": fid,
-                                "evidence_fetch_ids": [fid]}], "run_note": "Supported by returned source."})
+                                "evidence_fetch_ids": [fid]}], "run_note": "Supported by returned source.",
+                            "shift_letter": "The retained SEC page supplied the missing policy detail; use it for follow-up context."})
                 return SimpleNamespace(content=[block], usage=usage, stop_reason="tool_use")
             desk.client = Mock()
             desk.client.messages.create.side_effect = writer

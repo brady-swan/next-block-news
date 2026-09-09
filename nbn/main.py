@@ -486,6 +486,15 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
     }
     try:
         if config.STORYLINE_MEMORY_ENABLED and outcome.storyline_updates:
+            development_ids = {item["url_hash"] for item in inventory if item.get("_followup")
+                and any(isinstance(u, dict) and u.get("followup_id") == item["_followup"]["followup_id"]
+                        and u.get("result") == "development"
+                        for u in (outcome.dossier.get("follow_up_updates") or []))}
+            signal_times = {member: max((float(outcome.fetches[fid].inspected_at or 0)
+                for fid in draft.get("evidence_fetch_ids", []) if fid in outcome.fetches), default=0)
+                for member, draft in outcome.drafts.items() if member in development_ids}
+            for update in outcome.storyline_updates:
+                update["candidate_signal_times"] = signal_times
             storyline_result = store.apply_newsroom_storyline_updates(
                 con, run_id=pipeline_run_id, updates=outcome.storyline_updates,
                 allowed_existing_keys=set(outcome.storyline_read_keys),
@@ -506,6 +515,21 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
     result["newsroom"]["storyline_persistence"] = outcome.counters[
         "storyline_persistence"
     ]
+    from . import writer_continuity
+    allowed_contexts = {"storyline:" + key for key in
+                        (outcome.storyline_read_keys | committed_storyline_keys)}
+    allowed_contexts.update("notebook:" + a["canonical_key"] for a in outcome.story_attempts
+                            if a.get("identity_valid") and a.get("canonical_key"))
+    read_ids = getattr(session, "memory_read_ids", set())
+    if isinstance(read_ids, set):
+        allowed_contexts.update(read_ids)
+    allowed_contexts.update("notebook:" + str(i["story_key"]) for i in inventory if i.get("story_key"))
+    try:
+        result["newsroom"]["followups"] = writer_continuity.apply_updates(
+            con, pipeline_run_id, outcome.dossier.get("follow_up_updates"),
+            allowed_contexts=allowed_contexts, inventory=inventory)
+    except Exception as exc:
+        log.warning("follow-up memory failed open: %s", type(exc).__name__)
     for draft in outcome.drafts.values():
         requested = str(draft.get("storyline_key_requested") or "")
         draft["storyline_key"] = requested if requested in committed_storyline_keys else None
@@ -1292,6 +1316,18 @@ def _cycle_locked(con, lease_owner: str) -> dict:
                 "prompt_version": newsroom.PROMPT_VERSION,
             }
             return result
+        from . import writer_continuity
+        assignments = writer_continuity.due_assignments(con, now=run_started,
+            limit=min(2, max(0, 25 - len(retry_verdicts))))
+        if assignments:
+            writer_continuity.begin_assignments(con, pipeline_run_id, assignments)
+            # Reserve two existing candidate slots, not a larger Writer budget.
+            fresh = fresh[:max(0, 25 - len(retry_verdicts) - len(assignments))]
+            fresh += [{**a, "_run_id": pipeline_run_id} for a in assignments]
+            pending = [p for p in pending if p["url_hash"] in {i["url_hash"] for i in fresh}] + assignments
+            result["internal_assignments"] = len(assignments)
+            result["considered"] = len(pending) + len(retry_verdicts)
+            result["pending"] = len(fresh) + len(retry_verdicts)
         if not fresh and not retry_verdicts:
             result["newsroom"] = {
                 "mode": config.RUN_NEWSROOM_MODE, "status": "empty",
@@ -1305,6 +1341,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
             theme_snapshot=theme_snapshot, overrides=overrides,
             run_started=run_started, reservation=mailroom_reservation,
         )
+        writer_continuity.finish_assignments(con, pipeline_run_id, inventory)
         if len(store.pending_items(con, config.MAX_ITEMS_PER_TRIAGE + 1)) \
                 > config.MAX_ITEMS_PER_TRIAGE:
             store.editorial_run_soon(con)
@@ -2173,6 +2210,8 @@ class Health(BaseHTTPRequestHandler):
 
 
 def run():
+    from . import memory_search
+    memory_search.start_worker()
     threading.Thread(
         target=lambda: ThreadingHTTPServer(("0.0.0.0", config.PORT), Health).serve_forever(),
         daemon=True,

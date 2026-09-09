@@ -5,7 +5,7 @@ import time
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
-from nbn import config, main, observations, store
+from nbn import config, main, observations, store, writer_continuity
 from tests.support import temporary_store
 from tests.test_workspace import seed_run, seed_usage
 
@@ -37,6 +37,10 @@ def populate(con):
             store.save_desk_preparations(con,[{"run_id":rid,"item_hash":"lead3","effective_route":"background","event_summary":"Broad product announcement, no Bitcoin change."}],mode="enforce")
         con.execute("INSERT INTO newsroom_story_commits(run_id,story_id,state,dossier_digest,details_json,updated_at) VALUES (?,'story-bpi','delivered','fixture','{}',?)",(rid,at+15));con.commit()
         seed_usage(con,rid,at+10,.06);seed_usage(con,rid,at+11,.014,"editor")
+        if idx:
+            writer_continuity.save_letter(con,rid,"Lead with individual Bitcoin use, not broad government crypto strategy. The mining chart is still unavailable; check the original dataset before calling it a fresh record.",model="offline fixture",prompt_version="editorial-core-v2.35-writer-continuity")
+    store.save_newsroom_story_attempt(con,"mining-watch","research_pending",{"objective":"Has the original dataset confirmed a new record?"})
+    writer_continuity.apply_updates(con,"cycle:fixture-2",[{"followup_id":None,"base_revision":None,"context_id":"notebook:mining-watch","question":"Has the original dataset confirmed a new record?","source_paths":["https://example.org/data"],"next_check_minutes":60,"state":"open","result":"pending","note":"Offline UI fixture."}],allowed_contexts={"notebook:mining-watch"},inventory=[])
     store.set_status(con, "lead3", "skipped", "fixture-product", "Broad product announcement, no Bitcoin change.", stage="desk_prep", category="background")
     con.execute("INSERT INTO posts(created,story_key,item_hash,class,body,receipt_url,mode,nuelink_id,publisher_backend,publisher_status,publisher_synced_at) VALUES (?,?,?,?,?,?,'DRAFT','12345','typefully','draft',?)",(now-850,"policy-research","lead0","secondary",POST,"https://example.org/report",now));con.commit()
     observations.source_poll(con,"rss:fixture","Fixture feed","rss",count=0)

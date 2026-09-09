@@ -1,6 +1,46 @@
 # Next Block News — editorial core v2
 
-*Current code description: 2026-09-09, Plan 0072 Perception adoption and Writer desk usability. Deployment proof/status: SPRINT-0072-FINDINGS.md.*
+*Current code description: 2026-09-09, Sprint0073 audience, Writer continuity and hybrid recall. Deployment proof/status: SPRINT-0073-FINDINGS.md.*
+
+### Writer continuity — Sprint0073
+
+The audience brief now reflects the approved Bitcoin knowledge-graph review: Bitcoin, monetary
+conditions, financial freedom, privacy, energy and related open tools/AI, judged by concrete
+consequences. Routine software releases and small treasury-company announcements still do not
+clear the bar. Four explicit expert-query cohorts retain useful replies, quotes and reposts
+with actor/parent identity and original dates. Peer-to-Peer joins RSS; Kobeissi is a guide
+attention signal but remains Tier2 research evidence. No personal knowledge base is ingested.
+
+Every completed Writer session, including a no-post session, supplies a useful next-shift
+letter in its dossier. The latest preceding letter is injected with date/run identity;
+actual later Editor decisions and current publication states are joined separately.
+A missing letter may use the existing shared one-shot correction slot, never a new model
+budget or publication gate. Failed/exhausted handoffs are visible, not fabricated. Prep-only
+cycles do not write letters. Optional human-only desk_feedback remains separate and unindexed.
+
+The Writer may schedule a concrete question against a current notebook or a read/created
+storyline. Normal cadence admits up to two due checks within the existing25 candidate slots,
+even without new intake. Assignments are internal work, not fresh articles; item.story_key is
+initially unset. Old evidence retains its dates. No-change/inconclusive results do not become
+fresh storyline signals. A completed development whose story is technically deferred reuses
+the same candidate; delivered/held/uncertain rows never reopen. Per-run attempts preserve
+check history independently of actual Editor/delivery outcomes.
+
+The existing memory catalog/read tools now retrieve substantive notebooks, source artifacts,
+storylines and30-day letters with ranked keywords plus cached semantic similarity. Visual
+metadata remains keyword-searchable. Similarity does not establish truth or event identity.
+NBN uses SQLite projections/vector cache; private Ollama/nomic-embed-text:v1.5 supplies768D
+embeddings. Content/model-digest/version keys avoid re-embedding unchanged chunks; one hit per
+document prevents long records flooding results. Changed/deleted/expired projections cannot
+be revived by old vectors. A bounded background thread owns its own SQLite connection and
+does not hold write transactions across network calls or block intake on service startup.
+Missing/malformed/slow embeddings fall back to keywords. QMD is reserve only.
+
+Controls: WRITER_FOLLOWUPS_ENABLED=false stops new/scheduled check processing;
+empty MEMORY_EMBED_URL disables semantics without deleting memory. Model, effort, cadence,
+Writer/tool/packet budgets and autopostOFF remain unchanged. Additive tables:
+writer_handoffs, writer_followups, writer_followup_checks, writer_followup_attempts,
+memory_documents and memory_vectors. See the sprint plan for lifecycle/rollback details.
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after

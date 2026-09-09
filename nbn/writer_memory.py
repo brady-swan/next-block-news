@@ -109,6 +109,15 @@ def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
     """All active kinds, stable paginated order; relevance precedes a full-card cut."""
     now = time.time() if now is None else now
     offset, limit = max(0, min(int(offset), 100000)), max(1, min(int(limit), 100))
+    if str(query).strip():
+        from . import memory_search
+        result = memory_search.search(con, str(query).strip(), offset=offset, limit=limit, now=now)
+        for row in result["rows"]:
+            if row["kind"] == "notebook":
+                output = publication(con, row["context_id"].removeprefix("notebook:"))
+                row["current_output"] = {k: output.get(k) for k in
+                    ("publisher_status", "reader_covered", "duplicate_risk")} if output else None
+        return result
     union = """SELECT 'notebook:'||canonical_key AS context_id,'notebook' AS kind,
       canonical_key AS title,updated_at AS at,state AS state,attempts_json AS searchable
       FROM newsroom_story_memory WHERE updated_at>?
@@ -120,6 +129,8 @@ def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
         # Notebook-first catalog; artifacts belong beneath their originating run.
         union += " UNION ALL SELECT 'run:'||run_id,'reporting_run',run_id,MAX(created_at),CAST(COUNT(*) AS TEXT),'Reporting operations' FROM writer_artifacts WHERE expires_at>? GROUP BY run_id"
     params = [now - TTL, now - TTL, now]
+    union += " UNION ALL SELECT 'letter:'||run_id,'writer_letter',substr(body,1,160),written_at,'handoff',body FROM writer_handoffs WHERE written_at>?"
+    params.append(now - TTL)
     union += " UNION ALL SELECT asset_id,'visual_asset',kind||': '||COALESCE(json_extract(metadata_json,'$.purpose'),''),created_at,run_id,metadata_json FROM visual_assets"
     terms = re.findall(r"[\w@.-]+", str(query).lower())[:6]
     conditions = " AND ".join("lower(title||' '||state||' '||searchable) LIKE ? ESCAPE '\\'" for _ in terms) or "1"
@@ -176,6 +187,10 @@ def intake(con, query, *, hours=72, offset=0):
 
 
 def read(con, context_id):
+    if context_id.startswith("letter:"):
+        from . import writer_continuity
+        row = writer_continuity.handoff(con, context_id.removeprefix("letter:"))
+        return row if row and row["written_at"] > time.time() - TTL else None
     if context_id.startswith("visual_"):
         from . import visuals
         try:

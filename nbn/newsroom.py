@@ -30,12 +30,13 @@ from . import (
     store,
     verify,
     writer_memory,
+    writer_continuity,
     visual_tools,
 )
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.34-header-article-extraction"
+PROMPT_VERSION = "editorial-core-v2.35-writer-continuity"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -381,6 +382,7 @@ FINAL WRITING PASS — REQUIRED BEFORE YOU SUBMIT THE DOSSIER
   downstream code knows the actual Typefully/X result.
 
 {reporter.GUIDANCE}
+{writer_continuity.GUIDANCE}
 
 The only acceptable final action is submit_editorial_dossier.
 """
@@ -461,11 +463,14 @@ V2_DOSSIER_TOOL = {
                              "update_reason"],
             }},
             "run_note": {"type": "string", "maxLength": 1200},
+            "shift_letter": {"type": "string", "minLength": 1, "maxLength": 4000,
+                "description": "Required useful letter to the next Writer, including no-post sessions. Judgment and source routes, not a performance report."},
+            "follow_up_updates": writer_continuity.FOLLOWUP_SCHEMA,
             "native_sources": {**reporter.SOURCE_SCHEMA, "description":
                 "Retain source-specific extracts from observed native URLs. Retention here alone does not attach evidence to a story: cite relevant exact URLs in that story's evidence_fetch_ids, and selected_fetch_id if chosen for readers."},
             "desk_feedback": reporter.FEEDBACK_SCHEMA,
         },
-        "required": ["decisions", "stories", "storyline_updates", "run_note", "native_sources", "desk_feedback"],
+        "required": ["decisions", "stories", "storyline_updates", "run_note", "native_sources", "desk_feedback", "shift_letter", "follow_up_updates"],
     },
 }
 
@@ -983,6 +988,8 @@ class NewsroomSession:
         self.prefetch_chars = 0
         self.context_rows: dict[str, dict] = {}
         self.context_reads: set[str] = set()
+        self.memory_read_ids: set[str] = set()
+        self.incoming_handoff = writer_continuity.handoff(con, before=time.time())
         self.context_retrieval_calls = 0
         self.context_retrieval_bytes = 0
         self.context_capacity_hits = 0
@@ -1001,6 +1008,9 @@ class NewsroomSession:
             str(row.get("canonical_key") or "")
             for row in self.recent_clusters if str(row.get("canonical_key") or "")
         }
+        self.supplied_cluster_keys.update(
+            row["_followup"]["context_id"].removeprefix("notebook:") for row in self.inventory
+            if row.get("_followup", {}).get("context_id", "").startswith("notebook:"))
         self._load_story_memory()
 
     def _load_story_memory(self) -> None:
@@ -1011,6 +1021,9 @@ class NewsroomSession:
             store.canonical_story_key(self.con, str(row.get("story_key") or ""))
             for row in self.inventory if row.get("story_key")
         }
+        current_keys.update(row["_followup"]["context_id"].removeprefix("notebook:")
+                           for row in self.inventory
+                           if row.get("_followup", {}).get("context_id", "").startswith("notebook:"))
         seen_urls: set[str] = set()
         seen_fingerprints: set[str] = set()
         cards = []
@@ -1216,6 +1229,10 @@ class NewsroomSession:
             self.prep_backgrounds = []
         self.by_hash = {row["url_hash"]: row for row in self.inventory}
         selected = []
+        for item in self.inventory:
+            context = item.get("_followup", {}).get("context_id", "")
+            if context.startswith("storyline:"):
+                selected.append(context.removeprefix("storyline:"))
         for candidate_id in self.by_hash:
             for key in list(self.preparations.get(candidate_id, {}).get(
                     "related_storyline_keys") or []):
@@ -1303,6 +1320,8 @@ class NewsroomSession:
         ))
         seen: set[str] = set()
         for item in ranked:
+            if item.get("_followup"):
+                continue  # Internal assignment URI is never a source to fetch.
             if self.reporter_enabled and self._research_seconds_left() <= 1:
                 break
             if self.prefetch_attempts >= max(0, config.DESK_PREFETCH_MAX_URLS):
@@ -1521,6 +1540,8 @@ class NewsroomSession:
                 "operator_gate": _clean_text(item.get("_operator_gate"), 80) or None,
                 "owner_override": item.get("_owner_reconsider") or None,
                 "research_retry": bool(item.get("_research_retry")),
+                "reporting_assignment": item.get("_followup") or None,
+                "expert_attention": context.get("expert_signal"),
                 "identity_correction": writer_memory.latest_identity_failure(self.con, [candidate_id]),
                 "available_perception_text": perception.candidate_hint(self.con, item.get("url", "")),
                 "haiku_preparation": ({
@@ -1608,6 +1629,7 @@ class NewsroomSession:
             "recent_reader_feed_48h": recent_reader_feed,
             "storyline_board": self.storyline_cards,
             "verified_handle_directory": handle_directory,
+            "incoming_shift_letter": self.incoming_handoff,
         }
         if self.compact_enabled:
             related_keys = {store.canonical_story_key(self.con, str(value)) for value in
@@ -1785,6 +1807,8 @@ class NewsroomSession:
                         "full_lead_context_id": row.get("full_lead_context_id"),
                         "first_seen_at": row.get("first_seen_at"),
                         "research_retry": row.get("research_retry"),
+                        "reporting_assignment": row.get("reporting_assignment"),
+                        "expert_attention": row.get("expert_attention"),
                         "candidate_context_id": row["candidate_context_id"],
                         "identity_correction": row.get("identity_correction"),
                         "available_perception_text": row.get("available_perception_text"),
@@ -2286,6 +2310,7 @@ class NewsroomSession:
         row = writer_memory.read(self.con, context_id)
         if not row:
             return None
+        self.memory_read_ids.add(context_id)
         if row["kind"] == "notebook":
             self.supplied_cluster_keys.add(row["canonical_key"])
             material = row.pop("evidence_pool", [])
@@ -3064,6 +3089,9 @@ class NewsroomSession:
             native_submissions = {}
             for block in response.content:
                 if block.type == "tool_use" and block.name == "submit_editorial_dossier":
+                    writer_continuity.save_letter(self.con, self.run_id,
+                        block.input.get("shift_letter"), model=config.NEWSROOM_MODEL,
+                        prompt_version=PROMPT_VERSION)
                     native_submissions[block.id] = [str(row.get("url") or "")[:2000]
                         for row in (block.input.get("native_sources") or [])[:8] if isinstance(row, dict)]
                     reporter.take_feedback(self.con, self.run_id, block.input,
@@ -3089,6 +3117,9 @@ class NewsroomSession:
                     native_submissions.get(dossier_blocks[0].id, []))
                 preview = self._validate_and_convert_v2(dossier_blocks[0].input, persist=False)
                 identity_errors = self._identity_repairs(dossier_blocks[0].input)
+                missing_letter = not writer_continuity.save_letter(self.con, self.run_id,
+                    dossier_blocks[0].input.get("shift_letter"), model=config.NEWSROOM_MODEL,
+                    prompt_version=PROMPT_VERSION)
                 if identity_errors:
                     repair = {**(repair or {}), "ok": False, "kind": "dossier_identity_repair",
                         "identity_errors": identity_errors,
@@ -3096,20 +3127,27 @@ class NewsroomSession:
                         "retained receipts. Exact events, broader storylines, open drafts and confirmed "
                         "publications differ. No extra research is needed for an identity correction. "
                         "Resubmit the whole dossier once; defer any still-ambiguous story."}
+                letter_only = missing_letter and not repair
+                if missing_letter:
+                    repair = {**(repair or {}), "ok": False, "missing_shift_letter": True,
+                        "message": str((repair or {}).get("message") or "") +
+                        " Include the required useful shift_letter to your next Writer. "
+                        "Keep usable stories and source IDs unchanged; no new research is needed."}
                 if (repair and self.reporter_enabled and not receipt_repair_used and
                         not hard_finalization and self.successful_newsdesk_calls < config.RUN_NEWSROOM_MAX_ROUNDS - 1 and
                         self._research_seconds_left() > 20):
                     receipt_repair_used = True
                     pending_dossier = copy.deepcopy(dossier_blocks[0].input)
                     frozen_story_ids = set(preview.story_ids.values())
-                    if identity_errors:
-                        finalize_after_completion = True  # Correction only, no new research loop.
-                    elif finalize_after_completion:
+                    if finalize_after_completion:
                         repair["message"] = (
                             "Research is closed. Resubmit the whole dossier using the retained receipt IDs "
                             "or source-specific extracts from already observed native URLs. Do not invent "
-                            "evidence; defer unsupported stories. This reference repair is offered once."
+                            "evidence; defer unsupported stories. Include your required useful shift_letter. "
+                            "This reference repair is offered once."
                         )
+                    if identity_errors or letter_only:
+                        finalize_after_completion = True  # Correction only, no new research loop.
                     observations.record(self.con, self.run_id,
                         "identity_protocol_repair" if identity_errors else "receipt_protocol_repair",
                         repair, phase="requested")
@@ -3201,6 +3239,9 @@ class NewsroomSession:
             d for d in revised.get("decisions", []) if isinstance(d, dict) and d.get("candidate_id") not in members]
         # Storyline proposals are context from the original desk, not a repair side channel.
         revised["storyline_updates"] = copy.deepcopy(previous.get("storyline_updates", []))
+        revised["follow_up_updates"] = copy.deepcopy(previous.get("follow_up_updates", []))
+        if writer_continuity.letter_body(previous.get("shift_letter")):
+            revised["shift_letter"] = previous["shift_letter"]
         return revised
 
     def _identity_repairs(self, dossier: dict) -> list[dict]:
@@ -3592,6 +3633,12 @@ class NewsroomSession:
         }
         if persist:
             from . import observations
+            if self.messages and not writer_continuity.save_letter(self.con, self.run_id,
+                    dossier.get("shift_letter"), model=config.NEWSROOM_MODEL,
+                    prompt_version=PROMPT_VERSION):
+                observations.record(self.con, self.run_id, "writer_handoff", {
+                    "status": "incomplete", "reason": "Required useful shift letter missing after available correction"},
+                    phase="incomplete")
             for error in identity_errors.values():
                 for member in error["candidate_ids"]:
                     observations.record(self.con, self.run_id, "candidate_identity_failure", error,

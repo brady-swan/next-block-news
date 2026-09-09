@@ -1,6 +1,22 @@
 # Next Block News - current handoff
 
-Updated 2026-09-09 for Sprint0072 Perception adoption. Start here, then read SYSTEM.md and DOCUMENTATION.md. Release status is in SPRINT-0072-FINDINGS.md.
+Updated 2026-09-09 for Sprint0073 Writer continuity. Start here, then read SYSTEM.md and DOCUMENTATION.md. Release status is in SPRINT-0073-FINDINGS.md.
+
+## Latest scope — Sprint0073
+
+Runtime prompt editorial-core-v2.35-writer-continuity. Approved expanded audience brief and
+expert interactions, Peer-to-Peer RSS, required useful next-shift letters, Writer-scheduled
+follow-ups and lightweight hybrid recall. Model roster/efforts,15-minute cadence, retrieval
+budgets and autopostOFF unchanged. No personal KB import; QMD and Nano Banana remain parked.
+Letters are dated Writer judgment, not receipts; actual later Editor/output outcomes are
+joined live. Required letters and optional human-only self-reports are different mechanisms.
+
+Follow-ups enter only on ordinary cadence, inside25slots (at most2internal assignments).
+No new signal timestamp from an assignment/no-change check. Completed-check deferred stories
+reuse the same candidate; never reopen terminal/delivered rows. The private embedding companion
+uses a persisted model cache, CPU inference, no public endpoint. Its outage degrades recall to
+keywords, not newsroom downtime. Source/config docs and deployment proof below are historical
+unless SPRINT-0073-FINDINGS.md explicitly marks them current.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 

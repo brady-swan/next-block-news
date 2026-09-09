@@ -1,11 +1,23 @@
 # Next Block News - inbound news flow
 
 Current NBN consumer contract, verified against code and selected production settings on
-2026-09-07. SYSTEM.md explains the editorial/publisher lifecycle; DESK-GUIDE.md defines metrics.
+2026-09-09 (Sprint0073 code; live proof in SPRINT-0073-FINDINGS.md). SYSTEM.md explains the editorial/publisher lifecycle; DESK-GUIDE.md defines metrics.
 The pre-refresh flow, including historical Node implementation details, is archived at
 docs/history/INBOUND-PRE-0060.md.
 
 ## All roads to one newsroom
+
+Sprint0073 adds Peer-to-Peer RSS and four explicit expert-query cohorts (financial freedom,
+security/open tools, Bitcoin conversation, monetary conditions/energy). These include useful
+replies, quotes and reposts, retaining parent dates/authors and missing-context warnings.
+New queries bootstrap only a small recent window and retain existing acknowledged cursors.
+Kobeissi is a guide attention signal without a Tier2 evidence upgrade. Perception's existing
+survey slots rotate broader reporting questions; no quota or source cadence increase.
+
+Separately, Writer-scheduled follow-ups supply up to2internal assignments on normal desk
+cadence even when external intake is empty. They use existing25slots, have no article date,
+and are counted apart from fetched/new source leads. They cannot accelerate the desk clock.
+Required previous-shift letters and hybrid memory provide continuity, not another news feed.
 
 ```text
 RSS + SEC EDGAR --------------------------+

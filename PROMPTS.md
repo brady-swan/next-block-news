@@ -1,6 +1,6 @@
 # Next Block News prompt inventory
 
-Current 2026-09-08, Plan 0070. This is an index, not a duplicated prompt snapshot.
+Current 2026-09-09, Sprint0073. This is an index, not a duplicated prompt snapshot.
 Live editorial orientation: prompts/orientation-brief-v2.md, body after its separator.
 The draft v3 brief and tuning examples are not loaded. The wire_voice charter is retained
 for legacy paths; its old "source of truth" heading does not make it current v2 authority.
@@ -20,6 +20,15 @@ The separate Codex rolling audit is an app automation governed by AUDIT-AUTONOMY
 prompt seat in the worker. Runtime values on Desk / System take priority over this dated table.
 
 ## What the writer receives
+
+The approved expanded audience is aligned across orientation, mailroom, preparation and
+Editor. nbn/writer_continuity.py supplies required next-shift-letter and scheduled-check
+instructions plus the follow_up_updates schema. The latest dated letter (with separately
+observed Editor/output outcomes) survives packet compaction. Scheduled assignments carry
+explicit internal-work metadata and original context, never a manufactured event date.
+Every completed session writes a useful letter; there is no minimum length, compulsory
+research call or new budget. Missing letters use at most the existing shared repair slot.
+Semantic memory is an optional context-finding aid, never a factual/identity authority.
 
 A fresh run-scoped context contains the orientation, run brief, stable candidate cards,
 assignment summaries, uninspected reference pointers, prepared inspected receipts, exact-event

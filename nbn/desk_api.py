@@ -110,6 +110,7 @@ POST_FIELDS = "p.id,p.created,p.body,p.mode,p.publisher_status,p.confirmed_at,p.
 
 
 def run_detail(con, row):
+    from . import writer_continuity
     run = dict(row)
     rid = run["run_id"]
     inventory = decode(run.get("inventory_json"), list)[:100]
@@ -197,6 +198,10 @@ def run_detail(con, row):
     usage = rows(con, "SELECT seat,model,effort,outcome,latency_ms,estimated_cost_usd,cost_source,created_at,native_web_calls,native_x_calls FROM model_usage WHERE run_id=? ORDER BY id LIMIT 100", (rid,))
     feedback = next((a for a in reversed(artifacts) if a["kind"] == "writer_feedback"), None)
     return {**header(run), "counters": counters, "packet": packet, "packet_recorded": bool(packet_obs),
+            "shift_letter": writer_continuity.handoff(con, rid),
+            "handoff_status": "provided" if con.execute("SELECT 1 FROM writer_handoffs WHERE run_id=?", (rid,)).fetchone()
+                else "incomplete" if packet_obs and "v2.35" in str(run.get("prompt_version")) else "not_recorded",
+            "followup_checks": writer_continuity.checks(con, rid),
             "writer_feedback": feedback_card(feedback),
             "packet_truncated": bool(packet_obs and packet_obs["truncated"]), "artifacts": artifacts,
             "captured": len(inventory) if inventory else None,
@@ -381,7 +386,10 @@ def snapshot(con, query, state, now=None):
     elif view == "outputs":
         result.update(outputs(con,opt))
     else:
+        from . import memory_search, writer_continuity
         result.update({"roster":roster(now),"costs":costs(con,now),"sources":source_health(con,now),
+                       "memory_retrieval":memory_search.health(con),
+                       "followups":writer_continuity.active(con),
                        "perception":perception.summary(con,now),
                        "writer_feedback": recent_feedback(con,opt["page"]),
                        "cadence_minutes":config.DESK_INTERVAL_SECONDS/60,
