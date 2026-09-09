@@ -1985,7 +1985,8 @@ class NewsroomSession:
                 )
             return self._fetch_failure(result)
         final_url = str(fetched.get("final_url") or url)
-        final_ref = source_policy.classify(final_url, intake.get("source", "") if intake else "")
+        # A referenced/redirected receipt may have a different author than its discovery tip.
+        final_ref = source_policy.classify(final_url)
         text = str(fetched["text"])
         fingerprint = source_policy.content_fingerprint(text)
         material = source_policy.normalize_url(final_url) + "\n" + fingerprint

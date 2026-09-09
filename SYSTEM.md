@@ -241,6 +241,10 @@ before text/link caps so long navigation menus cannot crowd out the story; ambig
 pages retain the existing whole-page fallback. Bitcoin Magazine's `.td-post-content` is included;
 an empty Mempool explorer title shell is failed material, not a citable receipt. This does not
 read video or unlock blocked pages.
+Fetched receipt identity comes from the final destination URL, not the discovery item's source
+label. Referenced posts and redirects cannot borrow the tip author's name. Known registry sources
+keep their names/tiers; unregistered destinations display their domain, with URL/byline alongside.
+Discovery context and candidate linkage remain separate. Historical saved receipts are not rewritten.
 Text-based PDF responses use local Poppler extraction in the same fetch route. At most the first
 20 pages are parsed, within 10 seconds and the caller's remaining deadline; parser inputs over
 10 MiB are rejected. The existing HTTP download happens before that parser-input check. Returned

@@ -206,6 +206,64 @@ class NewsroomContractTests(unittest.TestCase):
         self.assertIn("search_web", result["recommended_next_action"])
         self.assertIn(row["title"], result["suggested_search_query"])
 
+    def test_quoted_receipt_keeps_destination_identity_and_intake_provenance(self):
+        tip_url = "https://x.com/SenLummis/status/2097376695820976361"
+        quoted_url = "https://x.com/semafor/status/2097325338925650358"
+        row = candidate(source="X @SenLummis", url=tip_url, discovery_origin="x_guides")
+        original_row = dict(row)
+        with temporary_store() as con:
+            session = self.session(con, [row])
+            with patch.object(newsroom.sources, "fetch_article", return_value={
+                "outcome": "ok", "text": "Semafor reports senators' comments.",
+                "final_url": quoted_url, "byline": "https://x.com/semafor",
+            }) as fetch:
+                result = session._fetch(quoted_url, intake=row, adapter_provenance="desk_prefetch")
+                cached = session._fetch(quoted_url, intake=row)
+            artifact = con.execute("SELECT * FROM writer_artifacts").fetchone()
+            persisted = json.loads(artifact["payload_json"])
+            self.assertEqual(json.loads(artifact["candidate_ids_json"]), [row["url_hash"]])
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM writer_artifacts").fetchone()[0], 1)
+        fetch.assert_called_once()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source_name"], "x.com")
+        self.assertEqual(result["source_id"], "unknown")
+        self.assertEqual(result["tier"], "unknown")
+        self.assertFalse(result["official"])
+        self.assertEqual(result["byline"], "https://x.com/semafor")
+        self.assertEqual(result["final_url"], quoted_url)
+        self.assertEqual(result["adapter_provenance"], "desk_prefetch")
+        self.assertEqual(persisted["source_name"], result["source_name"])
+        self.assertEqual(persisted["adapter_provenance"], "desk_prefetch")
+        self.assertTrue(cached["cached"])
+        self.assertEqual(cached["fetch_id"], result["fetch_id"])
+        self.assertEqual(cached["source_name"], result["source_name"])
+        self.assertEqual(row, original_row)
+
+    def test_fetched_receipt_identity_comes_from_final_url_not_discovery_label(self):
+        sec_url = "https://www.sec.gov/newsroom/press-releases/bitcoin-1"
+        cases = [
+            (sec_url, "https://other-reporter.example/story", "SEC"),
+            ("https://tip.example/story", sec_url, "Unrelated discovery source"),
+            (sec_url, sec_url, "SEC"),
+            ("https://unknown-reporter.example/story", "https://unknown-reporter.example/story", "Friendly feed label"),
+        ]
+        for requested, final, discovery_source in cases:
+            with self.subTest(requested=requested, final=final), temporary_store() as con:
+                row = candidate(url=requested, source=discovery_source)
+                session = self.session(con, [row])
+                expected = source_policy.classify(final)
+                with patch.object(newsroom.sources, "fetch_article", return_value={
+                    "outcome": "ok", "text": "Captured source text.", "final_url": final,
+                    "redirect_chain": [requested, final],
+                }):
+                    result = session._fetch(requested, intake=row)
+                actual = session.fetches[result["fetch_id"]].source
+                self.assertEqual(actual, expected)
+                self.assertEqual(result["requested_url"], requested)
+                self.assertEqual(result["final_url"], final)
+                self.assertEqual(result["redirect_chain"], [requested, final])
+                self.assertEqual(result["adapter_provenance"], "rss")
+
     def draft_dossier(self, row):
         return {
             "items": [{"url_hash": row["url_hash"], "story_id": "story-1",
