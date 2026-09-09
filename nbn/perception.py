@@ -169,8 +169,13 @@ def parse_mcp(text, operation, args, now):
             row = article_row({"Title": match[1], "URL": match[2], "Outlet": match[3], "Date": match[4]}, now, args)
             if row:
                 rows.append(row)
-    if not rows and not re.search(r"(?i)(?:\*\*0(?:\*\*\s+|\s+)(?:mentions|results|documents)|no (?:mentions|results|articles|documents|matching))", body):
+    empty = re.search(r"(?im)(?:^\*\*0(?:\*\*\s+|\s+)(?:mentions|results|documents)|^No (?:matching )?(?:mentions|results|articles|documents)(?: found(?: for [^\n]+)?)?\.?\s*$)", body)
+    if operation == "regulatory":
+        empty = empty or re.search(r"(?m)^No regulatory documents found for this query and date range\.\s*$", body)
+    if not rows and not empty:
         raise ValueError("search_format_unknown")
+    if not rows and empty:
+        return {"rows": [], "total": 0, "partial": False}
     count = re.search(r"\*\*(\d+)\*\*(?: of \*\*(\d+)\*\*)? mentions", body)
     total = int(count[2] or count[1]) if count else None
     if operation == "regulatory":

@@ -65,16 +65,18 @@ def link(con, run_id, members, canonical_key, receipt_ids):
 
 def publication(con, key):
     from .desk import LIVE_POST
-    family = [key] + [r[0] for r in con.execute(
-        "SELECT alias_key FROM story_key_aliases WHERE canonical_key=?", (key,))]
+    family = store.story_key_family(con, key)
+    if not family:
+        return None
     where = "p.story_key IN (" + ",".join("?" for _ in family) + ") AND " + LIVE_POST
     where += " AND p.mode IN ('DRAFT','IMMEDIATE','UNCERTAIN') AND COALESCE(p.publisher_status,'') NOT IN ('deleted','inactive')"
-    fields = "p.id,p.mode,p.body,p.receipt_url,p.publisher_status,p.confirmed_at,p.created,p.public_url"
+    fields = "p.id,p.mode,p.body,p.receipt_url,p.publisher_status,p.confirmed_at,p.created,p.public_url,p.publisher_synced_at"
     row = con.execute("SELECT " + fields + " FROM posts p WHERE " + where +
                       " ORDER BY p.created DESC,p.id DESC LIMIT 1", family).fetchone()
     if not row:
         return None
     out = dict(row)
+    out["copy_provenance"] = "NBN local accepted-copy snapshot; later manual Typefully edits may differ."
     confirmed = con.execute("SELECT " + fields + " FROM posts p WHERE " + where +
         " AND p.publisher_status='published' AND p.confirmed_at IS NOT NULL"
         " ORDER BY p.confirmed_at DESC,p.id DESC LIMIT 1", family).fetchone()
@@ -83,6 +85,24 @@ def publication(con, key):
     out["duplicate_risk"] = bool(confirmed) or bool(con.execute("SELECT 1 FROM posts p WHERE " + where +
         " AND (p.mode IN ('IMMEDIATE','UNCERTAIN') OR p.publisher_status IN ('scheduled','publishing','published','planned')) LIMIT 1", family).fetchone())
     return out
+
+
+def matching_notebooks(con, keys, *, limit=8):
+    """Exact current/prep matches, independent of the full catalog's stable pagination."""
+    rows, seen = [], set()
+    for key in keys:
+        canonical = store.canonical_story_key(con, key)
+        if not canonical or canonical in seen:
+            continue
+        seen.add(canonical)
+        cards = store.newsroom_story_memories(con, key=canonical, limit=1)
+        if cards:
+            row = cards[0]
+            rows.append({"context_id": "notebook:" + canonical, "event_key": canonical,
+                         "state": row["state"], "at": row["updated_at"]})
+        if len(rows) >= limit:
+            break
+    return rows
 
 
 def catalog(con, *, query="", offset=0, now=None, limit=PAGE):
@@ -151,7 +171,7 @@ def intake(con, query, *, hours=72, offset=0):
     result = [dict(r) for r in con.execute("SELECT url_hash AS candidate_id,title,source,url,published_at,"
         "first_seen,status,note,story_key,summary FROM items WHERE " + where +
         " ORDER BY first_seen DESC,url_hash LIMIT 21 OFFSET ?", params + [offset])]
-    return {"rows": result[:20], "next_offset": offset + 20 if len(result) > 20 else None,
+    return {"rows": result[:20], "offset": offset, "next_offset": offset + 20 if len(result) > 20 else None,
             "hours": hours, "note": "Discovery and previous decisions, not inspected evidence; fetch the source."}
 
 

@@ -27,6 +27,8 @@ production overrides; conservative Anthropic defaults remain available for rollb
 Perception supplies bounded feed/subject discovery plus three optional Writer tools: coverage/entity
 search, regulatory search and dated article reading. REST/MCP share source artifacts but retain
 separate quota/cache accounting. See [PERCEPTION.md](PERCEPTION.md) for limits and provenance.
+Retained-text hints survive crowded desks; exact-match memory and accepted-copy context help
+the Writer compare prior coverage without another search. Retrieval limits remain unchanged.
 
 Plan 0066 adds optional image inspection and five sourced NBN graphic templates. Writer and
 editor inspect the exact stored pixels; approved media travels through resumable Typefully

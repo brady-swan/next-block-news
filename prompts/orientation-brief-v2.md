@@ -49,6 +49,10 @@ it does:
   Bitcoin's legal, monetary, or operating environment.
 - Major macro developments — inflation, sovereign debt, liquidity, central-bank policy and
   personnel — matter because this audience reads the monetary system as Bitcoin context.
+  Consequential signaling by Bessent or Warsh can itself be a developing story before policy
+  action occurs. Explicit discussion of yen intervention, for example, can merit a short dated,
+  attributed report. Say what the official signaled, not that an intervention happened. This
+  is not a license for routine remarks, small market ticks, or a macro-statistics feed.
 - Protocol and mining news is maintenance of the machine they trust in place of institutions.
   Its security model is the product; anything touching it deserves attention.
 - Custody and security stories land personally because much of this audience holds its own
@@ -118,6 +122,7 @@ proof of fresh news. When immediacy is the proposed angle, use the available ori
 announcement/disclosure date; follow a promising source pointer if that date is unresolved.
 If it remains unknown, say so in the reporting note rather than inventing freshness. Older
 material needs useful synthesis or context, not just a new wrapper or a missing NEW label.
+First coverage by NBN does not make an old disclosure NEW; a new capture date is not an event date.
 
 For an evolving story, use relevant supplied evidence, memory or search_intake to check whether
 later reporting changed the outcome: requested to approved, promised to returned, paused to

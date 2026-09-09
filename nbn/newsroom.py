@@ -35,7 +35,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.30-perception-reporting"
+PROMPT_VERSION = "editorial-core-v2.31-perception-adoption"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -1526,10 +1526,33 @@ class NewsroomSession:
             "verified_handle_directory": handle_directory,
         }
         if self.compact_enabled:
-            related_keys = {
-                str(value) for row in self.preparations.values()
-                for value in list(row.get("related_keys") or [])
-            }
+            related_keys = {store.canonical_story_key(self.con, str(value)) for value in
+                [row.get("story_key") for row in self.inventory] +
+                [value for row in self.preparations.values() for value in row.get("related_keys") or []]
+                if value}
+            matching_notebooks = writer_memory.matching_notebooks(self.con, sorted(related_keys))
+            accepted_matches = []
+            for kind, rows in packet["coverage_board"].items():
+                for index, row in enumerate(rows):
+                    context_id = _context_id("coverage", f"{kind}:{row['event_key']}:{index}")
+                    output = writer_memory.publication(self.con, row["event_key"])
+                    self.context_rows[context_id] = {"kind": "coverage", "output_state": kind,
+                        **copy.deepcopy(row), "accepted_output": output,
+                        "note": "Accepted local copy is distinct from Writer proposals; no output means no accepted copy found."}
+                    row["context_id"] = context_id
+                    if (output and store.canonical_story_key(self.con, row["event_key"]) in related_keys
+                            and len(accepted_matches) < 4):
+                        summary = {k: output.get(k) for k in ("id", "mode", "publisher_status",
+                            "created", "publisher_synced_at", "confirmed_at", "receipt_url", "copy_provenance")}
+                        body = str(output.get("body") or "")
+                        summary.update(event_key=row["event_key"], context_id=context_id,
+                                       body=body[:2000], body_truncated=len(body) > 2000)
+                        # A newer draft must not obscure an earlier confirmed publication.
+                        confirmed = output.get("confirmed_output")
+                        summary["confirmed_output"] = ({k: confirmed.get(k) for k in
+                            ("id", "confirmed_at", "public_url")} if confirmed else None)
+                        accepted_matches.append(summary)
+            packet["matching_accepted_output"] = accepted_matches
             recent_index, related_full = [], []
             related_full_bytes = 0
             for index, row in enumerate(recent_reader_feed):
@@ -1614,6 +1637,8 @@ class NewsroomSession:
                 catalog["rows"].pop()
                 catalog["next_offset"] = len(catalog["rows"])
             packet["memory_catalog"] = catalog
+            catalog["matching_notebooks"] = matching_notebooks
+            catalog["matching_note"] = "Exact current/prep event matches, separate from the stable catalog page; not new evidence."
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 # Receipt sidecars can cost more than the evidence text. Offload those
                 # first, before sacrificing candidate assignments or output continuity.
@@ -1678,6 +1703,7 @@ class NewsroomSession:
                         "research_retry": row.get("research_retry"),
                         "candidate_context_id": row["candidate_context_id"],
                         "identity_correction": row.get("identity_correction"),
+                        "available_perception_text": row.get("available_perception_text"),
                         "prior_item_state_untrusted_context": row.get("prior_item_state_untrusted_context"),
                         "visual_available": ({key: row["visual_available"][key]
                             for key in ("count", "tool", "purpose")}
@@ -1690,7 +1716,7 @@ class NewsroomSession:
                     compact_coverage[kind] = []
                     for index, row in enumerate(rows):
                         context_id = _context_id("coverage", f"{kind}:{row['event_key']}:{index}")
-                        self.context_rows[context_id] = {"kind": "coverage", "output_state": kind, **row}
+                        # Already contains the full local accepted copy, not just a lede.
                         compact_coverage[kind].append({
                             "event_key": row["event_key"], "context_id": context_id,
                             "post_leads": row["post_leads"][:1],
@@ -1704,6 +1730,9 @@ class NewsroomSession:
                 packet["storyline_board"] = list(self.storyline_cards)
                 packet["verified_handle_directory"] = relevant_handles[:4]
                 packet["retrievable_context_index"]["handles"] = handle_index[:6]
+                for row in accepted_matches:
+                    if len(row["body"]) > 1000:
+                        row["body"], row["body_truncated"] = row["body"][:1000], True
                 # Full storyline prose is optional context, not a reason to abandon
                 # every candidate. Keep its existing retrieval path before removing
                 # the notebook catalog or refusing an otherwise usable desk.
@@ -1718,9 +1747,6 @@ class NewsroomSession:
                         "title": card["title"], "lifecycle": card["lifecycle"],
                         "revision": card["revision"],
                     })
-                if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
-                    packet["memory_catalog"] = {**catalog, "rows": [], "next_offset": 0,
-                        "note": "Open search_memory(query='',offset=0) to see the complete catalog."}
             for excerpt_bytes in (2000, 1000, 500):
                 if _json_bytes(packet) <= config.COMPACT_DESK_INITIAL_BYTES:
                     break
@@ -1737,6 +1763,12 @@ class NewsroomSession:
                     "preparation contains no model judgment. Full candidate details "
                     "remain available via candidate_context_id."
                 )
+            # Excerpts and mechanical repetition shrink before the useful memory map.
+            # This is a prefix of the original stable page; matching pointers are separate.
+            while (_json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES
+                   and len(catalog["rows"]) > 2):
+                catalog["rows"].pop()
+                catalog["next_offset"] = catalog["offset"] + len(catalog["rows"])
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 from . import observations
                 observations.record(self.con, self.run_id, "writer_packet_overflow", {
@@ -1750,6 +1782,13 @@ class NewsroomSession:
             supplied_keys = {c["storyline_key"] for c in packet["storyline_board"]}
             self.storyline_read_keys.difference_update(initial_storyline_keys - supplied_keys)
             self.storyline_cards = list(packet["storyline_board"])
+            from . import observations
+            observations.record(self.con, self.run_id, "writer_desk_visibility", {
+                "candidates": len(packet["intake_board"]),
+                "perception_hints": sum(bool(r.get("available_perception_text")) for r in packet["intake_board"]),
+                "catalog_rows": len(catalog["rows"]), "matching_notebooks": len(matching_notebooks),
+                "accepted_copy_matches": len(accepted_matches), "bytes": _json_bytes(packet),
+            }, phase="assembled")
             return packet
         if _json_bytes(packet) <= config.RUN_NEWSROOM_MAX_INITIAL_BYTES:
             return packet
@@ -1820,7 +1859,12 @@ class NewsroomSession:
         history_limit = (config.COMPACT_DESK_HISTORY_BYTES if self.compact_enabled
                          else config.RUN_NEWSROOM_MAX_HISTORY_BYTES)
         from . import visuals
-        if _json_bytes(visuals.without_pixels(self.messages)) > history_limit:
+        history_bytes = _json_bytes(visuals.without_pixels(self.messages))
+        if history_bytes > history_limit:
+            observations.record(self.con, self.run_id, "writer_history_overflow", {
+                "bytes": history_bytes, "limit": history_limit,
+                "messages": [{"role": m.get("role"), "bytes": _json_bytes(visuals.without_pixels(m))}
+                             for m in self.messages]}, phase="before_request")
             raise NewsroomError("context_overflow", "newsroom message history exceeds bound")
         if visuals.image_bytes(self.messages) > visuals.MAX_IMAGE_CONTEXT:
             raise NewsroomError("image_context_overflow", "newsroom image context exceeds bound")
@@ -1864,7 +1908,9 @@ class NewsroomSession:
             self.rounds += 1
             called_at = time.monotonic()
             observations.record(self.con, self.run_id, "writer_call", {"model": config.NEWSROOM_MODEL,
-                                "effort": config.NEWSROOM_EFFORT, "round": self.rounds}, phase="started")
+                "effort": config.NEWSROOM_EFFORT, "round": self.rounds,
+                "history_bytes": history_bytes,
+                "last_tool_receipts_supplied": self._last_tool_receipts()}, phase="started")
             try:
                 response = self.client.messages.create(**kwargs)
             except Exception:
@@ -1934,6 +1980,35 @@ class NewsroomSession:
         return {"type": "tool_result", "tool_use_id": tool_id,
                 "content": json.dumps(value, separators=(",", ":"), ensure_ascii=False),
                 "is_error": error}
+
+    def _last_tool_receipts(self) -> list[dict]:
+        """Literal receipt bodies in the next request, not all eagerly restored memory.
+
+        Sectioned JSON is left unclassified; this records transport visibility, not attention.
+        Writer selections and Editor inputs remain in their existing separate observations.
+        """
+        content = self.messages[-1].get("content") if self.messages else None
+        found = {}
+        pending = []
+        for block in content if isinstance(content, list) else []:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                try:
+                    pending.append(json.loads(block.get("content") or "{}"))
+                except (ValueError, TypeError):
+                    pass
+        while pending:
+            row = pending.pop()
+            if isinstance(row, list):
+                pending.extend(row)
+            elif isinstance(row, dict):
+                fid = row.get("fetch_id")
+                if isinstance(fid, str) and fid in self.fetches and row.get("text"):
+                    record = self.fetches[fid]
+                    found[fid] = {"fetch_id": fid, "retrieval_kind": record.retrieval_kind,
+                        "published_at": record.published_at, "inspected_at": record.inspected_at,
+                        "text_characters": len(row["text"])}
+                pending.extend(v for v in row.values() if isinstance(v, (dict, list)))
+        return list(found.values())[:40]
 
     def _fetch_failure(self, result: dict) -> dict:
         kind = _clean_text(result.get("error_kind") or result.get("kind") or "unknown", 80)
@@ -2158,16 +2233,46 @@ class NewsroomSession:
         self.fetches[fid] = record  # Never put archival evidence in the fresh URL cache.
         return self._fetch_payload(record, cached=True)
 
+    def _context_envelope(self, payload: dict, *, charge=1) -> dict:
+        """Bound the whole tool payload, not only its rows. Remaining bytes are conservative."""
+        left = max(0, config.COMPACT_DESK_RETRIEVAL_TOTAL_BYTES - self.context_retrieval_bytes)
+        out = {**payload, "remaining": {
+            "calls": max(0, config.COMPACT_DESK_RETRIEVAL_CALLS - self.context_retrieval_calls - charge),
+            "rows_per_call": config.COMPACT_DESK_RETRIEVAL_ROWS,
+            "bytes_per_call": config.COMPACT_DESK_RETRIEVAL_BYTES, "bytes_total": left}}
+        reserved = 0
+        for _ in range(8):
+            size = _json_bytes(out)
+            if size <= reserved:
+                break
+            reserved = size
+            out["remaining"]["bytes_total"] = max(0, left - reserved)
+        return out
+
+    def _context_failure(self, kind="context_retrieval_capacity", **details) -> dict:
+        # Control-only errors do not consume the evidence allowance or another local read.
+        self.context_capacity_hits += int(kind.endswith("capacity"))
+        return {"ok": False, "kind": kind, **details, "remaining": {
+            "calls": max(0, config.COMPACT_DESK_RETRIEVAL_CALLS - self.context_retrieval_calls),
+            "rows_per_call": config.COMPACT_DESK_RETRIEVAL_ROWS,
+            "bytes_per_call": config.COMPACT_DESK_RETRIEVAL_BYTES,
+            "bytes_total": max(0, config.COMPACT_DESK_RETRIEVAL_TOTAL_BYTES - self.context_retrieval_bytes)}}
+
     def _context_result(self, payload: dict) -> dict:
         if self.context_retrieval_calls >= config.COMPACT_DESK_RETRIEVAL_CALLS:
-            return {"ok": False, "kind": "context_retrieval_capacity"}
+            return self._context_failure()
+        payload = copy.deepcopy(payload)
         left = min(config.COMPACT_DESK_RETRIEVAL_BYTES,
                    config.COMPACT_DESK_RETRIEVAL_TOTAL_BYTES - self.context_retrieval_bytes)
-        while _json_bytes(payload) > left and payload.get("rows"):
-            payload["rows"].pop()
+        omitted = []
+        while _json_bytes(self._context_envelope({**payload, "capacity_omitted_ids": omitted})) > left and payload.get("rows"):
+            row = payload["rows"].pop()
+            omitted.insert(0, row.get("context_id") or row.get("candidate_id"))
             payload["next_offset"] = int(payload.get("offset") or 0) + len(payload["rows"])
+        payload = self._context_envelope({**payload, "capacity_omitted_ids": omitted})
         if _json_bytes(payload) > left:
-            return {"ok": False, "kind": "context_retrieval_capacity"}
+            return self._context_failure(capacity_omitted_ids=omitted,
+                offset=payload.get("offset", 0), next_offset=payload.get("offset", 0))
         self.context_retrieval_calls += 1
         self.context_retrieval_bytes += _json_bytes(payload)
         return payload
@@ -2175,12 +2280,13 @@ class NewsroomSession:
     def _read_desk_context(self, context_ids: list[str]) -> dict:
         if not self.compact_enabled and not self.context_rows:
             return {"ok": False, "kind": "compact_context_disabled"}
-        if self.context_retrieval_calls >= config.COMPACT_DESK_RETRIEVAL_CALLS:
-            self.context_capacity_hits += 1
-            return {"ok": False, "kind": "context_retrieval_capacity"}
         requested = list(dict.fromkeys(str(value) for value in context_ids))
         if len(requested) > config.COMPACT_DESK_RETRIEVAL_ROWS:
-            return {"ok": False, "kind": "context_row_capacity"}
+            return self._context_failure("context_row_capacity")
+        already = [cid for cid in requested if cid in self.context_reads]
+        pending = [cid for cid in requested if cid not in self.context_reads]
+        if pending and self.context_retrieval_calls >= config.COMPACT_DESK_RETRIEVAL_CALLS:
+            return self._context_failure(capacity_omitted_ids=pending, already_read_ids=already)
         for cid in requested:
             if cid not in self.context_rows:
                 row = self._open_memory(cid)
@@ -2188,21 +2294,25 @@ class NewsroomSession:
                     self.context_rows[cid] = row
         unknown = [value for value in requested if value not in self.context_rows]
         if unknown:
-            return {"ok": False, "kind": "unknown_context_id", "ids": unknown[:8]}
+            return self._context_failure("unknown_context_id", ids=unknown[:8])
         rows = []
+        charge = int(bool(pending))
+        def envelope(proposed):
+            delivered = {row["context_id"] for row in proposed}
+            omitted = [cid for cid in pending if cid not in delivered]
+            return self._context_envelope({"ok": True, "rows": proposed,
+                "capacity_omitted_ids": omitted, "omitted_for_capacity": len(omitted),
+                "already_read_ids": already}, charge=charge)
         byte_limit = min(
             config.COMPACT_DESK_RETRIEVAL_BYTES,
             config.COMPACT_DESK_RETRIEVAL_TOTAL_BYTES - self.context_retrieval_bytes,
         )
         if byte_limit <= 0:
-            self.context_capacity_hits += 1
-            return {"ok": False, "kind": "context_retrieval_capacity"}
-        for context_id in requested:
-            if context_id in self.context_reads:
-                continue
+            return self._context_failure(capacity_omitted_ids=pending, already_read_ids=already)
+        for context_id in pending:
             row = {"context_id": context_id, **self.context_rows[context_id]}
             proposed = rows + [row]
-            if _json_bytes({"ok": True, "rows": proposed}) > byte_limit:
+            if _json_bytes(envelope(proposed)) > byte_limit:
                 self.context_capacity_hits += 1
                 if not rows and row.get("kind") == "x_lead":
                     row = {"context_id": context_id, "kind": "x_lead",
@@ -2210,9 +2320,8 @@ class NewsroomSession:
                            "material_preview": lead_material.compact_preview(
                                lead_material.preview(row["material"]))}
                     proposed = [row]
-                    if _json_bytes({"ok": True, "rows": proposed}) > byte_limit:
-                        return {"ok": False, "kind": "context_retrieval_capacity",
-                                "context_id": context_id}
+                    if _json_bytes(envelope(proposed)) > byte_limit:
+                        return self._context_failure(capacity_omitted_ids=pending, already_read_ids=already)
                 elif not rows:
                     # Explicit, stable sections avoid an unreadable oversized notebook.
                     encoded = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
@@ -2226,11 +2335,16 @@ class NewsroomSession:
                     row = {"context_id": context_id, "kind": row.get("kind"),
                            "section_ids": ids, "note": "Open needed parts; concatenated text is the original JSON record."}
                     proposed = [row]
-                    if _json_bytes({"ok": True, "rows": proposed}) > byte_limit:
-                        return {"ok": False, "kind": "context_retrieval_capacity"}
+                    if _json_bytes(envelope(proposed)) > byte_limit:
+                        return self._context_failure(capacity_omitted_ids=pending, already_read_ids=already)
                 else:
                     break
             rows = proposed
+        payload = envelope(rows)
+        if _json_bytes(payload) > byte_limit:
+            return self._context_failure(capacity_omitted_ids=pending, already_read_ids=already)
+        for row in rows:
+            context_id = row["context_id"]
             if row.get("kind") == "x_lead":
                 self.lead_context_reads += 1
                 self.lead_context_truncations += int(bool(row.get("truncated_for_capacity")))
@@ -2239,10 +2353,8 @@ class NewsroomSession:
                 key = str(self.context_rows[context_id].get("storyline_key") or "")
                 if key:
                     self.storyline_read_keys.add(key)
-        payload = {"ok": True, "rows": rows,
-                   "omitted_for_capacity": max(0, len(requested) - len(rows))}
         used = _json_bytes(payload)
-        self.context_retrieval_calls += 1
+        self.context_retrieval_calls += charge
         self.context_retrieval_bytes += used
         return payload
 
@@ -2760,7 +2872,7 @@ class NewsroomSession:
             return self._tool_result(block.id, result, error=not result["ok"])
         if name in {"search_memory", "search_intake"}:
             if self.context_retrieval_calls >= config.COMPACT_DESK_RETRIEVAL_CALLS:
-                return self._tool_result(block.id, {"ok": False, "kind": "context_retrieval_capacity"}, error=True)
+                return self._tool_result(block.id, self._context_failure(), error=True)
             if name == "search_memory":
                 result = writer_memory.catalog(self.con, query=value.get("query", ""), offset=value.get("offset", 0))
             else:

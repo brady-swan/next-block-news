@@ -1,7 +1,8 @@
 # Perception reporting integration
 
-Sprint0071 · September9,2026 · code/prompt `editorial-core-v2.30-perception-reporting`.
-Release status and production proof belong in SPRINT-0071-FINDINGS.md.
+Sprint0071 integration + Sprint0072 adoption · September9,2026.
+Code/prompt `editorial-core-v2.31-perception-adoption`.
+Release status and production proof belong in SPRINT-0072-FINDINGS.md.
 
 ## What the Writer gets
 
@@ -20,6 +21,21 @@ publisher. Web/X/direct fetching remain available; no compulsory extra research 
 Candidate cards point to available retained text. Full text stays out of the initial packet until
 read. Existing memory catalogs/notebooks/search remain the only reporting memory system. Current
 editor/output states stay in their existing live projections, not duplicated in source records.
+
+The availability hint survives dense-packet reconstruction: original URL, artifact ID, publication
+and capture dates, length and completeness remain on each applicable candidate. It means available,
+not already inspected. Optional excerpt/metadata repetition shrinks before the notebook map.
+The stable catalog page keeps honest continuation offsets; separate exact current/prep notebook
+matches can surface old relevant work beyond that first page. Matching accepted-output snippets
+and coverage context IDs open the full local accepted-copy snapshot, with draft/published states
+and separate creation/sync/confirmation clocks. Later manual Typefully edits may differ. Accepted
+copy, Writer proposals and source evidence are not interchangeable.
+
+The four local retrieval calls, eight rows/call,16KiB/response and48KiB total are unchanged. Full
+UTF-8 response envelopes count toward the byte allowance, including conservative remaining-budget
+metadata. Responses distinguish exact capacity-omitted IDs from already-read IDs; repeated-only
+reads do not consume another call. Control-only errors contain no evidence and are not charged to
+the evidence allowance. Large memory records retain explicit section IDs.
 
 ## Discovery and durability
 
@@ -42,6 +58,8 @@ Successful query caches live5minutes; legitimate empty results1minute. Errors ar
 as empty. Requests/cooldowns are durable; historical request records retain30days. Cache keys
 include contract, transport, operation and exact arguments. Source versions may be shared across
 interfaces, while different searches never masquerade as equivalent cached results.
+The recorded successful “No regulatory documents found” MCP response is a complete empty result
+(`rows=[]`, `total=0`, `partial=false`), cached for60seconds without setting failure cooldown.
 
 ## Quotas and routing
 
@@ -92,6 +110,14 @@ replayed fixtures as organic uptake. Current limitations include incomplete bodi
 search output, unknown account balance and best-effort pagination.
 Article image URLs are retained as metadata, but are not yet promoted into the existing visual
 inspection candidate catalog. No claim that Perception images were inspected or attached.
+
+`writer_desk_visibility` records compact assembly counts. Each `writer_call` records history bytes
+and literal receipt IDs/bodies supplied by the last tool result; sectioned JSON remains unclassified.
+These are transport/visibility facts, not proof of attention or usefulness. Compare `writer_result`
+selections with actual `editor_input` and Editor decisions. Eagerly restored `fetches` alone do not
+prove the Writer received those bodies. Overflow diagnostics record message sizes without increasing
+the history allowance. Native X/direct links, Perception and memory are alternatives chosen for
+the missing fact; there is no mandatory tool sequence or extra grading model.
 
 References: [API reference](https://perception.to/api/reference),
 [MCP reference](https://perception.to/docs/mcp). Live contract fixtures are under tests/fixtures.

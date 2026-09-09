@@ -13,7 +13,7 @@ import anthropic
 from . import brain, config, guide_context, source_policy, store, models, lead_material
 
 log = logging.getLogger("nbn.desk_prep")
-PROMPT_VERSION = "assignment-desk-v2.6-related-outcomes"
+PROMPT_VERSION = "assignment-desk-v2.7-monetary-signaling"
 ROUTES = {"advance", "background"}
 
 SYSTEM = """You prepare the assignment desk for Next Block News, an automated Bitcoin wire.
@@ -32,8 +32,9 @@ post. ADVANCE useful follow-up evidence (for example, detention approved after i
 and group it with the same event using event_group/related_keys. Do not discard a useful original
 or changed outcome just because a social tip or open draft already covers part of the event.
 A consequential named statement or concrete proposal can itself be a development, even before
-policy changes. Do not dismiss it as mere opinion if it materially advances a Bitcoin-relevant
-story. Distinguish the statement/proposal from enacted policy in the research objective.
+policy changes. This includes consequential monetary signaling by Bessent or Warsh (for example,
+explicit yen-intervention remarks), not just completed action. Preserve attribution and the
+statement's date; distinguish signaling/proposals from enacted policy in the research objective.
 Useful factual Bitcoin data need not set a record. Material monetary/inflation news need not
 prove an immediate Bitcoin flow; routine macro ticks and trading advice remain background.
 

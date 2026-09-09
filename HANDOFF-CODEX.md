@@ -1,6 +1,6 @@
 # Next Block News - current handoff
 
-Updated 2026-09-09 for the completed Sprint0071 Perception integration. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Updated 2026-09-09 for Sprint0072 Perception adoption. Start here, then read SYSTEM.md and DOCUMENTATION.md. Release status is in SPRINT-0072-FINDINGS.md.
 This replaces the accumulated launch-era handoff; its unmodified body is archived at
 docs/history/HANDOFF-PRE-0060.md. Historical instructions there are not current authority.
 
@@ -238,7 +238,12 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
-Current runtime **ad864ff / editorial-core-v2.30-perception-reporting** is live on Railway
+Sprint0072 candidate **editorial-core-v2.31-perception-adoption** has independent code approval;
+deployment verification is pending in SPRINT-0072-FINDINGS.md. It preserves research budgets,
+retained-text hints, exact accepted-copy context and honest empty/capacity results. No new model
+or publishing rule. The audit now has its own NBN Audit task; see audit/audit-lane-handoff-2026-09-09.md.
+
+Previous runtime **ad864ff / editorial-core-v2.30-perception-reporting** was verified on Railway
 **fd4f02bb-3b24-4e79-82ac-5983e495dd6c** (SUCCESS). Independent review approved;652clean-release
 tests,49browser checks and live provider/cache/health/Desk smoke passed. See
 PERCEPTION.md for current tools/storage/quota semantics and SPRINT-0071-FINDINGS.md for the

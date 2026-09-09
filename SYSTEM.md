@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current code description: 2026-09-09, Plan 0071 Perception reporting integration. Deployment proof/status: SPRINT-0071-FINDINGS.md.*
+*Current code description: 2026-09-09, Plan 0072 Perception adoption and Writer desk usability. Deployment proof/status: SPRINT-0072-FINDINGS.md.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
@@ -40,6 +40,16 @@ remaining allowance. Shared account remaining is unknown. Node configuration is 
 Known backoff, partial coverage and source reuse are visible in System; actual research appears
 in each run. Writer response/time/tool/context budgets and autopostOFF are unchanged.
 See PERCEPTION.md for contracts, limitations and feature-disable rollback.
+
+Plan0072 preserves retained-text hints through crowded packet compaction, keeps a bounded memory
+map with separate exact-event matches, and makes coverage expansion return full local accepted
+copy rather than another lede. Current draft and confirmed output stay separate; local accepted
+copy is not guaranteed to reflect later manual Typefully edits. Context tools report remaining
+capacity, exact omissions and already-read IDs within unchanged limits. Successful empty regulatory
+searches are cached empties, not failures. Observations distinguish available, tool-supplied,
+Writer-selected and Editor-delivered evidence; visibility is not proof of editorial use.
+Gap-driven tool guidance and the owner-approved Bessent/Warsh signaling clarification add no new
+research ritual, model seat, quota, publication gate or routine macro beat.
 
 ### Reporting execution — Plan 0068
 
