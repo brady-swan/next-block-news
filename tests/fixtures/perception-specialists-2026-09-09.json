@@ -1,0 +1,24 @@
+[
+  {
+    "name": "perception_search_regulatory",
+    "arguments": {
+      "q": "bitcoin",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-09",
+      "limit": 5
+    },
+    "status": 200,
+    "body": "event: message\ndata: {\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"## Regulatory Intelligence: \\\"bitcoin\\\"\\n\\n**1 document** found | Stance: 0% supportive, 100% neutral, 0% restrictive\\n\\n**Active agencies:** CFTC (1)\\n\\n### Documents\\n\\n**[Remarks at George Washington University](https://www.cftc.gov/PressRoom/SpeechesTestimony/opagunewardena1)**\\nCFTC · Sep 3, 2026\\n> Good Morning, Bom dia, Tudu bem.It is a great pleasure to join you for the fourth edition of Regulation Week, jointly organized by the Fundação Getulio Vargas Center for Law and Regulation in Rio de Janeiro and the George Washington University Regulatory Studies Center here in Washington, D.C.For th...\\n\\n\\n---\\n**Suggested next steps:**\\n- See how media is covering \\\"bitcoin\\\" beyond regulatory sources\\n- Compare US vs EU regulatory activity\\n- Check enforcement actions (restrictive stance)\\n\\n---\\n*Regulatory data from [Perception](https://perception.to) — 36 agencies, full document text including PDFs.*\"}]},\"jsonrpc\":\"2.0\",\"id\":\"54aa55b1-90f2-416b-8ec5-7489ae0f4d8d\"}\n\n"
+  },
+  {
+    "name": "perception_search_companies",
+    "arguments": {
+      "company": "Block",
+      "startDate": "2026-09-08",
+      "endDate": "2026-09-09",
+      "limit": 5
+    },
+    "status": 200,
+    "body": "event: message\ndata: {\"result\":{\"_meta\":{\"perception/widget\":{\"widget\":\"company_sentiment\",\"company\":\"Block\",\"period\":{\"start\":\"2026-09-08\",\"end\":\"2026-09-09\"},\"total_mentions\":2,\"sentiment\":{\"positive\":2,\"negative\":0,\"neutral\":0,\"positive_pct\":100,\"negative_pct\":0},\"top_outlets\":[{\"name\":\"The Block\",\"count\":1},{\"name\":\"Bloomberg\",\"count\":1}],\"recent\":[{\"title\":\"Jack Dorsey’s Block joins rush for federal bank charters from OCC\",\"outlet\":\"The Block\",\"sentiment\":\"Positive\"},{\"title\":\"Dorsey’s Block Joins Crypto-Bank Race With National Trust Bid\",\"outlet\":\"Bloomberg\",\"sentiment\":\"Positive\"}],\"link\":\"https://perception.to\"}},\"content\":[{\"type\":\"text\",\"text\":\"## Block\\n\\n**2** mentions\\n\\n**Sentiment** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 100% pos · 0% neg\\n\\n**Top sources**\\n`████████████` **The Block** 1\\n`████████████` **Bloomberg** 1\\n| # | Title | Source | Date | Sentiment |\\n|---|-------|--------|------|-----------|\\n| 1 | [Jack Dorsey’s Block joins rush for federal bank charters fro...](https://www.theblock.co/news/regulation/2026-09-08-jack-dorsey-block-joins-rush-federal-bank-charters-from-occ-413947) | The Block | Sep 8 | Positive |\\n| 2 | [Dorsey’s Block Joins Crypto-Bank Race With National Trust Bi...](https://www.bloomberg.com/news/articles/2026-09-08/dorsey-s-block-joins-crypto-bank-race-with-national-trust-bid) | Bloomberg | Sep 8 | Positive |\\n\\n**Try next:**\\n- See if this company's coverage aligns with broader narrative trends → `perception_get_trends(hours=168)`\\n- Check overall market sentiment for context → `perception_get_sentiment(startDate=\\\"2026-09-08\\\", endDate=\\\"2026-09-09\\\")`\\n- Search for specific topic coverage involving Block → `perception_search_mentions(q=\\\"Block\\\", startDate=\\\"2026-09-08\\\", endDate=\\\"2026-09-09\\\")`\\n\\n---\\n*Data: [Perception](https://perception.to)* · [Prompt Library](https://perception.to/prompts)\"}]},\"jsonrpc\":\"2.0\",\"id\":\"f9a0c310-3232-4c82-97b1-80e8d704e468\"}\n\n"
+  }
+]

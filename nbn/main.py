@@ -1177,8 +1177,8 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     writer_memory.prune(con)
     rss_items = sources.fetch_feeds(con)
     edgar_items = sources.fetch_edgar(con)
-    perception_items = sources.fetch_perception(con)
     x_items = sources.fetch_x(con)
+    perception_items = sources.fetch_perception(con)
     item_groups = (
         ("rss", rss_items),
         ("edgar", edgar_items),
@@ -1196,6 +1196,7 @@ def _cycle_locked(con, lease_owner: str) -> dict:
     # between these commits replays idempotent upserts instead of losing news.
     sources.acknowledge(con, rss_items)
     sources.acknowledge(con, x_items)
+    sources.acknowledge(con, perception_items)
     mailroom = intake_triage.route_cycle(con, inserted, run_id=pipeline_run_id)
     mailroom_reservation = mailroom.pop("reservation", None)
     if config.EDITORIAL_ENGINE == "v2" and config.RUN_NEWSROOM_MODE == "live":

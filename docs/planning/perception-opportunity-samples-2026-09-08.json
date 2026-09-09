@@ -1,0 +1,125 @@
+{
+  "date_utc": "2026-09-09",
+  "scope": "New read-only opportunity probes after owner's request to push beyond the first plan. Not publication recommendations or a coverage benchmark.",
+  "probes": [
+    {
+      "tool": "perception_search_mentions",
+      "arguments": {
+        "subject_ids": [
+          "self-custody",
+          "merchant-payments",
+          "mining-pools"
+        ],
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "limit": 12
+      },
+      "at": "2026-09-09T02:25:28.625048+00:00",
+      "status": 200,
+      "seconds": 1.666,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "59",
+        "ratelimit-reset": "60"
+      },
+      "text_characters": 3527,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://investor.galaxy.com/news-releases/news-release-details/galaxy-provides-update-ercot-batch-zero-large-load",
+        "https://x.com/bitcoinwell/status/2097402280723013724",
+        "https://www.reddit.com/r/Bitcoin/comments/1waxx2c/everyone_asking_how_to_get_rich_off_bitcoin_needs/",
+        "https://newsletter.blockwareintelligence.com/p/what-bitcoins-bottom-formation-means",
+        "https://x.com/bitcoinwell/status/2097354456375378250",
+        "https://x.com/bitcoinwell/status/2097354085012013523",
+        "https://cryptoslate.com/paolo-ardoino-wants-ai-agents-to-hold-tether-but-developers-are-left-on-the-hook-for-overspending/",
+        "https://www.youtube.com/watch?v=MiiqkcqnbXY",
+        "https://www.youtube.com/watch?v=ZGHf3umDUxg",
+        "https://www.youtube.com/watch?v=ivY_Hrju228",
+        "https://stablecoininsider.org/stablecoin-savings-accounts-2026-2027/",
+        "https://www.youtube.com/watch?v=T15uZD_6dJs"
+      ],
+      "matches": [
+        "**12** of **19** mentions · Sep 8–Sep 8"
+      ]
+    },
+    {
+      "tool": "perception_search_voices",
+      "arguments": {
+        "query": "CLARITY"
+      },
+      "at": "2026-09-09T02:25:33.827795+00:00",
+      "status": 200,
+      "seconds": 5.203,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "58",
+        "ratelimit-reset": "59"
+      },
+      "text_characters": 22958,
+      "structured_content_present": false,
+      "source_urls": [],
+      "matches": [
+        "### Earnings Transcripts Matches (92)",
+        "### Conferences & Podcasts Matches (0)"
+      ]
+    },
+    {
+      "tool": "perception_search_companies",
+      "arguments": {
+        "company": "Block",
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "limit": 8
+      },
+      "at": "2026-09-09T02:25:34.797848+00:00",
+      "status": 200,
+      "seconds": 0.97,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "57",
+        "ratelimit-reset": "54"
+      },
+      "text_characters": 1166,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://www.theblock.co/news/regulation/2026-09-08-jack-dorsey-block-joins-rush-federal-bank-charters-from-occ-413947",
+        "https://www.bloomberg.com/news/articles/2026-09-08/dorsey-s-block-joins-crypto-bank-race-with-national-trust-bid"
+      ],
+      "matches": [
+        "**2** mentions"
+      ]
+    },
+    {
+      "tool": "perception_search_voices",
+      "arguments": {
+        "query": "CLARITY Act"
+      },
+      "at": "2026-09-09T02:26:07.304736+00:00",
+      "status": 200,
+      "seconds": 4.804,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "56",
+        "ratelimit-reset": "25"
+      },
+      "text_characters": 18515,
+      "structured_content_present": false,
+      "source_urls": [],
+      "matches": [
+        "### Earnings Transcripts Matches (24)",
+        "### Conferences & Podcasts Matches (0)"
+      ]
+    }
+  ],
+  "observations": [
+    "No-keyword subject search (self-custody, merchant-payments, mining-pools) found 19 mentions and returned 12: original company IR, X accounts, conference/podcast links and substantial off-remit material. Selection remains necessary; no missed-post claim.",
+    "Block entity search found two relevant company news items, from Bloomberg and The Block, in 0.970 seconds. They concern an already-covered NBN storyline, not a newly established miss.",
+    "Generic CLARITY voice query matched 92 earnings records; exact CLARITY Act narrowed that to 24. Both returned zero conference/podcast matches, and neither returned non-Perception source URLs in the observed text.",
+    "Generic voice output was 22,958 characters; exact phrase output was 18,515. Better queries help but date/speaker/source-type/output-size controls would improve writer ergonomics.",
+    "All four probes returned HTTP200. This does not establish completeness, correct event dates, or all-day availability."
+  ]
+}

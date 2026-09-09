@@ -24,6 +24,10 @@ native web/X research in its writing context, with six responses / six minutes a
 reporting memory. Optional writer self-reports appear in Desk, for human review only. These are explicit per-seat
 production overrides; conservative Anthropic defaults remain available for rollback.
 
+Perception supplies bounded feed/subject discovery plus three optional Writer tools: coverage/entity
+search, regulatory search and dated article reading. REST/MCP share source artifacts but retain
+separate quota/cache accounting. See [PERCEPTION.md](PERCEPTION.md) for limits and provenance.
+
 Plan 0066 adds optional image inspection and five sourced NBN graphic templates. Writer and
 editor inspect the exact stored pixels; approved media travels through resumable Typefully
 delivery. The Desk's Visuals tab supports queued selection, omission and layout review.

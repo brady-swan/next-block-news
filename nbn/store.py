@@ -196,6 +196,18 @@ CREATE TABLE IF NOT EXISTS writer_artifacts (
 );
 CREATE INDEX IF NOT EXISTS idx_writer_artifacts_time ON writer_artifacts(expires_at,created_at);
 CREATE INDEX IF NOT EXISTS idx_writer_artifacts_run ON writer_artifacts(run_id);
+CREATE TABLE IF NOT EXISTS perception_requests (
+  request_id TEXT PRIMARY KEY, surface TEXT NOT NULL, operation TEXT NOT NULL,
+  purpose TEXT NOT NULL, started_at REAL NOT NULL, completed_at REAL,
+  status TEXT NOT NULL, http_status INTEGER, elapsed_ms INTEGER,
+  quota_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_perception_requests_time ON perception_requests(started_at);
+CREATE TABLE IF NOT EXISTS perception_cache (
+  cache_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, expires_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_perception_source_url ON writer_artifacts(
+  json_extract(payload_json,'$.canonical_url'),created_at) WHERE kind='receipt';
 CREATE TABLE IF NOT EXISTS newsroom_runs (
   run_id TEXT PRIMARY KEY,
   status TEXT NOT NULL,
@@ -1877,6 +1889,11 @@ def connect() -> sqlite3.Connection:
 
 def upsert_new_items(con, items) -> list:
     """Insert unseen items; return the newly inserted subset."""
+    with con:
+        return _upsert_new_items(con, items)
+
+
+def _upsert_new_items(con, items) -> list:
     fresh = []
     for it in items:
         key = canonical_discovery_key(it["url"])
@@ -1887,6 +1904,9 @@ def upsert_new_items(con, items) -> list:
         ).fetchone()
         material = lead_material.parse(it.get("source_material"))
         if existing:
+            if it.get("_perception_article"):
+                from . import perception
+                perception.save_article(con, it["_perception_article"], existing["url_hash"])
             prior = lead_material.parse(existing["source_material"])
             # A later post may point to the same article. Never relabel its author/text
             # as the earlier post. Node/RSS-first records can attach a separate X tip.
@@ -1917,13 +1937,15 @@ def upsert_new_items(con, items) -> list:
              candidate_id, lead_material.encode(material) if material else ""),
         )
         if cur.rowcount:
+            if it.get("_perception_article"):
+                from . import perception
+                perception.save_article(con, it["_perception_article"], h)
             if it.get("_bootstrap_background"):
                 con.execute("UPDATE items SET status='skipped',decision_stage='intake',"
                             "decision_category='bootstrap_background',note=? WHERE url_hash=?",
                             ("Pilot feed initialization: older archive entry, not a new arrival", h))
             else:
                 fresh.append({**it, "url_hash": h})
-    con.commit()
     return fresh
 
 

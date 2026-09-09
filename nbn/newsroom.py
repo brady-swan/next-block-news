@@ -19,6 +19,7 @@ import anthropic
 from . import (
     brain,
     config,
+    perception,
     desk_prep,
     guide_context,
     lead_material,
@@ -34,7 +35,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.29-visual-evidence"
+PROMPT_VERSION = "editorial-core-v2.30-perception-reporting"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -92,6 +93,8 @@ class FetchRecord:
 
     @property
     def evidence_capability(self) -> str:
+        if self.retrieval_kind == "provider_captured_text":
+            return "provider_captured_text"
         if self.retrieval_kind != "direct_fetch":
             return "provider_reported_extract"
         if self.source.trusted_own_research:
@@ -122,6 +125,8 @@ class FetchRecord:
 
 
 def _record_originality(record: FetchRecord) -> str:
+    if record.retrieval_kind == "provider_captured_text":
+        return "provider_captured_text"
     if record.retrieval_kind != "direct_fetch":
         return "provider_reported_extract"
     if record.source.official:
@@ -282,6 +287,14 @@ HOW TO WORK
 - Before searching, inspect a promising supplied receipt, same-event companion, reusable evidence,
   or prior-search pointer when it appears likely to answer the question. Search fills a real gap;
   it is not a ritual every candidate must pass.
+- Perception is an optional industry reporting resource: perception_coverage finds coverage or
+  recognized companies; perception_regulatory finds policy/agency material; perception_article
+  reads retained or newly retrieved text. Follow promising pointers toward original sources.
+  Coverage rows are not receipts. An article read returns a dated provider-captured receipt,
+  which may only be a summary; inspect what it actually supports. Cached material is not a new
+  development or independent second publisher. Refresh when the date or missing detail matters,
+  or use your existing web/X/direct fetch tools. Stop once the useful story is adequately supported.
+  Perception failures are resource limitations, not editorial reasons to abandon a story.
 - When calling search_web, include the candidate_ids the query is researching. That lets useful
   result pointers return with those exact candidates in a later fresh newsroom session.
 - Routine prepared stories may already have a safely inspected receipt. Finish in one response
@@ -1425,6 +1438,7 @@ class NewsroomSession:
                 "owner_override": item.get("_owner_reconsider") or None,
                 "research_retry": bool(item.get("_research_retry")),
                 "identity_correction": writer_memory.latest_identity_failure(self.con, [candidate_id]),
+                "available_perception_text": perception.candidate_hint(self.con, item.get("url", "")),
                 "haiku_preparation": ({
                     key: self.preparations[candidate_id].get(key)
                     for key in ("event_summary", "bitcoin_relevance", "freshness_note",
@@ -2695,7 +2709,7 @@ class NewsroomSession:
             returned = {"unavailable": "non-JSON tool return"}
         observations.record(self.con, self.run_id, "tool", {**assignment, "returned": returned},
                             ref=block.id, phase="failed" if result.get("is_error") else "completed")
-        if block.name in {"fetch_intake_item", "fetch_source", "search_web", "record_sources"}:
+        if block.name in {"fetch_intake_item", "fetch_source", "search_web", "record_sources"} | perception.WRITER_TOOL_NAMES:
             candidates = block.input.get("candidate_ids") or [block.input.get("candidate_id")]
             writer_memory.save(self.con, self.run_id, block.id, "research_step",
                 {"tool": block.name, "arguments": block.input, "returned": returned},
@@ -2715,6 +2729,7 @@ class NewsroomSession:
         allowed = {"fetch_intake_item", "search_web", "fetch_source", "finish_research",
                    "read_desk_context", "search_memory", "search_intake", "record_sources",
                    "list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"}
+        allowed |= perception.WRITER_TOOL_NAMES
         if allow_assignment:
             allowed.add("assign_haiku_research")
             allowed.add("assign_research")
@@ -2724,6 +2739,12 @@ class NewsroomSession:
             if self.tool_calls >= config.RUN_NEWSROOM_MAX_TOOL_CALLS:
                 return self._tool_result(block.id, {"ok": False, "kind": "tool_capacity"}, error=True)
             self.tool_calls += 1
+        if name in perception.WRITER_TOOL_NAMES:
+            try:
+                result = perception.writer_call(self, name, value)
+            except (ValueError, TypeError, KeyError) as exc:
+                result = {"ok": False, "kind": "invalid_perception_request", "detail": str(exc)[:120]}
+            return self._tool_result(block.id, result, error=not result.get("ok"))
         if name in {"list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"}:
             from . import visual_tools
             return visual_tools.dispatch(self, block)
@@ -2805,6 +2826,8 @@ class NewsroomSession:
         if self.compact_enabled or self.context_rows:
             research_tools.insert(-1, READ_DESK_CONTEXT_TOOL)
         research_tools.extend(reporter.TOOLS)
+        if config.PERCEPTION_TOOLS_ENABLED and config.PERCEPTION_API_KEY:
+            research_tools.extend(perception.writer_tools())
         from . import visual_tools
         research_tools.extend(visual_tools.TOOLS)
         if self.research_mode == "on" and not self.reporter_enabled:
@@ -2918,7 +2941,7 @@ class NewsroomSession:
                 if block.name not in {"fetch_intake_item", "search_web", "fetch_source",
                                       "read_desk_context", "assign_haiku_research", "assign_research",
                                       "record_sources", "search_memory", "search_intake",
-                                      "list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"}:
+                                      "list_visuals", "inspect_visual", "render_visual", "inspect_pdf_page"} | perception.WRITER_TOOL_NAMES:
                     raise NewsroomError("invalid_tool", f"unexpected v2 tool {block.name}")
                 signature = json.dumps([block.name, block.input], sort_keys=True,
                                        separators=(",", ":"))

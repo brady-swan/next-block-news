@@ -2015,6 +2015,32 @@ function Support({
               </article>
             ))}
           </section>
+          {data.perception && (
+            <section className="system-section">
+              <h2>Perception reporting</h2>
+              <p className="meta-copy">One reporting interface · separate REST and MCP capacity.
+                New research allowance: {data.perception.daily_new_work_limit}/day,
+                including up to {data.perception.survey_daily_limit} subject surveys.</p>
+              <div className="health-grid">
+                {["rest", "mcp"].map((surface) => (
+                  <article className="dependency" key={surface}>
+                    <strong>{surface.toUpperCase()} today (UTC)</strong>
+                    <span>{data.perception.today.filter((r: Row) => r.surface === surface)
+                      .reduce((n: number, r: Row) => n + r.attempts, 0)} recorded NBN attempts</span>
+                  </article>
+                ))}
+              </div>
+              <p className="meta-copy">Last feed: {clock(data.perception.feed.last_success, true)} ·
+                {!data.perception.feed.last_success ? " Not observed" : data.perception.feed.partial ? " Partial coverage / backlog" : " Last window caught up"} ·
+                Next backlog page: {data.perception.feed.next_page || "None recorded"}.</p>
+              <Note>{data.perception.quota_scope}. Search results are pointers; article text may be partial.
+                Shared source reuse does not refresh the original publication date.</Note>
+              <p className="meta-copy">Reuse since release: {data.perception.reuse_since_release.query_cache_hits || 0} query-cache hits ·
+                {" "}{data.perception.reuse_since_release.retained_article_reads || 0} retained-article reads.
+                These avoid provider retrieval, not the Writer's reading cost.</p>
+              <Json label="Recent Perception requests and backoff" value={data.perception} />
+            </section>
+          )}
           <section className="system-section">
             <h2>Recent model calls</h2>
             <p className="meta-copy">

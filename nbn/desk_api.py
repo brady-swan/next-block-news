@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from urllib.parse import urlencode
 
-from . import config, desk, observations, store
+from . import config, desk, observations, store, perception
 
 LIVE_RUN = "mode='live' AND run_id LIKE 'cycle:%'"
 HEADER = "run_id,status,mode,model,prompt_version,created_at,updated_at,completed_at,error_kind"
@@ -382,6 +382,7 @@ def snapshot(con, query, state, now=None):
         result.update(outputs(con,opt))
     else:
         result.update({"roster":roster(now),"costs":costs(con,now),"sources":source_health(con,now),
+                       "perception":perception.summary(con,now),
                        "writer_feedback": recent_feedback(con,opt["page"]),
                        "cadence_minutes":config.DESK_INTERVAL_SECONDS/60,
                        "recent_calls":rows(con,"SELECT seat,model,effort,outcome,created_at,latency_ms,estimated_cost_usd,cost_source FROM model_usage ORDER BY created_at DESC LIMIT 20"),

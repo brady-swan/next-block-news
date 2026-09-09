@@ -238,6 +238,11 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
+Sprint0071 Perception integration supersedes the implementation description below. See
+PERCEPTION.md for current tools/storage/quota semantics and SPRINT-0071-FINDINGS.md for the
+release status, reviewed commit and production smoke. The dated older release evidence below
+is history, not instructions to redeploy it. Models, Writer budgets and autopostOFF are unchanged.
+
 Current runtime **ccea9a0 / editorial-core-v2.29-visual-evidence** is live on Railway
 **451d51c7-c9c9-4ef8-8ab8-32b07b96200e** (SUCCESS). All five visual correctness priorities and
 approved style changes are implemented, along with the separately reviewed appendix-reference

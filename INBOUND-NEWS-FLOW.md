@@ -39,7 +39,8 @@ of preparation, research, writing or editing.
 | SEC EDGAR | Every worker cycle; up to 25 Bitcoin-bearing 8-K hits | Query covers today/yesterday, not all filing types |
 | X recent search | 180-second throttle; up to three 25-post pages/query/poll | Durable continuation; since_id advances only after storage and full window drain; initial lookback six hours |
 | X public-list membership | 3,600 seconds | The list supplies accounts, not a polled timeline |
-| Direct Perception | 900-second throttle; up to 50 results | Broad Bitcoin discovery, yesterday/today |
+| Direct Perception | 900-second acknowledged poll; one page | Broad Bitcoin discovery; alternates newest page and frozen-window backlog |
+| Perception subject survey | Up to 8 slots/day, one attempt per slot | Custody, mining, payments and policy source pointers; normal preparation decides relevance |
 | Node wire API | Persisted 300-second throttle | Each valid run consumed once, including empty runs |
 | Fresh Morning EIC cited reads | Weekdays 14:40 UTC | One-hour catch-up; current date/window/provenance required |
 | Fresh Afternoon EIC cited reads | Weekdays 21:15 UTC | Same freshness checks; not a scheduled thread |
@@ -101,10 +102,15 @@ acknowledged after upsert, so an interruption replays instead of losing returned
 query leaves others running; a shared 429 stops further requests. Three-page overflow continues
 next poll, rather than jumping past unread posts. Existing `x_since_` keys seed the new cursor.
 
-Direct Perception queries the Bitcoin feed separately from the Node. Shared credentials
-do not imply free usage or shared NBN caching; provider overlap remains a measurement issue.
-The separate REST quota pool is currently exhausted. Perception changes are deferred by the owner;
-this release does not change its configuration or attempt to substitute another quota pool.
+Direct Perception queries the Bitcoin feed separately from the Node. The approved integration
+retains dated source bodies on new and duplicate arrivals without reopening skipped stories.
+Items and articles are committed before page progress is acknowledged. Offset pagination is
+best-effort; partial/truncated coverage and backlog remain visible. The Writer can search the
+industry corpus, find regulatory originals, or read retained/retrieved text through one interface.
+REST and MCP have separate provider quotas; shared evidence avoids duplicate article retrieval.
+New research uses at most24attempts/day (including up to8survey attempts), with at most4REST
+research attempts. This is NBN-local accounting, not account-wide remaining capacity or a promise
+of free calls. Marketing Node configuration is unchanged. See PERCEPTION.md for exact behavior.
 
 ## Marketing Node boundary
 

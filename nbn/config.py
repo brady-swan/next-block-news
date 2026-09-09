@@ -277,6 +277,9 @@ BRIEFING_SCHEDULE = [
 # so /feed polling in either service consumes the same account budget. Activates when set.
 PERCEPTION_API_KEY = os.environ.get("NBN_PERCEPTION_API_KEY", "")
 PERCEPTION_POLL_SECONDS = int(os.environ.get("NBN_PERCEPTION_POLL_SECONDS", "900"))
+PERCEPTION_TOOLS_ENABLED = os.environ.get("NBN_PERCEPTION_TOOLS_ENABLED", "true").lower() == "true"
+PERCEPTION_NEW_WORK_DAILY = int(os.environ.get("NBN_PERCEPTION_NEW_WORK_DAILY", "24"))
+PERCEPTION_SURVEY_DAILY = int(os.environ.get("NBN_PERCEPTION_SURVEY_DAILY", "8"))
 PERCEPTION_DIRECT_ENABLED = (
     os.environ.get("NBN_PERCEPTION_DIRECT_ENABLED", "true").lower() == "true"
 )

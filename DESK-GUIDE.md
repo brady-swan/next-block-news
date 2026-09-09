@@ -1,6 +1,6 @@
 # The run-first Desk
 
-Current 2026-09-08, Plan 0068. The Desk is part of the existing NBN Railway service, not a separate app
+Current 2026-09-09, Plan 0071. The Desk is part of the existing NBN Railway service, not a separate app
 or public news site. All /desk routes, assets, snapshots and the PDF require the existing
 NBN_REPORT_TOKEN. Do not share authenticated links or put them in public documentation.
 
@@ -64,6 +64,11 @@ does not mean no research. Delivered desk includes the memory catalog with expli
 Provider-reported extracts are source-specific paraphrases, not verbatim page text. Evidence IDs
 establish recorded use, not how much a finding influenced judgment. Human quality questions
 guide review without an invented score. Unassigned research remains visible at run level.
+Perception coverage/regulatory/article requests use that same Research view. Search rows are
+pointers; provider-captured article text has its own provenance and may be partial. System's
+Perception section shows UTC-day local REST/MCP attempts, new-work allowance, cache/article
+reuse, provider observations, survey state and partial/backlogged feed progress. These are not
+account-wide remaining quotas; Node may be consuming the same subscription elsewhere.
 Copy compares writer proposals with actual editor-returned or submitted copy. Omitted/unavailable
 editor fallbacks are not editor rewrites. Activity shows actual timestamped handoffs.
 

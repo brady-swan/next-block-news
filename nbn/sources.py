@@ -175,6 +175,9 @@ _last_perception_poll = 0.0
 
 def fetch_perception(con=None) -> list:
     """Poll Perception /feed for fresh Bitcoin articles, throttled to respect rate budget."""
+    if con is not None:
+        from . import perception
+        return perception.collect(con)
     global _last_perception_poll
     from . import observations
     import datetime

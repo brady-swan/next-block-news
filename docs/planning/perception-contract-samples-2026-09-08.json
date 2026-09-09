@@ -1,0 +1,375 @@
+{
+  "checked_at": "2026-09-09T02:18:07Z",
+  "scope": "Read-only contract samples, not a completeness/quality benchmark; no publication or production changes.",
+  "server": {
+    "name": "perception-mcp-server",
+    "version": "1.6.1",
+    "registered_tools": 32,
+    "existing_nbn_key_authenticated": true
+  },
+  "probes": [
+    {
+      "tool": "perception_search_mentions",
+      "arguments": {
+        "q": "Lummis CLARITY",
+        "startDate": "2026-09-05",
+        "endDate": "2026-09-09",
+        "limit": 5
+      },
+      "at": "2026-09-09T02:12:45.110216+00:00",
+      "status": 200,
+      "seconds": 1.327,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "57",
+        "ratelimit-reset": "14"
+      },
+      "text_characters": 2045,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://x.com/scottmelker/status/2097442162400956845",
+        "https://bitcoinmagazine.com/news/lummis-blasts-democrats-on-clarity-act",
+        "https://watcher.guru/news/us-republicans-crypto-clarity-act-may-fail-in-senate-next-week",
+        "https://x.com/pete_rizzo_/status/2097366026220458147",
+        "https://www.coinspeaker.com/clarity-act-lummis-2030-warning/"
+      ]
+    },
+    {
+      "tool": "perception_get_trends",
+      "arguments": {
+        "hours": 24,
+        "include_emerging": true,
+        "limit": 8,
+        "context": "Next Block News: useful timely Bitcoin news, custody, monetary freedom, mining, adoption and consequential policy. Not altcoin promotion, trading signals, routine software releases or small treasury buys."
+      },
+      "at": "2026-09-09T02:12:46.540059+00:00",
+      "status": 200,
+      "seconds": 1.43,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "56",
+        "ratelimit-reset": "12"
+      },
+      "text_characters": 6764,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://coinpost.jp/?p=735878",
+        "https://newsable.asianetnews.com/markets/hype-hits-record-high-as-jane-street-ubs-among-30-firms-with-75m-in-etf-exposure-articleshow-9uzgk2n",
+        "https://www.theblock.co/news/defi/2026-09-05-ubs-jane-street-among-firms-with-combined-75-million-in-hyperliquid-etf-holdings-bloomberg-413616",
+        "https://www.reddit.com/r/Bitcoin/comments/1w6zlt0/simon_gerovich_ceo_of_metaplanet_just_pulled_off/?utm_source=ifttt",
+        "https://x.com/Pledditor/status/2095381802114335052",
+        "https://x.com/Pledditor/status/2095381280254742668",
+        "https://www.coindesk.com/policy/2026/09/04/u-s-sheriff-s-association-shifts-opposition-stance-to-clarity-act-to-neutral",
+        "https://x.com/BitcoinArchive/status/2095846313833218250",
+        "https://x.com/BitcoinNewsCom/status/2095845351605305670",
+        "https://x.com/BitcoinArchive/status/2096935027267309614",
+        "https://x.com/btcqna/status/2096971919845208531",
+        "https://x.com/BitcoinArchive/status/2096989680054993314",
+        "https://x.com/cz_binance/status/2096077151892320305",
+        "https://x.com/_RichardTeng/status/2095903500324811198",
+        "https://x.com/_RichardTeng/status/2095897479036420253",
+        "https://github.com/firedancer-io/firedancer/releases/tag/v26.09.0",
+        "https://github.com/jito-foundation/jito-solana/releases/tag/v4.3.0-beta.3-jito.1",
+        "https://x.com/phongle/status/2095165224949047632",
+        "https://x.com/phongle/status/2095164664992645499",
+        "https://x.com/TimKotzman/status/2095176118114365549",
+        "https://x.com/BitcoinPierre/status/2096692056395489645",
+        "https://x.com/River/status/2096614979419902426",
+        "https://x.com/Leishman/status/2096617433331122534"
+      ]
+    },
+    {
+      "tool": "perception_search_regulatory",
+      "arguments": {
+        "q": "bitcoin",
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-09",
+        "limit": 5
+      },
+      "at": "2026-09-09T02:12:47.902163+00:00",
+      "status": 200,
+      "seconds": 1.362,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "55",
+        "ratelimit-reset": "11"
+      },
+      "text_characters": 895,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://www.cftc.gov/PressRoom/SpeechesTestimony/opagunewardena1"
+      ]
+    },
+    {
+      "tool": "perception_get_article",
+      "arguments": {
+        "url": "https://bitcoinmagazine.com/news/lummis-blasts-democrats-on-clarity-act",
+        "publication_date": "2026-09-08"
+      },
+      "at": "2026-09-09T02:13:55.700004+00:00",
+      "status": 200,
+      "seconds": 13.921,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "59",
+        "ratelimit-reset": "60"
+      },
+      "text_characters": 1274,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://bitcoinmagazine.com/news/lummis-blasts-democrats-on-clarity-act"
+      ]
+    },
+    {
+      "tool": "perception_search_voices",
+      "arguments": {
+        "query": "bitcoin custody"
+      },
+      "at": "2026-09-09T02:14:00.421246+00:00",
+      "status": 200,
+      "seconds": 4.721,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "58",
+        "ratelimit-reset": "47"
+      },
+      "text_characters": 5961,
+      "structured_content_present": false,
+      "source_urls": []
+    },
+    {
+      "tool": "perception_get_brains_corpus",
+      "arguments": {
+        "handle": "BitcoinArchive",
+        "limit": 5,
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09"
+      },
+      "at": "2026-09-09T02:14:01.400942+00:00",
+      "status": 200,
+      "seconds": 0.98,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "57",
+        "ratelimit-reset": "42"
+      },
+      "text_characters": 480,
+      "structured_content_present": false,
+      "source_urls": []
+    },
+    {
+      "tool": "perception_get_article",
+      "arguments": {
+        "url": "https://www.cftc.gov/PressRoom/SpeechesTestimony/opagunewardena1",
+        "publication_date": "2026-09-03"
+      },
+      "at": "2026-09-09T02:18:04.913748+00:00",
+      "status": 200,
+      "seconds": 1.751,
+      "headers": {
+        "ratelimit-policy": "60;w=60",
+        "ratelimit-limit": "60",
+        "ratelimit-remaining": "59",
+        "ratelimit-reset": "60"
+      },
+      "text_characters": 14707,
+      "structured_content_present": false,
+      "source_urls": [
+        "https://www.cftc.gov/PressRoom/SpeechesTestimony/opagunewardena1"
+      ]
+    }
+  ],
+  "rest_probes": [
+    {
+      "at": "2026-09-09T02:13:44.332754+00:00",
+      "params": {
+        "keyword": "Lummis CLARITY",
+        "startDate": "2026-09-05",
+        "endDate": "2026-09-09",
+        "limit": 5,
+        "page": 1
+      },
+      "status": 200,
+      "seconds": 1.276,
+      "headers": {
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "83"
+      },
+      "response_keys": [
+        "data",
+        "pagination",
+        "performance"
+      ],
+      "pagination": {
+        "total": 0,
+        "page": 1,
+        "pageSize": 50,
+        "totalPages": 1,
+        "hasNextPage": false,
+        "returned": 0,
+        "truncated": false
+      },
+      "rows": [],
+      "count": 0
+    },
+    {
+      "at": "2026-09-09T02:18:06.535075+00:00",
+      "params": {
+        "keyword": "Lummis",
+        "startDate": "2026-09-05",
+        "endDate": "2026-09-09",
+        "limit": 5,
+        "page": 1
+      },
+      "status": 200,
+      "seconds": 2.28,
+      "headers": {
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "82"
+      },
+      "pagination": {
+        "total": 10,
+        "page": 1,
+        "pageSize": 50,
+        "totalPages": 1,
+        "hasNextPage": false,
+        "returned": 10,
+        "truncated": false
+      },
+      "rows": [
+        {
+          "title": "@scottmelker",
+          "url": "https://x.com/scottmelker/status/2097442162400956845",
+          "date": "2026-09-08 21:49:14 UTC",
+          "keys": [
+            "id",
+            "Title",
+            "Content",
+            "Date",
+            "Outlet",
+            "Sentiment",
+            "URL",
+            "author_name",
+            "timestamp",
+            "image_url",
+            "Outlet_Category"
+          ],
+          "content_chars": 154
+        },
+        {
+          "title": "Lummis Blasts Democrats Ahead of Clarity Act Vote — But Adds Bill Can Get Passed",
+          "url": "https://bitcoinmagazine.com/news/lummis-blasts-democrats-on-clarity-act",
+          "date": "2026-09-08 20:56:30 UTC",
+          "keys": [
+            "id",
+            "Title",
+            "Content",
+            "Date",
+            "Outlet",
+            "Sentiment",
+            "URL",
+            "author_name",
+            "timestamp",
+            "image_url",
+            "Outlet_Category"
+          ],
+          "content_chars": 399
+        },
+        {
+          "title": "US Republicans: Crypto Clarity Act may fail in Senate Next Week",
+          "url": "https://watcher.guru/news/us-republicans-crypto-clarity-act-may-fail-in-senate-next-week",
+          "date": "2026-09-08 17:14:25 UTC",
+          "keys": [
+            "id",
+            "Title",
+            "Content",
+            "Date",
+            "Outlet",
+            "Sentiment",
+            "URL",
+            "author_name",
+            "timestamp",
+            "image_url",
+            "Outlet_Category"
+          ],
+          "content_chars": 2628
+        },
+        {
+          "title": "@pete_rizzo_",
+          "url": "https://x.com/pete_rizzo_/status/2097366026220458147",
+          "date": "2026-09-08 16:46:42 UTC",
+          "keys": [
+            "id",
+            "Title",
+            "Content",
+            "Date",
+            "Outlet",
+            "Sentiment",
+            "URL",
+            "author_name",
+            "timestamp",
+            "image_url",
+            "Outlet_Category"
+          ],
+          "content_chars": 422
+        },
+        {
+          "title": "CLARITY Act: Lummis Links Crypto Jobs and Tax Revenue to Its Passage",
+          "url": "https://www.coinspeaker.com/clarity-act-lummis-2030-warning/",
+          "date": "2026-09-08 14:25:51 UTC",
+          "keys": [
+            "id",
+            "Title",
+            "Content",
+            "Date",
+            "Outlet",
+            "Sentiment",
+            "URL",
+            "author_name",
+            "timestamp",
+            "image_url",
+            "Outlet_Category"
+          ],
+          "content_chars": 3999
+        },
+        {
+          "title": "@pete_rizzo_",
+          "url": "https://x.com/pete_rizzo_/status/2097113687551033369",
+          "date": "2026-09-08 00:04:00 UTC",
+          "keys": [
+            "id",
+            "Title",
+            "Content",
+            "Date",
+            "Outlet",
+            "Sentiment",
+            "URL",
+            "author_name",
+            "timestamp",
+            "image_url",
+            "Outlet_Category"
+          ],
+          "content_chars": 157
+        }
+      ],
+      "count": 10
+    }
+  ],
+  "observations": [
+    "MCP Lummis CLARITY search returned nine matches, showing five. Search output was markdown source pointers, not full article evidence.",
+    "REST Lummis CLARITY returned zero; REST Lummis returned ten. Do not assume identical REST and MCP query semantics.",
+    "REST limit=5 still reported pageSize=50 and returned ten in the single-keyword sample.",
+    "Bitcoin Magazine get_article result labeled Full Text contained only a short 399-character feed body, matching REST Content length.",
+    "CFTC get_article returned a substantial speech. The agency author/date/source link were retained. No claim the speech is a fresh publishable NBN story.",
+    "24-hour trends included older linked reporting and off-remit topics despite NBN context.",
+    "Voices custody query returned older ETF filing/transcript passages and no conference/podcast matches. Coverage and source-type labels need inspection.",
+    "BitcoinArchive corpus returned zero in the tested September8–9 window; this is not evidence that the account posted nothing.",
+    "MCP rate-limit headers reported a 60-per-minute window, not remaining daily included calls."
+  ]
+}

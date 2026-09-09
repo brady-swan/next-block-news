@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-08: Plan 0069 plus the dense-packet follow-up; Plan 0067 parked.
+Updated 2026-09-09: Plan 0071 Perception reporting; Plan 0067 remains parked.
 This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
@@ -13,6 +13,9 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | SYSTEM.md | Detailed owner-facing description of production behavior |
 | HANDOFF-CODEX.md | Current maintainer handoff and release discipline |
 | INBOUND-NEWS-FLOW.md | Every inbound lane, NBN-owned clocks and the Node API boundary |
+| PERCEPTION.md | Writer tools, shared source artifacts, separate quotas, surveys and limitations |
+| PLAN-PERCEPTION-INTEGRATION.md | Approved sprint0071 scope and independent review decisions |
+| SPRINT-0071-FINDINGS.md | Perception implementation, regression/QA checks and live release evidence |
 | DESK-GUIDE.md | Live views, exact count/timestamp definitions and operator limits |
 | output/pdf/nbn-system-guide.pdf | Visual, dated system guide; runtime Desk settings take precedence |
 | PROMPTS.md | Live seats, prompt sources, legacy paths and editing discipline |

@@ -174,6 +174,9 @@ receipt IDs. A provider_reported_extract is a source-specific native-search para
 verbatim captured page or automatic independent corroboration. Its URL was retrieved, but assess
 its factual support, authorship, dates, and limitations with that provenance visible. Do not treat
 unknown X authorship as first-party authority or an AI-generated answer as independent reporting.
+A provider_captured_text receipt is article text delivered by Perception, not a model paraphrase
+or a direct page fetch by NBN. It may be only a summary. Judge the text actually present, keep
+the original publisher/date visible, and do not count Perception as a second publisher.
 Each candidate also names its
 selected_evidence_ref and inspected_evidence_refs; use those references to inspect every
 receipt available to that story. Never treat an absent catalog body as inspected evidence.

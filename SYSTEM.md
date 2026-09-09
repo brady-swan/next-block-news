@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-09, Plan 0070 plus fetched-receipt identity repair (993bdc1). This is the owner-facing description of production behavior.*
+*Current code description: 2026-09-09, Plan 0071 Perception reporting integration. Deployment proof/status: SPRINT-0071-FINDINGS.md.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
@@ -22,6 +22,24 @@ Brady reviews drafts.
 Production seats have explicit environment overrides. `NBN_MODEL` remains the Anthropic
 legacy-stack setting; `NBN_NEWSROOM_MODEL` selects the v2 writer. Unconfigured installations
 keep the previous Anthropic defaults. Intake is intentionally still Haiku, not Luna.
+
+### Perception reporting — Plan 0071
+
+The Writer has optional coverage/company, regulatory and article tools alongside native web/X.
+Intake retains dated source text instead of discarding everything beyond600summary characters.
+Query caches are short-lived; unchanged source versions keep their original capture/expiry.
+The existing30-day memory and exact Editor receipt path carry provider-captured text, original
+publisher/date and completeness limitations. Search pointers remain uninspected leads.
+
+One acknowledged feed page per900-second poll alternates newest and backlog reads. Up to8
+persisted subject-survey slots/day add normal discovery candidates; no topic publication quotas.
+REST/MCP have separate provider quotas and shared article artifacts. New work is capped24daily
+attempts across interfaces, including surveys; at most4REST research attempts. A soft20MCP
+threshold can route equivalent plain-keyword queries to REST; specialists may still use the
+remaining allowance. Shared account remaining is unknown. Node configuration is unchanged.
+Known backoff, partial coverage and source reuse are visible in System; actual research appears
+in each run. Writer response/time/tool/context budgets and autopostOFF are unchanged.
+See PERCEPTION.md for contracts, limitations and feature-disable rollback.
 
 ### Reporting execution — Plan 0068
 
