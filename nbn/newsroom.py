@@ -819,6 +819,64 @@ def _history_for_budget(messages: list[dict]) -> list[dict]:
     ])
 
 
+def _compact_packet_aliases(packet: dict) -> None:
+    """Last pressure tier: alias exact repetition, never discard reporting context."""
+    defaults = dict(packet["run_brief"].get("compact_display_defaults") or {})
+    expert_instruction = "Attention only, not corroboration or parent-source authority."
+    technical_state = {
+        "note": "defer:newsdesk_unavailable:initial_context_overflow",
+        "decision_stage": "newsdesk", "decision_category": "technical_defer",
+    }
+    cards = []
+    for original in packet.get("intake_board", []):
+        row = dict(original)
+        if isinstance(row.get("expert_attention"), dict):
+            attention = dict(row["expert_attention"])
+            if attention.get("instruction") == expert_instruction:
+                del attention["instruction"]
+                defaults["expert_attention.instruction"] = expert_instruction
+            if row.get("intake_url") and attention.get("post_url") == row["intake_url"]:
+                del attention["post_url"]
+                defaults["expert_attention.post_url"] = "When omitted, equals this candidate's intake_url."
+            row["expert_attention"] = attention
+        if row.get("prior_item_state_untrusted_context") == technical_state:
+            row["prior_item_state_untrusted_context"] = {"compact_default": True}
+            defaults["prior_item_state_untrusted_context.compact_default"] = {
+                "applies_when": {"compact_default": True}, **technical_state,
+            }
+        cards.append(row)
+    packet["intake_board"] = cards
+    coverage = {}
+    for kind, rows in packet.get("coverage_board", {}).items():
+        coverage[kind] = []
+        for original in rows:
+            row = dict(original)
+            for key in ("headlines", "post_leads"):
+                if row.get(key) == []:
+                    del row[key]
+                    defaults["coverage_board.empty_previews"] = "Omitted headlines/post_leads are empty arrays."
+            coverage[kind].append(row)
+    packet["coverage_board"] = coverage
+    receipts = []
+    for original in packet.get("prepared_evidence", []):
+        row = dict(original)
+        if (row.get("excerpt_of_content_fingerprint")
+                and row.get("original_content_fingerprint") == row["excerpt_of_content_fingerprint"]):
+            del row["original_content_fingerprint"]
+            defaults["prepared_evidence.original_content_fingerprint"] = (
+                "When omitted, equals the present excerpt_of_content_fingerprint.")
+        requested, final = row.get("requested_url"), row.get("final_url")
+        if (requested and final and requested != final
+                and row.get("redirect_chain") == [requested, final]):
+            del row["redirect_chain"]
+            row["chain_pair"] = True
+            defaults["prepared_evidence.chain_pair"] = (
+                "When true, redirect_chain is [requested_url, final_url].")
+        receipts.append(row)
+    packet["prepared_evidence"] = receipts
+    packet["run_brief"]["compact_display_defaults"] = defaults
+
+
 def _compact_packet_repetition(packet: dict) -> None:
     """Deduplicate display metadata; retained records and evidence bytes stay intact."""
     defaults = {
@@ -1917,6 +1975,8 @@ class NewsroomSession:
                 catalog["next_offset"] = catalog["offset"] + len(catalog["rows"])
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 _fit_optional_previews(packet, self.context_rows, config.COMPACT_DESK_INITIAL_BYTES)
+            if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                _compact_packet_aliases(packet)
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 from . import observations
                 observations.record(self.con, self.run_id, "writer_packet_overflow", {
