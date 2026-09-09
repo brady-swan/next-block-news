@@ -1,7 +1,8 @@
 # 0074 — preparation reliability and packet fit
 
 Owner-authorized September9,2026, turn01a087d0-800d-7bb3-93c5-add45493f5f3.
-Status: independently approved; implementation in review. Audit paused, autopost OFF.
+Status: independently approved, implemented, deployed and smoke-tested. Same dedicated audit
+resumed; nonempty natural runs still to observe. Autopost OFF. See SPRINT-0074-FINDINGS.md.
 
 ## Evidence and boundary
 

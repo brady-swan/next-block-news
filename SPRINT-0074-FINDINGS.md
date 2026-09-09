@@ -1,7 +1,7 @@
 # Repair0074 — preparation reliability
 
-September9,2026. Scope: PLAN-0074-PREPARATION-RELIABILITY.md. Build in progress;
-not yet a deployed-release claim. Audit paused, autopost OFF.
+September9,2026. Scope: PLAN-0074-PREPARATION-RELIABILITY.md. Deployed and smoke-tested;
+same dedicated audit resumed, autopost OFF. Natural editorial outcomes remain to observe.
 
 Independent lead approved the bounded plan and90s timeout headroom. Observed production
 prep failures were ReadTimeout near45.1seconds (10of25calls), not a credit/quota error.
@@ -21,5 +21,29 @@ replay/encrypted reasoning and rejects genuinely oversized raw history. Image bu
 Focused tests:36passed, independently rerun by the lead reviewer in1.994seconds.
 Full dirty-worktree suite:685passed in36.012seconds, including two unrelated evaluator
 tests excluded from release. Independent implementation approved; reviewer requested real
-handoff field names in the dense fixture, now applied. Clean deployment and smoke pending.
+handoff field names in the dense fixture, now applied and11packet tests rerun successfully.
 No model/effort, source, selection, cadence, Writer budget or publication-policy change.
+
+## Deployment and smoke
+
+Reviewed runtime commit b698346 pushed and deployed from a clean archive. Clean-release
+suite:683testsPASS33.529seconds. Online SQLite backup integrity check passed:
+/data/backups/nbn-pre-source-policy-20260909T202723Z.db.
+
+Railway deployment4829bd39-4f3c-40a0-9b53-bee827400de1SUCCESS. Actual running hashes of
+newsroom.py/config.py/desk_prep.py match the clean reviewed archive. Effective Luna/low
+timeout90s; initial65536bytes, history196608bytes, overall360s; autopostfalse. No credential
+or environment mutation and no embedding-companion change. Runtime prompt version remains
+v2.35 because editorial prompts did not change; identify this repair by commit/file hashes.
+
+First natural worker cycle completed at1788985784.452UTC with no error. Health and all four
+authenticated Desk workspace views return200. Latest editorial runs at smoke were PRE-release:
+4a4868a4(21advanced) and923dc8eb(17advanced), both initial overflows on old code. Do not
+mislabel them regressions of this deployment. Next persisted editorial deadline1788986329.608
+(15:38:49CT). No paid Writer replay or synthetic draft created; nonempty natural preparation,
+initial packet and later history behavior are explicit audit follow-ups, not claimed proven.
+
+SAME audit-nbn-production automation resumedACTIVE in its dedicated NBN Audit task, same
+15-minute cadence/autonomy/notification intent. Durable prompt adds prep latency/size/failure
+classification, useful Writer time remaining, retrievable preview preservation and true
+raw-history-overflow watches. No repeated-build authority or model-upgrade approval added.

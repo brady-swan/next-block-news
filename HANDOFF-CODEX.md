@@ -9,8 +9,8 @@ the360s lifecycle. Prep diagnostics now expose input size, elapsed time and conf
 Dense initial packets shorten optional retrievable previews after existing compaction, keeping
 real prep/letter/control/output context. Responses history accounting no longer double-counts
 parsed and raw output; full raw replay and encrypted reasoning are unchanged. Initial64KiB,
-history192KiB and retrieval budgets remain unchanged. Audit paused until release/smoke;
-consult SPRINT-0074-FINDINGS.md for actual deployment and resumption status. Stronger models
+history192KiB and retrieval budgets remain unchanged. Repair deployed and dedicated audit
+resumed; consult SPRINT-0074-FINDINGS.md for smoke and natural-run limitations. Stronger models
 and richer discovery inputs are proposals only. Autopost remainsOFF.
 
 ## Latest scope — Sprint0073
