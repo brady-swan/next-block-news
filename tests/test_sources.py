@@ -196,6 +196,54 @@ class SourceFetchSafetyTests(unittest.TestCase):
             result = sources.fetch_article(url)
         self.assertEqual(result["text"], "Collection introduction. First article. Second article.")
 
+    def test_explicit_header_report_survives_chrome_cleanup_and_caps(self):
+        url = "https://www.btcpolicy.org/articles/data-center-dividends"
+        body = ('<title>Data Center Dividends</title>'
+                '<link rel="canonical" href="https://example.com/report">'
+                '<meta name="author" content="Report author">'
+                '<header>Site navigation</header><div>' + 'Menu ' * 400 + ''.join(
+                    f'<a href="/menu/{i}">Menu {i}</a>' for i in range(30)) + '</div>'
+                '<header class="section_blog-post2-content"><div>'
+                '<h1>Data Center Dividends</h1><p>September 9, 2026</p>'
+                '<a href="/report.pdf">Download report</a>'
+                '<div class="text-rich-text w-richtext">'
+                '<p>Conditional household estimates use existing revenue.</p>'
+                '<header>Nested navigation</header><p>Services are funded first.</p>'
+                '<a href="/methodology">Methodology</a><script>Script noise</script>'
+                '</div></div></header><footer>Footer noise</footer>')
+        response = httpx.Response(200, text=body, request=httpx.Request("GET", url))
+        with patch.object(sources, "_assert_public_http_url"), \
+                patch.object(sources.httpx, "Client") as client:
+            client.return_value.__enter__.return_value.get.return_value = response
+            result = sources.fetch_article(url, limit=240)
+        self.assertIn("Conditional household estimates", result["text"])
+        self.assertIn("Services are funded first.", result["text"])
+        self.assertIn("September 9, 2026", result["text"])
+        for noise in ("Site navigation", "Menu", "Nested navigation", "Script noise", "Footer noise"):
+            self.assertNotIn(noise, result["text"])
+        self.assertLessEqual(len(result["text"]), 240)
+        self.assertEqual(result["links"], [
+            {"text": "Download report", "url": "https://www.btcpolicy.org/report.pdf"},
+            {"text": "Methodology", "url": "https://www.btcpolicy.org/methodology"}])
+        self.assertEqual(result["canonical_url"], "https://example.com/report")
+        self.assertEqual(result["byline"], "Report author")
+
+    def test_ambiguous_header_reports_do_not_select_one(self):
+        body = ('<p>Collection introduction.</p>'
+                '<header class="section_blog-post2-content">First report.</header>'
+                '<header class="section_blog-post2-content">Second report.</header>')
+        self.assertEqual(sources._article_markup(body), body)
+
+    def test_unmarked_header_remains_chrome(self):
+        url = "https://example.com/news"
+        body = '<header>Site menu</header><p>Actual article text.</p>'
+        response = httpx.Response(200, text=body, request=httpx.Request("GET", url))
+        with patch.object(sources, "_assert_public_http_url"), \
+                patch.object(sources.httpx, "Client") as client:
+            client.return_value.__enter__.return_value.get.return_value = response
+            result = sources.fetch_article(url)
+        self.assertEqual(result["text"], "Actual article text.")
+
 
 if __name__ == "__main__":
     unittest.main()

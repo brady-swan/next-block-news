@@ -489,18 +489,23 @@ def _fred_csv(url: str, timeout: float = 20) -> str:
 def _article_markup(body: str) -> str:
     """Prefer an explicitly marked story body before applying text/link limits.
 
-    AP and Fox use div-based menus, so removing <nav> alone can consume the whole
-    receipt budget before the article starts. Keep the existing fallback for pages
+    AP and Fox use div-based menus; BPI puts its report inside a <header>.
+    Select explicit story markup before removing chrome or applying limits.
+    Keep the existing fallback for pages
     without a single identifiable body (including X and multi-article indexes).
     """
-    if not re.search(r"articleBody|RichTextStoryBody|article-body|td-post-content", body):
+    if not re.search(r"articleBody|RichTextStoryBody|article-body|td-post-content|section_blog-post2-content", body):
         return body
     try:
         soup = BeautifulSoup(body, "html.parser")
         for selector in ('[itemprop~="articleBody"]', '.RichTextStoryBody', '.article-body',
-                         '.td-post-content'):
+                         '.td-post-content', '.section_blog-post2-content'):
             matches = soup.select(selector)
             if len(matches) == 1 and matches[0].get_text(strip=True):
+                # This explicitly identified report is not site-header chrome.
+                # Nested chrome still goes through the normal cleanup below.
+                if matches[0].name == "header":
+                    matches[0].name = "div"
                 return str(soup.title or "") + "\n" + str(matches[0])
     except Exception as exc:  # Extraction remains best-effort; never invent body text.
         log.warning("article body selection failed: %s", type(exc).__name__)
