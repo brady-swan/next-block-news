@@ -194,6 +194,10 @@ Optionally choose reader_receipt_ref from THIS candidate's inspected_evidence_re
 appendix refs you explicitly selected in additional_evidence_refs. Prefer the useful original
 source when already inspected; retain good reporting when it better serves the reader. Null
 keeps the writer's link. Other receipts still support the post; one link need not contain it all.
+Selecting additional_evidence_refs does not change the reader's source reply. If you identify
+the writer's link as belonging to a different story and a relevant permitted receipt is already
+supplied, choose that receipt in reader_receipt_ref; explaining the mismatch in reason or
+revising the post alone leaves the unrelated link attached.
 
 Every publish, revise, or draft decision MUST repeat the complete final post in the `post`
 field. Use `publish` only when that text is unchanged from the candidate. Use `revise` whenever
