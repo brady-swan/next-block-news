@@ -1,5 +1,25 @@
 # Fetched receipt identity — bounded audit repair
 
+## Current disposition — deployed and smoked
+
+Runtime **993bdc1**, Railway **a12de434-63f2-4be3-a3d1-3c2455a62810 SUCCESS**.
+September 9, 03:38:50 UTC smoke verified the clean-archive newsroom hash, unchanged editor,
+store and config hashes, internal/external health200, all four authenticated Desk views200,
+unauthenticated403, autopostOFF, no worker/publisher error and no unresolved deliveries.
+One ordinary intake cycle completed after restart. The next scheduled newsroom is03:41:33;
+no post-release newsroom session or natural changed-destination receipt has yet been observed.
+The exact bug path is covered by failing-before/passing-after mocked regression tests, not
+claimed as a live content replay. No paid test run, test draft, historical rewrite or comment.
+
+Independent plan/code approval; 48 focused, 632 working-tree and **630 clean-release tests** pass.
+The only runtime change is the fetched receipt classification call. No prompt, registry,
+source policy, model, cadence, budget, schema, API credential or publication setting changed.
+Unknown fetched sources now use their actual domain fallback; URLs/bylines retain the author.
+
+Evidence: [smoke snapshot](audit/receipt-label-smoke-2026-09-09.json). Backup and rollback target
+are below. No implementation or deployment work remains; continue normal audit observation.
+The audit stayed ACTIVE throughout. Do not rebuild this repair from the historical plan below.
+
 ## New delta and authority
 
 September 9, 2026, 03:33 UTC heartbeat `01a0842c-520c-7252-85b6-d10e5775cfc7`.
@@ -64,3 +84,12 @@ one replica and /data volume; prior successful deployment451d51c7-c9c9-4ef8-8ab8
 No deployment or content mutation yet. Rollback is a clean archive of a9cf437 (docs-only after
 ccea9a0), preserving the prior v2.29 runtime. Prompt version remains v2.29: this is a fetched
 metadata correction, not a prompt/policy change.
+
+## Release evidence
+
+Runtime commit993bdc1; clean archive `/tmp/nbn-receipt-label.muHwrH` passed **630 tests in
+24.064 seconds**, excluding unrelated dirty evaluation work. Its newsroom.py SHA256 is
+`c75e41b17ca8821391f57f24037c51b770ecc8dc60d5063816270d83f655b746`.
+Online backup `/data/backups/nbn-pre-source-policy-20260909T033629Z.db` passed integrity check.
+Railway deployment `a12de434-63f2-4be3-a3d1-3c2455a62810` started03:37:11UTC on the same
+production target. No autopost/config/credential changes. Completion and smoke are recorded above.

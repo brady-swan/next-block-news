@@ -1,0 +1,63 @@
+{
+  "runtime_commit": "993bdc1",
+  "deployment_id": "a12de434-63f2-4be3-a3d1-3c2455a62810",
+  "deployment_status": "SUCCESS",
+  "observed_at": "2026-09-09T03:38:50.098231+00:00",
+  "hashes": {
+    "nbn/newsroom.py": "c75e41b17ca8821391f57f24037c51b770ecc8dc60d5063816270d83f655b746",
+    "nbn/editor.py": "5aac0125054e1a96fd1a8d79f9a904a92d660b1e078ac73806cf4e2088cec8a5",
+    "nbn/store.py": "f076ef4f0ca8984166ae1622a5f5adda2fd9de9630e21a9e98180308a08f110b",
+    "nbn/config.py": "30b1a5594d566dfac248b070b1f349825f0095f4099f4e403fe7cf726af436dc"
+  },
+  "health": {
+    "internal_status": 200,
+    "external_status": 200,
+    "started": 1788925064.5236206,
+    "cycles": 1,
+    "last_cycle_ts": 1788925070.5334938,
+    "last_error": null,
+    "autopost": false
+  },
+  "desk": {
+    "newsroom": {
+      "status": 200,
+      "bytes": 139932,
+      "view": "newsroom"
+    },
+    "intake": {
+      "status": 200,
+      "bytes": 49112,
+      "view": "intake"
+    },
+    "outputs": {
+      "status": 200,
+      "bytes": 31608,
+      "view": "outputs"
+    },
+    "system": {
+      "status": 200,
+      "bytes": 18799,
+      "view": "system",
+      "now": {
+        "observed_at": 1788925130.0377085,
+        "worker": "healthy",
+        "last_cycle": 1788925070.5334938,
+        "next_desk": 1788925293.733009,
+        "publisher_sync": 1788924991.2400756,
+        "publisher_error": false,
+        "node_fetch": 1788924796.2950482,
+        "node_generated": "2026-09-09T01:00:00.329304+00:00",
+        "node_error": false,
+        "autopost": false,
+        "pending_delivery": 0
+      }
+    }
+  },
+  "unauthenticated": 403,
+  "tests": {
+    "focused": 48,
+    "working_tree": 632,
+    "clean_archive": 630
+  },
+  "limits": "One ordinary intake cycle completed after restart. No post-release newsroom session or changed-destination production receipt yet observed; exact branch is mocked-regression tested. No forced paid run or manual Typefully mutation."
+}

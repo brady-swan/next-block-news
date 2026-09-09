@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current as of 2026-09-08, deployed Plan 0070 (ccea9a0). This is the owner-facing description of production behavior.*
+*Current as of 2026-09-09, Plan 0070 plus fetched-receipt identity repair (993bdc1). This is the owner-facing description of production behavior.*
 
 Next Block News is an automated Bitcoin news wire on X at `@nextblocknews_`. One Python
 worker runs continuously on Railway. It polls intake on a loop with a 60-second sleep after
