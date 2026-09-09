@@ -857,6 +857,11 @@ def _compact_packet_aliases(packet: dict) -> None:
                     defaults["coverage_board.empty_previews"] = "Omitted headlines/post_leads are empty arrays."
             coverage[kind].append(row)
     packet["coverage_board"] = coverage
+    prefetch_metadata = {
+        "ok": True, "cached": True, "adapter_provenance": "desk_prefetch",
+        "inspectable_evidence": True, "evidence_capability": "inspected_social_statement",
+        "independent_report": False, "retrieval_kind": "direct_fetch", "text_truncated": True,
+    }
     receipts = []
     for original in packet.get("prepared_evidence", []):
         row = dict(original)
@@ -872,6 +877,14 @@ def _compact_packet_aliases(packet: dict) -> None:
             row["chain_pair"] = True
             defaults["prepared_evidence.chain_pair"] = (
                 "When true, redirect_chain is [requested_url, final_url].")
+        if all(key in row and type(row[key]) is type(value) and row[key] == value
+               for key, value in prefetch_metadata.items()):
+            for key in prefetch_metadata:
+                del row[key]
+            row["prefetch_meta"] = True
+            defaults["prepared_evidence.prefetch_meta"] = {
+                "applies_when": {"prefetch_meta": True}, **prefetch_metadata,
+            }
         receipts.append(row)
     packet["prepared_evidence"] = receipts
     packet["run_brief"]["compact_display_defaults"] = defaults

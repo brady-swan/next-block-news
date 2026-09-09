@@ -10,8 +10,8 @@ from tests.support import temporary_store
 from tests.test_compact_desk import crowded_desk
 
 
-def fixture():
-    return json.loads((Path(__file__).parent / "fixtures/post0074-packet.json").read_text())
+def fixture(name="post0074-packet.json"):
+    return json.loads((Path(__file__).parent / "fixtures" / name).read_text())
 
 
 class PacketAliasTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class PacketAliasTests(unittest.TestCase):
         data = fixture()
         original = copy.deepcopy(data)
         packet = data["packet"]
-        self.assertEqual(newsroom._json_bytes(packet), 70938)
+        self.assertEqual(newsroom._json_bytes(packet), 71779)
         newsroom._compact_packet_aliases(packet)
         self.assertLessEqual(newsroom._json_bytes(packet), 65536)
         self.assertEqual(data["context_rows"], original["context_rows"])
@@ -38,6 +38,9 @@ class PacketAliasTests(unittest.TestCase):
                 self.assertIn(after["context_id"], data["context_rows"])
         for before, after in zip(original["packet"]["prepared_evidence"], packet["prepared_evidence"]):
             restored = dict(after)
+            if restored.pop("prefetch_meta", False):
+                legend = packet["run_brief"]["compact_display_defaults"]["prepared_evidence.prefetch_meta"]
+                restored.update({key: value for key, value in legend.items() if key != "applies_when"})
             restored.setdefault("original_content_fingerprint", restored["excerpt_of_content_fingerprint"])
             if restored.pop("chain_pair", False):
                 restored["redirect_chain"] = [restored["requested_url"], restored["final_url"]]
@@ -49,6 +52,49 @@ class PacketAliasTests(unittest.TestCase):
         # Extra preserved content probes margin; this is not an exact historic replay.
         packet["run_brief"]["assignment"] += "x" * 762
         self.assertLessEqual(newsroom._json_bytes(packet), 65536)
+
+    def test_second_corrected_reconstruction_fits_with_dates_and_real_preparation(self):
+        data = fixture("post0074-packet-second.json")
+        before = copy.deepcopy(data)
+        self.assertEqual(newsroom._json_bytes(data["packet"]), 72530)
+        newsroom._compact_packet_aliases(data["packet"])
+        self.assertLessEqual(newsroom._json_bytes(data["packet"]), 65536)
+        self.assertEqual(data["context_rows"], before["context_rows"])
+        for old, new in zip(before["packet"]["intake_board"], data["packet"]["intake_board"]):
+            for key in ("candidate_id", "arrived_at", "haiku_preparation", "research_retry",
+                        "candidate_context_id", "full_lead_context_id"):
+                self.assertEqual(new.get(key), old.get(key))
+
+    def test_prefetch_metadata_requires_all_exact_typed_values_and_roundtrips(self):
+        metadata = {
+            "ok": True, "cached": True, "adapter_provenance": "desk_prefetch",
+            "inspectable_evidence": True, "evidence_capability": "inspected_social_statement",
+            "independent_report": False, "retrieval_kind": "direct_fetch", "text_truncated": True,
+        }
+        rows = [{**metadata, "text": "Original excerpt", "fetch_id": "first"}]
+        for key, value in metadata.items():
+            missing = dict(metadata)
+            del missing[key]
+            rows.append(missing)
+            for replacement in ([None, not value, int(value)] if isinstance(value, bool)
+                                else [None, "distinct"]):
+                rows.append({**metadata, key: replacement})
+        original = copy.deepcopy(rows)
+        packet = {"run_brief": {}, "prepared_evidence": rows}
+        newsroom._compact_packet_aliases(packet)
+        self.assertEqual(packet["prepared_evidence"][0], {
+            "text": "Original excerpt", "fetch_id": "first", "prefetch_meta": True})
+        self.assertEqual(packet["prepared_evidence"][1:], original[1:])
+        legend = packet["run_brief"]["compact_display_defaults"]["prepared_evidence.prefetch_meta"]
+        restored = copy.deepcopy(packet["prepared_evidence"])
+        for row in restored:
+            if row.pop("prefetch_meta", False):
+                row.update({key: value for key, value in legend.items() if key != "applies_when"})
+        self.assertEqual(restored, original)
+        self.assertEqual(rows, original)
+        once = copy.deepcopy(packet)
+        newsroom._compact_packet_aliases(packet)
+        self.assertEqual(packet, once)
 
     def test_mixed_technical_states_never_invent_missing_or_editorial_fields(self):
         state = {"note": "defer:newsdesk_unavailable:initial_context_overflow",
