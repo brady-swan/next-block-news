@@ -1,4 +1,5 @@
 import json
+import httpx
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -30,6 +31,37 @@ def decision(candidate_id, route="advance"):
 
 
 class DeskPreparationTests(unittest.TestCase):
+    def test_timeout_is_bounded_one_call_accounted_with_success_and_failure_diagnostics(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), temporary_store() as con:
+                row = self.saved_item(con, url="https://example.com/diagnostic")
+                api = Mock()
+                if fail:
+                    api.messages.create.side_effect = httpx.ReadTimeout("timed out")
+                else:
+                    api.messages.create.return_value = response_for([decision(row["url_hash"])])
+                with patch.object(config, "DESK_PREP_MODEL", "gpt-5.6-luna"), \
+                        patch.object(config, "DESK_PREP_TIMEOUT_SECONDS", 90), \
+                        patch.object(desk_prep.models, "ResponsesClient", return_value=api) as factory, \
+                        patch.object(desk_prep.brain, "consume_model_call") as budget:
+                    result = desk_prep.prepare(con, run_id="diag", inventory=[row],
+                        coverage_keys=[], continuity_ids=set(), reservation="r", mode="enforce")
+                factory.assert_called_once_with("gpt-5.6-luna", timeout=90)
+                api.messages.create.assert_called_once()
+                budget.assert_called_once_with("r")
+                diagnostics = result.diagnostics
+                self.assertEqual(diagnostics["request_cards"], 1)
+                sent = api.messages.create.call_args.kwargs["messages"][0]["content"]
+                self.assertEqual(diagnostics["request_bytes"], len(sent.encode()))
+                self.assertEqual(diagnostics["timeout_seconds"], 90)
+                self.assertGreaterEqual(diagnostics["elapsed_ms"], 0)
+                self.assertEqual(diagnostics["error_kind"], "ReadTimeout" if fail else "")
+                self.assertEqual(result.advanced_ids, (row["url_hash"],))
+                usage = con.execute("SELECT * FROM model_usage").fetchall()
+                self.assertEqual(len(usage), 1)
+                self.assertEqual(usage[0]["outcome"], "error" if fail else "ok")
+                self.assertEqual(usage[0]["latency_ms"], diagnostics["elapsed_ms"])
+
     def test_worst_case_packet_carries_shared_keys_once_and_fits(self):
         cards = []
         for index in range(25):

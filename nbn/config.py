@@ -95,7 +95,7 @@ DESK_PREP_MAX_OUTPUT_TOKENS = int(
     os.environ.get("NBN_DESK_PREP_MAX_OUTPUT_TOKENS", "6000")
 )
 DESK_PREP_TIMEOUT_SECONDS = float(
-    os.environ.get("NBN_DESK_PREP_TIMEOUT_SECONDS", "45")
+    os.environ.get("NBN_DESK_PREP_TIMEOUT_SECONDS", "90")
 )
 DESK_PREP_MAX_CALLS_PER_HOUR = int(
     os.environ.get("NBN_DESK_PREP_MAX_CALLS_PER_HOUR", "6")

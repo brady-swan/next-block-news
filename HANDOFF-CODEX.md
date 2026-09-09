@@ -1,6 +1,17 @@
 # Next Block News - current handoff
 
-Updated 2026-09-09 for Sprint0073 Writer continuity. Start here, then read SYSTEM.md and DOCUMENTATION.md. Release status is in SPRINT-0073-FINDINGS.md.
+Updated 2026-09-09 for repair0074 preparation reliability. Start here, then read SYSTEM.md and DOCUMENTATION.md. Release status is in SPRINT-0074-FINDINGS.md.
+
+## Latest repair — 0074
+
+Luna preparation timeout defaults to90s (one call, same25cards/model/effort), still inside
+the360s lifecycle. Prep diagnostics now expose input size, elapsed time and configured bound.
+Dense initial packets shorten optional retrievable previews after existing compaction, keeping
+real prep/letter/control/output context. Responses history accounting no longer double-counts
+parsed and raw output; full raw replay and encrypted reasoning are unchanged. Initial64KiB,
+history192KiB and retrieval budgets remain unchanged. Audit paused until release/smoke;
+consult SPRINT-0074-FINDINGS.md for actual deployment and resumption status. Stronger models
+and richer discovery inputs are proposals only. Autopost remainsOFF.
 
 ## Latest scope — Sprint0073
 

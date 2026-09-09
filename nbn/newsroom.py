@@ -783,6 +783,42 @@ def _compact_candidate_density(row: dict, full: dict) -> dict:
             if value is not None and value != "" and value != [] and value != {}}
 
 
+def _fit_optional_previews(packet: dict, context_rows: dict, limit: int) -> None:
+    """Fit optional display prose only; identities, controls and prep stay inline."""
+    # Full records already exist behind these references. Never silently clip a
+    # field without a retrievable original, or remove a coverage/candidate row.
+    tiers = []
+    for length in (160, 100, 80):
+        tiers.extend((row, key, length, "preview_truncated")
+                     for rows in packet["coverage_board"].values() for row in rows
+                     for key in ("post_leads", "headlines"))
+    tiers.extend((row, "body", 300, "body_truncated")
+                 for row in packet.get("matching_accepted_output", []))
+    tiers.extend((row, key, length, "preview_truncated")
+                 for row in packet["intake_board"]
+                 for key, length in (("headline_or_post", 100), ("what_arrived", 60)))
+    for row, key, length, marker in tiers:
+        if _json_bytes(packet) <= limit:
+            break
+        context_id = row.get("candidate_context_id") or row.get("context_id")
+        if context_id not in context_rows:
+            continue
+        value = row.get(key)
+        clipped = ([text[:length] for text in value] if isinstance(value, list)
+                   else value[:length] if isinstance(value, str) else value)
+        if clipped != value:
+            row[key], row[marker] = clipped, True
+
+
+def _history_for_budget(messages: list[dict]) -> list[dict]:
+    """Count Responses replay once, not its parallel local parsed tool blocks."""
+    from . import visuals
+    return visuals.without_pixels([
+        {"role": message.get("role"), "_responses_output": message["_responses_output"]}
+        if "_responses_output" in message else message for message in messages
+    ])
+
+
 def _compact_packet_repetition(packet: dict) -> None:
     """Deduplicate display metadata; retained records and evidence bytes stay intact."""
     defaults = {
@@ -1880,6 +1916,8 @@ class NewsroomSession:
                 catalog["rows"].pop()
                 catalog["next_offset"] = catalog["offset"] + len(catalog["rows"])
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                _fit_optional_previews(packet, self.context_rows, config.COMPACT_DESK_INITIAL_BYTES)
+            if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 from . import observations
                 observations.record(self.con, self.run_id, "writer_packet_overflow", {
                     "bytes": _json_bytes(packet), "limit": config.COMPACT_DESK_INITIAL_BYTES,
@@ -1969,12 +2007,13 @@ class NewsroomSession:
         history_limit = (config.COMPACT_DESK_HISTORY_BYTES if self.compact_enabled
                          else config.RUN_NEWSROOM_MAX_HISTORY_BYTES)
         from . import visuals
-        history_bytes = _json_bytes(visuals.without_pixels(self.messages))
+        budget_history = _history_for_budget(self.messages)
+        history_bytes = _json_bytes(budget_history)
         if history_bytes > history_limit:
             observations.record(self.con, self.run_id, "writer_history_overflow", {
                 "bytes": history_bytes, "limit": history_limit,
-                "messages": [{"role": m.get("role"), "bytes": _json_bytes(visuals.without_pixels(m))}
-                             for m in self.messages]}, phase="before_request")
+                "messages": [{"role": m.get("role"), "bytes": _json_bytes(m)}
+                             for m in budget_history]}, phase="before_request")
             raise NewsroomError("context_overflow", "newsroom message history exceeds bound")
         if visuals.image_bytes(self.messages) > visuals.MAX_IMAGE_CONTEXT:
             raise NewsroomError("image_context_overflow", "newsroom image context exceeds bound")

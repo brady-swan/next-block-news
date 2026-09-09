@@ -328,6 +328,8 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
     rows: list[dict]
     called = False
     error_kind = ""
+    request_bytes = 0
+    elapsed_ms = 0
     supplied_storylines = list(storyline_index or [])[:80]
     if all_protected and not supplied_storylines:
         rows = [_synthetic(
@@ -348,7 +350,8 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
         packet, compacted = _packet(
             cards, coverage_keys, config.DESK_PREP_MAX_PACKET_BYTES, supplied_storylines
         )
-        if len(packet.encode("utf-8")) > config.DESK_PREP_MAX_PACKET_BYTES:
+        request_bytes = len(packet.encode("utf-8"))
+        if request_bytes > config.DESK_PREP_MAX_PACKET_BYTES:
             error_kind = "packet_capacity"
             rows = [_synthetic(
                 item, run_id=run_id, reason="Preparation packet exceeded capacity; advanced.",
@@ -381,19 +384,21 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
                         str(row.get("storyline_key") or "") for row in supplied_storylines
                     },
                 )
+                elapsed_ms = int((time.monotonic() - started) * 1000)
                 store.record_model_usage(
                     con, run_id=run_id, seat="desk_prep", model=config.DESK_PREP_MODEL,
                     round_number=1, response=response,
-                    latency_ms=int((time.monotonic() - started) * 1000), outcome="ok",
+                    latency_ms=elapsed_ms, outcome="ok",
                 )
             except Exception as exc:  # noqa: BLE001 - assignment desk fails open
                 error_kind = type(exc).__name__
+                elapsed_ms = int((time.monotonic() - started) * 1000)
                 log.warning("assignment desk failed open: %s", exc)
                 if called:
                     store.record_model_usage(
                         con, run_id=run_id, seat="desk_prep", model=config.DESK_PREP_MODEL,
                         round_number=1, response=response,
-                        latency_ms=int((time.monotonic() - started) * 1000), outcome="error",
+                        latency_ms=elapsed_ms, outcome="error",
                     )
                 rows = [_synthetic(
                     item, run_id=run_id, reason="Preparation was unavailable; advanced to newsroom.",
@@ -432,6 +437,8 @@ def prepare(con, *, run_id: str, inventory: list[dict], coverage_keys: list[str]
         "protected": sum(bool(row.get("protection_reason")) for row in rows),
         "fail_open": sum(row.get("outcome") not in {"model", "protected"} for row in rows),
         "error_kind": error_kind,
+        "request_bytes": request_bytes, "request_cards": len(bounded),
+        "timeout_seconds": config.DESK_PREP_TIMEOUT_SECONDS, "elapsed_ms": elapsed_ms,
         "packet_compacted": bool(locals().get("compacted", False)), **saved,
     }
     return PreparationResult(rows, advanced, diagnostics)

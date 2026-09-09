@@ -1,4 +1,5 @@
 import json
+import copy
 import os
 import time
 import unittest
@@ -30,6 +31,40 @@ def native_response(url="https://www.sec.gov/newsroom/test", author=""):
 
 
 class ModelsTests(unittest.TestCase):
+    def test_history_budget_counts_raw_replay_once_and_keeps_real_limit(self):
+        from nbn import visuals
+        raw = [{"type": "reasoning", "id": "r1", "encrypted_content": "opaque" * 100,
+                "summary": []}, {"type": "function_call", "call_id": "c1",
+                "name": "fetch_source", "arguments": json.dumps({"text": "a" * 110000})}]
+        response = models.normalize(raw_response(raw), provider="xai", effort="medium")
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"), \
+                patch.object(config, "NEWSROOM_MODEL", "grok-4.3"), \
+                patch.object(newsroom.brain, "consume_model_call"):
+            desk = newsroom.NewsroomSession(run_id="history-repair", inventory=[],
+                recent_clusters=[], theme_snapshot=[], handles={}, con=con, reservation="r",
+                prep_mode="off", research_mode="off", compact_enabled=True)
+            desk._append_assistant(response)
+            before = copy.deepcopy(desk.messages)
+            self.assertGreater(newsroom._json_bytes(visuals.without_pixels(before)),
+                               config.COMPACT_DESK_HISTORY_BYTES)
+            self.assertLess(newsroom._json_bytes(newsroom._history_for_budget(before)),
+                            config.COMPACT_DESK_HISTORY_BYTES)
+            with patch.object(desk.client, "create", return_value=response) as call:
+                desk._call(max_tokens=100)
+                self.assertEqual(models.response_input(call.call_args.kwargs["messages"]), raw)
+                self.assertEqual(desk.messages, before)
+                desk.messages[0]["_responses_output"][0]["encrypted_content"] = "opaque" * 40000
+                with self.assertRaises(newsroom.NewsroomError) as raised:
+                    desk._call(max_tokens=100)
+                self.assertEqual(raised.exception.kind, "context_overflow")
+                self.assertEqual(call.call_count, 1)
+        ordinary = [{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "data": "pixel-data"},
+             "_asset_id": "asset1", "_content_hash": "hash1"},
+            {"type": "text", "text": "Context"}]}]
+        self.assertEqual(newsroom._history_for_budget(ordinary), visuals.without_pixels(ordinary))
+        self.assertEqual(visuals.image_bytes(ordinary), len("pixel-data"))
+
     def test_preparation_schema_matches_existing_parser_list_limits(self):
         native = desk_prep.preparation_tool("gpt-5.6-luna")
         fields = native["input_schema"]["properties"]["decisions"]["items"]["properties"]

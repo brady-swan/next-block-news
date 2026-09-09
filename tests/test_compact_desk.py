@@ -48,6 +48,63 @@ def crowded_desk(con, *, candidates=25, receipts=6):
 
 
 class CompactDeskTests(unittest.TestCase):
+    def test_real_preparation_and_shift_context_fit_without_losing_judgment(self):
+        for count in (17, 25):
+            with self.subTest(candidates=count), temporary_store() as con, \
+                    patch.object(newsroom.anthropic, "Anthropic"):
+                desk = crowded_desk(con, candidates=count, receipts=5)
+                desk.recent_clusters = [{
+                    "canonical_key": f"previous-event-{i}", "draft_open": True,
+                    "draft_post_leads": ["Earlier accepted Bitcoin reporting with dates and attributed findings. " * 5],
+                    "updated_at": 1788980000,
+                } for i in range(40)]
+                for index, item in enumerate(desk.inventory):
+                    if index:
+                        item.pop("_owner_reconsider")
+                        item["note"] = "Earlier held: inspect original statement."
+                    desk.preparations[item["url_hash"]] = {
+                        "outcome": "model", "protection_reason": "guide_account",
+                        "event_summary": "An important new development. " * 7,
+                        "bitcoin_relevance": "Consequences for Bitcoin custody and monetary access. " * 3,
+                        "research_objective": "Inspect the dated original statement, compare earlier coverage and preserve the announcement scope. " * 2,
+                        "source_leads": [item["url"], "https://example.com/original-statement"],
+                        "related_keys": [item["story_key"]],
+                    }
+                desk.incoming_handoff = {
+                    "body": "Check the original statement; earlier copy is only a draft. " * 28,
+                    "run_id": "previous-run", "written_at": 1788980000,
+                    "actual_story_outcomes": [{"event_key": "previous-event-0", "editor_decision": "revise"}],
+                    "actual_outputs": [{"event_key": "previous-event-0", "publisher_status": "draft", "confirmed_at": None}],
+                }
+                letter = copy.deepcopy(desk.incoming_handoff)
+                output = {"id": 12, "body": "Earlier accepted copy with useful specifics. " * 70,
+                          "mode": "draft", "publisher_status": "draft", "created": 1788980000,
+                          "confirmed_at": None, "receipt_url": "https://example.com/original"}
+                with patch.object(writer_memory, "publication", return_value=output):
+                    packet = desk._initial_packet()
+                self.assertLessEqual(newsroom._json_bytes(packet), config.COMPACT_DESK_INITIAL_BYTES)
+                self.assertEqual(len(packet["intake_board"]), count)
+                self.assertEqual(packet["incoming_shift_letter"], letter)
+                self.assertEqual(len(packet["coverage_board"]["open_drafts"]), 40)
+                self.assertEqual(len(packet["prepared_evidence"]), 5)
+                for row in packet["intake_board"]:
+                    self.assertIn("important new development", row["haiku_preparation"]["event_summary"])
+                    self.assertIn("original statement", row["haiku_preparation"]["research_objective"])
+                    self.assertTrue(row["research_retry"])
+                self.assertEqual(packet["intake_board"][0]["owner_override"]["requested_by"], "Brady")
+                accepted = packet["matching_accepted_output"][0]
+                self.assertEqual(accepted["publisher_status"], "draft")
+                self.assertIsNone(accepted["confirmed_at"])
+                # Exercise the actual bounded retrieval tool for both full records.
+                cid = packet["intake_board"][0]["candidate_context_id"]
+                result = desk._read_desk_context([cid])
+                self.assertTrue(result["ok"])
+                for key, value in desk.preparations[desk.inventory[0]["url_hash"]].items():
+                    self.assertEqual(result["rows"][0]["haiku_preparation"][key], value)
+                result = desk._read_desk_context([accepted["context_id"]])
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["rows"][0]["accepted_output"], output)
+
     def test_metadata_pressure_preserves_sources_controls_and_retrieval(self):
         from nbn import perception
         with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
@@ -81,7 +138,8 @@ class CompactDeskTests(unittest.TestCase):
                         "use": "Available dated text, not yet read in this session; use perception_article if useful."}
 
             with patch.object(perception, "candidate_hint", side_effect=hint):
-                with patch.object(newsroom, "_compact_packet_repetition"):
+                with patch.object(newsroom, "_compact_packet_repetition"), \
+                        patch.object(newsroom, "_fit_optional_previews"):
                     with self.assertRaises(newsroom.NewsroomError) as raised:
                         desk._initial_packet()
                     self.assertEqual(raised.exception.kind, "initial_context_overflow")
@@ -186,7 +244,8 @@ class CompactDeskTests(unittest.TestCase):
             def unchanged(row, full):
                 baseline[row["candidate_id"]] = copy.deepcopy(row)
                 return row
-            with patch.object(newsroom, "_compact_candidate_density", side_effect=unchanged):
+            with patch.object(newsroom, "_compact_candidate_density", side_effect=unchanged), \
+                    patch.object(newsroom, "_fit_optional_previews"):
                 with self.assertRaises(newsroom.NewsroomError):
                     desk._initial_packet()
             packet = desk._initial_packet()

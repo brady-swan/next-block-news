@@ -1,6 +1,6 @@
 # Next Block News — editorial core v2
 
-*Current code description: 2026-09-09, Sprint0073 audience, Writer continuity and hybrid recall. Deployment proof/status: SPRINT-0073-FINDINGS.md.*
+*Current code description: 2026-09-09, repair0074 preparation reliability following Sprint0073. Deployment proof/status: SPRINT-0074-FINDINGS.md.*
 
 ### Writer continuity — Sprint0073
 
@@ -243,6 +243,10 @@ keys from a compact index, and a run-local same-event group.
 Preparation is bounded to three source leads, three related event keys, and two storyline keys
 per card. Responses schemas expose these same parser limits explicitly; Anthropic retains its
 compatible schema subset. No validation failure may silently discard a candidate.
+Repair0074 gives the existing single25-card preparation call90seconds instead of45, within
+the unchanged360-second newsroom lifecycle. No retries, model/effort changes or added calls.
+Run preparation counters report compact request bytes, cards, timeout, elapsed milliseconds
+and error class for success and failure; the same attempt is accounted once in model usage.
 It may mark a card Background
 only when it is facially outside scope, contains no development, or is an exact code-identified
 duplicate. Guide tips, official/primary items, operator promotions, research
@@ -281,11 +285,18 @@ preparation-failure boilerplate. It retains the exact fail-open outcome and prot
 reason, rather than presenting fallback prose as model judgment. Real preparation and all
 nonempty control fields remain intact; original full cards stay retrievable. This adds no
 model calls and does not change the packet or retrieval limits.
+If still oversized, optional coverage ledes, matching accepted-copy excerpts and candidate
+headline/arrival previews shorten further with explicit truncation flags and existing full
+context IDs. No candidate, exact event, incoming letter, output state, control or real
+preparation guidance is removed. Full originals remain available through read_desk_context.
 An irreducibly oversized packet still defers, recording section sizes as an assembly failure,
 not a delivered writer input. Only inline cards count as initially supplied/read. These are
 ceilings, not required consumption. The
 stable prompt benefits from provider caching. Responses tool turns preserve the provider's complete
 output state, including encrypted reasoning, in bounded run history only—not editorial memory.
+The192KiB history cap counts each Responses replay once, not both its raw provider output
+and the duplicate locally parsed tool blocks. Raw replay and encrypted reasoning remain
+unchanged. Image manifests and the separate image-byte limit retain their prior accounting.
 Native-only research turns may continue in the same conversation; they do not require fake
 client-tool results. A plain-text response is not a final editorial decision. The last allowed
 response forces the dossier specifically.
