@@ -219,13 +219,14 @@ class ReportingExecutionTests(unittest.TestCase):
             with self.subTest(recover=recover), temporary_store() as con, ExitStack() as stack:
                 run_id = "reader-choice-recovery"
                 row, original, draft, fake = materialization_fixture(con, run_id)
+                revised = "The SEC updated its Bitcoin policy."
                 better = inspected("better", "https://www.sec.gov/original-policy", "SEC", draft["post"])
                 fake.conduct.return_value.fetches[better.fetch_id] = better
                 sent = []
                 def create(_model, _system, raw, **kwargs):
                     payload = json.loads(raw)
                     sent.append(payload)
-                    choice = {"story_id": "sec", "verdict": "publish", "post": draft["post"],
+                    choice = {"story_id": "sec", "verdict": "revise", "post": revised,
                         "reason": "Use the original source."}
                     if recover and len(sent) == 2:
                         ref = next(r["evidence_ref"] for r in payload["unassigned_run_research"]["receipts"]
@@ -248,7 +249,7 @@ class ReportingExecutionTests(unittest.TestCase):
                 self.assertEqual(result["drafted"], 1)
                 post = dict(con.execute("SELECT * FROM posts").fetchone())
                 chosen = better.final_url if recover else original.final_url
-                self.assertEqual(post["body"], draft["post"])
+                self.assertEqual(post["body"], revised if recover else draft["post"])
                 self.assertEqual(post["receipt_url"], chosen)
                 self.assertEqual(writer_memory.publication(con, post["story_key"])["receipt_url"], chosen)
                 self.assertEqual(store.accepted_reader_context(con, post["id"])["reader_receipt"]["url"], chosen)
