@@ -1,7 +1,9 @@
 # Sprint0072 — make the Writer's existing research desk usable
 
 September9,2026. Owner-authorized turn01a0864b-aa94-7593-9ae2-f3118215c329.
-Status: plan approved by independent lead; implementation and release verification underway.
+Status: COMPLETE. Independent plan/code approval, implementation,662clean tests, Railway
+deployment and production smoke passed. Same audit restored in its separate lane.
+Runtime d8b2a46; release evidence and limitations: SPRINT-0072-FINDINGS.md.
 
 ## Objective and judgment
 

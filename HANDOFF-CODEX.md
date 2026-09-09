@@ -238,10 +238,12 @@ Database: /data/nbn.db; tapes: /data/tapes; backups: /data/backups.
 
 ## Latest release evidence and unresolved work
 
-Sprint0072 candidate **editorial-core-v2.31-perception-adoption** has independent code approval;
-deployment verification is pending in SPRINT-0072-FINDINGS.md. It preserves research budgets,
+Sprint0072 **d8b2a46 / editorial-core-v2.31-perception-adoption** is deployed on Railway
+**b0d6f330-cc4f-488d-a122-5332996bf5ee** (SUCCESS). Independent code approval,662clean tests,
+exact hash/health/authenticated Desk smoke and natural13:41UTC cycle passed. It preserves research budgets,
 retained-text hints, exact accepted-copy context and honest empty/capacity results. No new model
-or publishing rule. The audit now has its own NBN Audit task; see audit/audit-lane-handoff-2026-09-09.md.
+or publishing rule. AutopostOFF. Same audit restored in NBN Audit with adoption watches;
+see SPRINT-0072-FINDINGS.md and audit/audit-lane-handoff-2026-09-09.md.
 
 Previous runtime **ad864ff / editorial-core-v2.30-perception-reporting** was verified on Railway
 **fd4f02bb-3b24-4e79-82ac-5983e495dd6c** (SUCCESS). Independent review approved;652clean-release

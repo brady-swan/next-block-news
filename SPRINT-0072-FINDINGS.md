@@ -1,7 +1,7 @@
 # Sprint0072 — Perception adoption and Writer desk usability
 
 September9,2026. Owner turn01a0864b-aa94-7593-9ae2-f3118215c329.
-Status: independent plan and code review APPROVED; deployment verification pending.
+Status: independent plan and code review APPROVED; deployed and production smoke PASSED.
 
 ## Shipped scope
 
@@ -49,11 +49,31 @@ returned receipt ID, and the actual mocked Editor request contains the matching 
 reference. No Perception network request or publisher mutation occurs. This proves wiring, not
 that a live model will choose well or that Perception always has useful full text.
 
-Full working-tree/archive suite counts and production release evidence will be recorded below.
+Full working-tree suite passed664tests in26.672seconds; clean committed archive passed662tests
+in27.546seconds. Two unrelated evaluator tests exist only in the dirty working tree and were
+not shipped. No UI assets or database schemas changed; existing offline UI/API tests passed.
 
 ## Release verification
 
-Pending. Autopost remains OFF. Audit is paused in the separate NBN Audit task for this build;
-the same15-minute schedule will resume with targeted adoption checks after successful smoke.
+Runtime `d8b2a46` pushed to origin/main and deployed from its clean archive, not the dirty working
+tree. Railway deployment `b0d6f330-cc4f-488d-a122-5332996bf5ee`, created13:38:29.603UTC, SUCCESS.
+Single replica and/data preserved. Online SQLite backup with integrity_check=ok:
+`/data/backups/nbn-pre-source-policy-20260909T133805Z.db`.
+
+At13:40UTC, six exact runtime/prompt SHA256 hashes matched the archive. Loaded Writer v2.31
+and prep v2.7 confirmed. Health, authenticated System HTML and System/Newsroom workspace JSON
+all returned200. Empty regulatory parser smoke returned rows=[],total0,partialfalse. AutopostOFF.
+Initial post-restart cycles correctly waited on the previous process's lease. The natural
+cycle completed13:41:13.146UTC onv2.31:335 fetched,1new,14pending, no worker error/autopostOFF.
+Normal recovery closed one deployment-interrupted v2.30 pre-materialization run;0items held and
+0outputs delivered by recovery. No lease clearing or database repair was needed.
+
+The same audit-nbn-production heartbeat was restored ACTIVE in NBN Audit
+`01a08641-aacb-7121-befa-4ca836497496`, same15-minute cadence and standing autonomy. Exact canonical
+prompt, target and ACTIVE status verified after update13:42:22.022UTC. Added checks
+cover hint retention, exact memory/copy access, actual supplied versus selected evidence, honest
+empty/capacity results, freshness and consequential monetary signaling. Full historical editorial
+review remains at the audit lane's checkpoint; this smoke does not advance it. No organic v2.31
+Writer/Editor outcome was yet observed at smoke time; the resumed audit measures that separately.
 No forced paid Writer replay, historical test post, Typefully content change, new audit schedule,
 Node change or Nano Banana implementation is part of this release.
