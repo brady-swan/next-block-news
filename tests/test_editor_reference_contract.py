@@ -20,6 +20,44 @@ def research():
 
 
 class EditorReferenceContractTests(unittest.TestCase):
+    def test_non_drop_requires_explicit_source_choice_but_legacy_drop_remains_valid(self):
+        payload, _ = editor._batch_editor_payload([card()], [])
+        candidate = payload["candidates"][0]
+        for verdict in ("publish", "revise", "draft"):
+            with self.subTest(verdict=verdict):
+                row = {"verdict": verdict, "post": "Useful copy."}
+                errors = []
+                self.assertIsNone(editor._editor_decision(row, payload, candidate, "initial", errors))
+                self.assertEqual(errors[0]["field"], "reader_receipt_ref")
+                retained = editor._editor_decision({**row, "reader_receipt_ref": None}, payload, candidate, "initial")
+                self.assertIsNone(retained["reader_receipt"])
+        self.assertEqual(editor._editor_decision({"verdict": "drop", "post": None},
+            payload, candidate, "initial")["verdict"], "drop")
+
+    def test_omitted_source_choice_recovers_only_affected_sibling(self):
+        sent = []
+        def create(_model, system, raw, **kwargs):
+            payload = json.loads(raw)
+            sent.append(payload)
+            self.assertIn("reader_receipt_ref", kwargs["schema"]["properties"]["decisions"]["items"]["required"])
+            self.assertIn("Do not omit the field", system)
+            if len(sent) == 1:
+                return answer([{"story_id": "s1", "verdict": "publish", "post": "Keep sibling.",
+                    "reader_receipt_ref": None}, {"story_id": "s2", "verdict": "revise",
+                    "post": "Use the original.", "reason": "The assigned link is unrelated; use the original source."}])
+            self.assertEqual([c["story_id"] for c in payload["candidates"]], ["s2"])
+            self.assertIn('"field": "reader_receipt_ref"', payload["recovery_constraint"])
+            ref = payload["unassigned_run_research"]["receipts"][0]["evidence_ref"]
+            return answer([{"story_id": "s2", "verdict": "revise", "post": "Use the original.",
+                "additional_evidence_refs": [ref], "reader_receipt_ref": ref}])
+        with temporary_store() as con, patch.object(brain, "_create", side_effect=create):
+            result = editor.review_newsroom_batch([card("s1"), card("s2")], con,
+                run_id="reader:missing", research=[research()])
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(result["decisions"]["s1"]["post"], "Keep sibling.")
+        self.assertEqual(result["decisions"]["s2"]["origin"], "recovery")
+        self.assertEqual(result["decisions"]["s2"]["reader_receipt"]["fetch_id"], "official")
+
     def test_absent_and_empty_appendix_allow_only_empty_array(self):
         for appendix in (None, {}, {"receipts": []}):
             payload = {"candidates": [card()]}
@@ -42,6 +80,7 @@ class EditorReferenceContractTests(unittest.TestCase):
             self.assertEqual(additions(schema)["items"]["enum"], ["research_a", "research_b"])
             self.assertEqual(additions(schema)["maxItems"], 8)
             props = schema["properties"]["decisions"]["items"]["properties"]
+            self.assertIn("reader_receipt_ref", schema["properties"]["decisions"]["items"]["required"])
             self.assertEqual("visual_verdict" in props, len(cards) == 2)
             self.assertNotIn("enum", props["reader_receipt_ref"])
             self.assertNotIn("enum", props["story_id"])
@@ -63,6 +102,7 @@ class EditorReferenceContractTests(unittest.TestCase):
                 messages=[], max_tokens=100, schema=schema)
         actual = http.post.call_args.kwargs["json"]["text"]["format"]
         self.assertTrue(actual["strict"])
+        self.assertIn("reader_receipt_ref", actual["schema"]["properties"]["decisions"]["items"]["required"])
         allowed = additions(actual["schema"])["items"]["enum"]
         self.assertEqual(allowed, ["research_abc"])
         for invalid in ("research_abc],", "reader_receipt_ref", "reader_receipt_ref:", "visual_verdict"):

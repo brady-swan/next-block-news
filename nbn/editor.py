@@ -22,7 +22,7 @@ BATCH_EDITOR_SCHEMA = {
             "verdict": {"type": "string", "enum": ["publish", "revise", "draft", "drop"]},
             "post": {"type": ["string", "null"]}, "reason": {"type": "string"},
             "reader_receipt_ref": {"type": ["string", "null"], "description":
-                "Optional exact evidence_ref from this story's inspected_evidence_refs, or from your "
+                "Required explicit choice: exact evidence_ref from this story's inspected_evidence_refs, or from your "
                 "additional_evidence_refs. This is the reader-facing source, not a URL. Null keeps the writer's source."},
             "visual_verdict": {"type": "string", "enum": ["none", "approve", "omit", "hold"]},
             "visual_asset_id": {"type": ["string", "null"]},
@@ -32,7 +32,7 @@ BATCH_EDITOR_SCHEMA = {
                 "items": {"type": "string"}, "description":
                 "Optional: exact refs from unassigned_run_research that you inspected and find relevant to THIS story. Empty otherwise. Writer evidence plus additions may total at most eight. Never select unrelated research."},
         },
-        "required": ["story_id", "verdict", "post", "reason"],
+        "required": ["story_id", "verdict", "post", "reason", "reader_receipt_ref"],
     }}},
     "required": ["decisions"],
 }
@@ -193,10 +193,11 @@ infer support from a title, URL, reporting note, reputation or an unseen clipped
 Multiple extracts repeating one report are still not independent corroboration. These arrays contain
 only exact evidence_ref IDs, such as research_ followed by its supplied identifier; never field
 names, URLs, null strings, or visual settings. No new lookup or research round is required.
-Optionally choose reader_receipt_ref from THIS candidate's inspected_evidence_refs, or from
+Every decision must explicitly include reader_receipt_ref. Choose from THIS candidate's inspected_evidence_refs, or from
 appendix refs you explicitly selected in additional_evidence_refs. Prefer the useful original
 source when already inspected; retain good reporting when it better serves the reader. Null
-keeps the writer's link. Other receipts still support the post; one link need not contain it all.
+keeps the writer's link; also use null for a drop. Do not omit the field.
+Other receipts still support the post; one link need not contain it all.
 Selecting additional_evidence_refs does not change the reader's source reply. If you identify
 the writer's link as belonging to a different story and a relevant permitted receipt is already
 supplied, choose that receipt in reader_receipt_ref; explaining the mismatch in reason or
@@ -485,6 +486,8 @@ def _editor_decision(row: dict, payload: dict, card: dict, origin: str, errors: 
     refs = list(dict.fromkeys(refs))
     if card.get("evidence_records_used", len(card["inspected_evidence_refs"])) + len(refs) > 8:
         return reject("additional_evidence_refs", "Writer receipts plus selected additions exceed eight")
+    if verdict != "drop" and "reader_receipt_ref" not in row:
+        return reject("reader_receipt_ref", "Explicitly choose a permitted evidence_ref, or null to retain the writer's source")
     reader_ref = row.get("reader_receipt_ref")
     reader_catalog = {r["evidence_ref"]: r for r in payload.get("evidence_catalog", [])
                       if r["evidence_ref"] in card["inspected_evidence_refs"]}

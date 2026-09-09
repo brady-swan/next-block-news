@@ -176,7 +176,7 @@ class ReportingExecutionTests(unittest.TestCase):
     def test_editor_recovery_identifies_the_actual_bad_field(self):
         with temporary_store() as con, patch("nbn.brain._create", side_effect=[response({"decisions": [
                 {"story_id": "gold", "verdict": "publish", "post": "Good copy.", "additional_evidence_refs": ["visual_verdict"]}]}),
-                response({"decisions": [{"story_id": "gold", "verdict": "publish", "post": "Good copy.", "additional_evidence_refs": []}]})]) as create:
+                response({"decisions": [{"story_id": "gold", "verdict": "publish", "post": "Good copy.", "reader_receipt_ref": None, "additional_evidence_refs": []}]})]) as create:
             result = editor.review_newsroom_batch([{"story_id": "gold", "post": "Good copy.", "inspected_evidence": [], "selected_receipt": {}}], con, run_id="r")
             constraint = json.loads(create.call_args_list[1].args[2])["recovery_constraint"]
             self.assertIn('"field": "additional_evidence_refs"', constraint)
@@ -213,6 +213,47 @@ class ReportingExecutionTests(unittest.TestCase):
             self.assertEqual(store.accepted_reader_context(con, post["id"])["reader_receipt"]["url"], chosen["url"])
             con.execute("UPDATE publisher_mutations SET state='uncertain'"); con.commit()
             self.assertFalse(store.accepted_reader_context(con, post["id"]))
+
+    def test_missing_reader_choice_recovery_materializes_source_or_preserves_human_fallback(self):
+        for recover in (True, False):
+            with self.subTest(recover=recover), temporary_store() as con, ExitStack() as stack:
+                run_id = "reader-choice-recovery"
+                row, original, draft, fake = materialization_fixture(con, run_id)
+                better = inspected("better", "https://www.sec.gov/original-policy", "SEC", draft["post"])
+                fake.conduct.return_value.fetches[better.fetch_id] = better
+                sent = []
+                def create(_model, _system, raw, **kwargs):
+                    payload = json.loads(raw)
+                    sent.append(payload)
+                    choice = {"story_id": "sec", "verdict": "publish", "post": draft["post"],
+                        "reason": "Use the original source."}
+                    if recover and len(sent) == 2:
+                        ref = next(r["evidence_ref"] for r in payload["unassigned_run_research"]["receipts"]
+                            if r["fetch_id"] == "better")
+                        choice.update(reader_receipt_ref=ref, additional_evidence_refs=[ref])
+                    return response({"decisions": [choice]})
+                stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="test"))
+                stack.enter_context(patch.object(brain, "_create", side_effect=create))
+                stack.enter_context(patch.object(newsroom, "start_session", return_value=fake))
+                stack.enter_context(patch.object(config, "RUN_NEWSROOM_MODE", "live"))
+                stack.enter_context(patch.object(config, "AUTOPOST_ENABLED", False))
+                stack.enter_context(patch.object(publisher, "backend_name", return_value="typefully"))
+                publish = stack.enter_context(patch.object(publisher, "publish", return_value=("DRAFT", "fixture-draft")))
+                self.assertTrue(store.acquire_cycle_lease(con, "owner"))
+                result = main._run_editorial_v2(con, lease_owner="owner", pipeline_run_id=run_id,
+                    inventory=[row], pending=[row], result={k: 0 for k in
+                        ("held", "skipped", "posted", "drafted", "uncertain", "failed", "taped")},
+                    theme_snapshot=[], overrides={}, run_started=time.time())
+                self.assertEqual(len(sent), 2)
+                self.assertEqual(result["drafted"], 1)
+                post = dict(con.execute("SELECT * FROM posts").fetchone())
+                chosen = better.final_url if recover else original.final_url
+                self.assertEqual(post["body"], draft["post"])
+                self.assertEqual(post["receipt_url"], chosen)
+                self.assertEqual(writer_memory.publication(con, post["story_key"])["receipt_url"], chosen)
+                self.assertEqual(store.accepted_reader_context(con, post["id"])["reader_receipt"]["url"], chosen)
+                if not recover:
+                    self.assertTrue(publish.call_args.kwargs["force_draft"])
 
     def test_visual_examples_are_valid_and_source_media_outranks_avatar(self):
         examples = [json.JSONDecoder().raw_decode(visual_tools.GUIDANCE[m.end():])[0]

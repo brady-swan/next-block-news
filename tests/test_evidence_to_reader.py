@@ -72,14 +72,14 @@ class EvidenceToReaderTests(unittest.TestCase):
         payload, _ = editor._batch_editor_payload([card()], [], research=[self.research()])
         c = payload["candidates"][0]
         ref = payload["unassigned_run_research"]["receipts"][0]["evidence_ref"]
-        valid = {"verdict": "revise", "post": "Useful.", "additional_evidence_refs": [ref]}
+        valid = {"verdict": "revise", "post": "Useful.", "reader_receipt_ref": None, "additional_evidence_refs": [ref]}
         self.assertEqual(editor._editor_decision(valid, payload, c, "initial")["additional_evidence_refs"], [ref])
         for bad in ([ref, "unseen"], "not-list", [None], [ref] * 9):
             with self.subTest(bad=bad):
                 self.assertIsNone(editor._editor_decision({**valid, "additional_evidence_refs": bad}, payload, c, "initial"))
         self.assertIsNone(editor._editor_decision(valid, payload, {**c, "evidence_records_used": 8}, "initial"))
-        legacy = editor._editor_decision({"verdict": "publish", "post": "Useful."}, payload, c, "initial")
-        self.assertEqual(legacy["additional_evidence"], [])
+        retained = editor._editor_decision({"verdict": "publish", "post": "Useful.", "reader_receipt_ref": None}, payload, c, "initial")
+        self.assertEqual(retained["additional_evidence"], [])
         self.assertIsNone(editor._editor_decision({**valid, "verdict": []}, payload, c, "initial"))
 
     def test_invalid_first_pass_recovers_only_omitted_with_same_excerpt(self):
@@ -88,10 +88,10 @@ class EvidenceToReaderTests(unittest.TestCase):
             p = json.loads(raw)
             sent.append(p)
             if len(sent) == 1:
-                return answer([{"story_id": "s1", "verdict": "publish", "post": "First."},
+                return answer([{"story_id": "s1", "verdict": "publish", "post": "First.", "reader_receipt_ref": None},
                     {"story_id": "s2", "verdict": "revise", "post": "Bad ref.", "additional_evidence_refs": ["unknown"]}])
             ref = p["unassigned_run_research"]["receipts"][0]["evidence_ref"]
-            return answer([{"story_id": "s2", "verdict": "revise", "post": "Recovered.", "additional_evidence_refs": [ref]}])
+            return answer([{"story_id": "s2", "verdict": "revise", "post": "Recovered.", "reader_receipt_ref": None, "additional_evidence_refs": [ref]}])
         with temporary_store() as con, patch.object(brain, "_create", side_effect=create):
             result = editor.review_newsroom_batch([card("s1"), card("s2")], con,
                 run_id="test:recovery", research=[self.research()])
@@ -121,7 +121,7 @@ class EvidenceToReaderTests(unittest.TestCase):
         self.assertEqual(sent[1]["candidates"], base["candidates"])
 
     def test_malformed_verdict_does_not_discard_valid_sibling(self):
-        first = answer([{"story_id": "s1", "verdict": "publish", "post": "Keep me."},
+        first = answer([{"story_id": "s1", "verdict": "publish", "post": "Keep me.", "reader_receipt_ref": None},
                         {"story_id": "s2", "verdict": [], "post": "Malformed."}])
         second = answer([{"story_id": "s2", "verdict": "drop", "post": None}])
         with temporary_store() as con, patch.object(brain, "_create", side_effect=[first, second]) as create:
@@ -152,7 +152,7 @@ class EvidenceToReaderTests(unittest.TestCase):
                 post = ('The SEC announced a Bitcoin policy update.\n\n"Only the invisible remainder says this."'
                         if quote_beyond_excerpt else 'The SEC announced a Bitcoin policy update.\n\nOperating funds are raised separately.'
                         if native else 'The SEC announced a Bitcoin policy update.\n\n"Operating funds are raised separately."')
-                return answer([{"story_id": "sec", "verdict": "revise", "post": post, "reason": "Useful original context.",
+                return answer([{"story_id": "sec", "verdict": "revise", "post": post, "reason": "Useful original context.", "reader_receipt_ref": None,
                     "additional_evidence_refs": ["invalid"] if invalid_refs else [receipt["evidence_ref"]]}])
             stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="test"))
             stack.enter_context(patch.object(brain, "_create", side_effect=create))

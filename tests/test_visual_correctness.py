@@ -48,7 +48,7 @@ class VisualCorrectnessTests(unittest.TestCase):
 
     @staticmethod
     def decision(story):
-        return {"story_id":story, "verdict":"publish", "post":"Test copy."}
+        return {"story_id":story, "verdict":"publish", "post":"Test copy.", "reader_receipt_ref":None}
 
     def test_evidence_only_unknown_rights_reaches_initial_and_recovery_as_exact_pixels(self):
         a = self.asset()

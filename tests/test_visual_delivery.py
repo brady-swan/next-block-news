@@ -181,7 +181,7 @@ class VisualDeliveryTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             stale=visual_choices.request(self.con,"test","s","omit",a["asset_id"],"landscape",0)
             self.assertFalse(stale["ok"]); review.assert_not_called()
-        decision={"verdict":"publish","post":"Test copy.","visual_review":{
+        decision={"verdict":"publish","post":"Test copy.","reader_receipt_ref":None,"visual_review":{
             "verdict":"approve","asset_id":a["asset_id"],"content_hash":a["content_hash"],
             "post_hash":visuals.digest("Test copy."),"alt_text":a["metadata"]["alt_text"],"credit":a["metadata"]["credit"]}}
         with patch.object(editor,"review_newsroom_batch",return_value={"decisions":{"s":decision}}), \
@@ -208,7 +208,7 @@ class VisualDeliveryTests(unittest.TestCase):
         from nbn import brain
         a=self.asset(); visual={**visuals.manifest(a),"reusable":True}
         candidate={"story_id":"s","post":"Test copy.","visual":visual,"selected_receipt":{},"inspected_evidence":[]}
-        row={"story_id":"s","verdict":"publish","post":"Test copy.","visual_verdict":"approve",
+        row={"story_id":"s","verdict":"publish","post":"Test copy.","reader_receipt_ref":None,"visual_verdict":"approve",
             "visual_asset_id":a["asset_id"],"visual_content_hash":a["content_hash"],"text_fallback":None}
         with patch.object(brain,"_create",return_value=Mock()) as create, \
              patch.object(brain,"_json_from",side_effect=[{"decisions":[]},{"decisions":[row]}]), \
@@ -267,12 +267,12 @@ class VisualDeliveryTests(unittest.TestCase):
     def test_editor_approval_binds_exact_asset_hash_and_copy(self):
         asset=self.asset(); visual={**visuals.manifest(asset),"reusable":True}
         card={"visual":visual,"inspected_evidence_refs":[]}
-        row={"verdict":"publish","post":"Test copy.","visual_verdict":"approve",
+        row={"verdict":"publish","post":"Test copy.","reader_receipt_ref":None,"visual_verdict":"approve",
             "visual_asset_id":asset["asset_id"],"visual_content_hash":asset["content_hash"],"text_fallback":"Standalone."}
         result=editor._editor_decision(row,{},card,"initial")
         self.assertEqual(result["visual_review"]["post_hash"],visuals.digest("Test copy."))
         self.assertIsNone(editor._editor_decision({**row,"visual_content_hash":"other"},{},card,"initial"))
-        self.assertIsNone(editor._editor_decision({"verdict":"publish","post":"Test copy."},{},card,"initial"))
+        self.assertIsNone(editor._editor_decision({"verdict":"publish","post":"Test copy.","reader_receipt_ref":None},{},card,"initial"))
         omitted=editor._editor_decision({**row,"visual_verdict":"omit"},{},card,"initial")
         self.assertEqual(omitted["post"],"Standalone.")
         self.assertIsNone(editor._editor_decision({**row,"visual_verdict":"omit","text_fallback":None},{},card,"initial"))

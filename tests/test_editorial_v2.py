@@ -101,7 +101,7 @@ class EditorialV2Tests(unittest.TestCase):
                 "uncertain": 0, "failed": 0, "taped": 0}
 
     def test_v212_prompts_teach_writer_craft_without_style_gates(self):
-        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.35-writer-continuity")
+        self.assertEqual(newsroom.PROMPT_VERSION, "editorial-core-v2.36-reader-receipt-contract")
         self.assertIn("FINAL WRITING PASS", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("still be publication-ready", newsroom.NEWSROOM_V2_SYSTEM)
         self.assertIn("Do not define a familiar Bitcoin-native", newsroom.NEWSROOM_V2_SYSTEM)
@@ -1094,9 +1094,9 @@ class EditorialV2Tests(unittest.TestCase):
             )
 
         first = answer({"decisions": [{"story_id": "s1", "verdict": "publish",
-                                       "post": "First.", "reason": "good"}]})
+                                       "post": "First.", "reason": "good", "reader_receipt_ref": None}]})
         second = answer({"decisions": [{"story_id": "s2", "verdict": "draft",
-                                        "post": "Second.", "reason": "review"}]})
+                                        "post": "Second.", "reason": "review", "reader_receipt_ref": None}]})
         candidates = [{
             "story_id": key, "post": text, "selected_receipt": {},
             "inspected_evidence": [], "output_continuity": {"canonical_key": key},
