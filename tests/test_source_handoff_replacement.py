@@ -140,7 +140,7 @@ class ReplacementTests(unittest.TestCase):
         self.assertEqual(result["decisions"]["s1"]["replacement_decision"], "reject")
 
     def test_controller_preserves_draft_and_identity_on_veto_or_missing_review(self):
-        for case in ("reject", "missing", "outage", "capacity", "drop", "approve", "create_update", "visual_reject", "no_evidence", "exact_output", "failed_attempt"):
+        for case in ("reject", "missing", "outage", "capacity", "drop", "drop_existing_counter", "approve", "create_update", "visual_reject", "no_evidence", "exact_output", "failed_attempt"):
             with self.subTest(case=case), temporary_store() as con, ExitStack() as stack:
                 row, receipt, draft, desk = materialization_fixture(con, "replacement-case")
                 outcome = desk.conduct.return_value
@@ -180,7 +180,7 @@ class ReplacementTests(unittest.TestCase):
                     self.assertEqual(con.execute("SELECT COUNT(*) FROM story_key_aliases").fetchone()[0], int(case == "create_update"))
                     return {"ok": case != "outage", "payload_deferred": ["sec"] if case == "capacity" else [],
                         "decisions": {} if case in {"missing", "outage", "capacity"} else {"sec": {
-                            "verdict": "drop" if case == "drop" else "revise", "post": draft["post"],
+                            "verdict": "drop" if case in {"drop", "drop_existing_counter"} else "revise", "post": draft["post"],
                             "reason": "Separate event, keep the existing draft." if case.endswith("reject") else "Review result.",
                             "replacement_decision": "reject" if case.endswith("reject") else case}}}
                 stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="test"))
@@ -196,8 +196,16 @@ class ReplacementTests(unittest.TestCase):
                 self.assertTrue(store.acquire_cycle_lease(con, "test-owner"))
                 result = main._run_editorial_v2(con, lease_owner="test-owner", pipeline_run_id="replacement-case",
                     inventory=[row], pending=[row], result={k: 0 for k in
-                    ("held", "skipped", "posted", "drafted", "uncertain", "failed", "taped")},
+                    ("held", "posted", "drafted", "uncertain", "failed", "taped")} |
+                    ({"skipped": 3} if case == "drop_existing_counter" else {}),
                     theme_snapshot=[], overrides={}, run_started=time.time())
+                if case in {"drop", "drop_existing_counter"}:
+                    self.assertEqual(result["skipped"], 4 if case == "drop_existing_counter" else 1)
+                    run = con.execute("SELECT status,error_kind FROM newsroom_runs WHERE run_id='replacement-case'").fetchone()
+                    self.assertEqual(run["status"], "completed")
+                    self.assertFalse(run["error_kind"])
+                    commit = con.execute("SELECT state FROM newsroom_story_commits WHERE run_id='replacement-case'").fetchone()
+                    self.assertEqual(commit["state"], "held")
                 if case in {"approve", "create_update"}:
                     self.assertEqual(replace.call_count, int(case == "approve"))
                     self.assertEqual(publish.call_count, int(case == "create_update"))
@@ -213,11 +221,11 @@ class ReplacementTests(unittest.TestCase):
                     self.assertEqual(con.execute("SELECT COUNT(*) FROM writer_artifacts WHERE canonical_key<>''").fetchone()[0], 0)
                     item = con.execute("SELECT status,story_key FROM items WHERE url_hash=?", (row["url_hash"],)).fetchone()
                     self.assertFalse(item["story_key"])
-                    self.assertEqual(item["status"], "skipped" if case in {"drop", "exact_output"} else "new")
+                    self.assertEqual(item["status"], "skipped" if case in {"drop", "drop_existing_counter", "exact_output"} else "new")
                     failure = writer_memory.latest_identity_failure(con, [row["url_hash"]])
                     if case == "failed_attempt":
                         self.assertEqual(failure["failure"], attempt["failure"])
-                    elif case not in {"drop", "no_evidence", "exact_output"}:
+                    elif case not in {"drop", "drop_existing_counter", "no_evidence", "exact_output"}:
                         self.assertIn("replacement_identity_rejected" if case.endswith("reject") else "replacement_review_incomplete", failure["failure"])
                         self.assertEqual(result["held"], 1)
 

@@ -858,7 +858,8 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                 **diagnostic, "verdict": "drop" if dropped else "held", "reason": reason,
                 "operation": "keep_existing", "origin": "replacement_review"}, ref=story_id, phase="applied")
             store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held", details=diagnostic)
-            result["skipped" if dropped else "held"] += len(members)
+            counter = "skipped" if dropped else "held"
+            result[counter] = int(result.get(counter, 0)) + len(members)
             continue
         if story_id in pending_replacement_attempts and verdict != "drop":
             persist_attempt(pending_replacement_attempts.pop(story_id))
