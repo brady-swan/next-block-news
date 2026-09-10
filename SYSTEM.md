@@ -2,6 +2,14 @@
 
 ## Sprint0076 — local Codex reporter pilot
 
+September10 status: the owner ended the pilot. Tooling0077 adds bounded independent tool
+workers, crash/cancellation cleanup, targeted/searchable PDF reads and page inspection,
+browser sections/links, explicit chart schemas and cached typed search outcomes. It does
+not restart reporting or change editorial/model settings. The historical two-hour shift
+received an owner-authorized extension and was stopped before its final cutoff.
+See `infra/codex-reporter/README.md` for current tool limits and `SPRINT-0077-FINDINGS.md`
+for verification, remaining limitations and rollback.
+
 The pilot uses `NBN_OPERATING_MODE=infrastructure`: the Railway process collects raw
 RSS/EDGAR/X/Perception/Node leads, synchronizes actual Typefully coverage, stores evidence
 and serves the Desk. It does **not** run the legacy Haiku/Luna/Grok funnel, scheduled

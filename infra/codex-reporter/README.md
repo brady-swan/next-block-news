@@ -1,4 +1,30 @@
-# Local Codex reporter pilot —0076
+# Local Codex reporter pilot —0076, tooling0077
+
+The September10 reporting test has ended. Tooling0077 prepares another test but does not
+start one; reporter, audit and autopost remain off unless separately authorized.
+
+The stdio bridge isolates each call in an owned process group with a45-second wall-clock
+limit. Three read slots, two notebook/handoff slots and one delivery slot have no hidden
+queue. Busy calls say **not dispatched**. Cancellation/EOF/parent loss clean owned children;
+interrupted submissions retain their stable ID and remain uncertain, never auto-recreated.
+The supervisor uses a daemon turn consumer and distinguishes operator_stop (paused),
+shift_cutoff (completed), and turn_timeout (failed); none automatically starts another shift.
+
+`nbn_fetch` keeps its default legacy article/PDF behavior. For deeper PDFs use `pdf_query`
+for literal search (physical pages1–500), or `start_page`/`page_count` (up to12 pages).
+Targeted retrieval accepts32MiB, parses for at most12s inside a35s fetch allowance, and
+returns bounded text with actual page numbers. Follow `next_cursor` with the same URL for
+clipped text, or `next_page` for another range. No OCR, verified table layout or inferred
+publication date. `nbn_visual pdf_page` supports those physical pages for separate pixel
+inspection; source-image attachment permissions are unchanged.
+
+`nbn_browser` returns outbound links, a24k text window, next_offset and an actual viewport
+screenshot. `query` finds a literal section; it is not a web search. Links are not evidence.
+`nbn_visual` now exposes the real chart/passage schemas plus a complete illustrative call;
+missing fields are reported together. No change to renderer design or editorial decisions.
+Reporter Google searches share existing SQLite cache/provider health; provider failures
+and X errors are distinct from zero results. Native web/exact-source fallback remains
+available. See PLAN-0077-REPORTER-TOOLING.md and SPRINT-0077-FINDINGS.md.
 
 Current host: `/Users/brady/codex/nbn-reporter-pilot`. Runtime and separate account login
 are already installed. Do not repeat device login or use the historical container spike.

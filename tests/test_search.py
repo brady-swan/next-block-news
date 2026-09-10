@@ -6,6 +6,23 @@ from nbn import search
 
 
 class SearchTests(unittest.TestCase):
+    def test_parallel_requests_never_log_serpapi_query_credentials(self):
+        import concurrent.futures
+        import threading
+        barrier=threading.Barrier(2)
+        logger=logging.getLogger('httpx')
+        def request(url,**kwargs):
+            barrier.wait(timeout=2)
+            logger.info('HTTP Request: GET https://serpapi.com/search.json?api_key=fixture-secret')
+            logger.info('Public fixture response')
+            return Mock()
+        with patch.object(search.httpx,'get',side_effect=request),self.assertLogs('httpx',level='INFO') as logs:
+            with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                results=[pool.submit(search._request,'https://serpapi.com/search.json',params={},timeout=1) for _ in range(2)]
+                for result in results:result.result(timeout=3)
+        self.assertNotIn('fixture-secret',' '.join(logs.output))
+        self.assertEqual(len(logs.output),2)
+
     def test_unconfigured_search_is_a_noop(self):
         with (
             patch("nbn.search.config.SERPAPI_KEY", ""),

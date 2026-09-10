@@ -1,5 +1,12 @@
 # Next Block News
 
+**Current operation (September10):** the legacy model pipeline is paused. Railway runs
+infrastructure-only intake/coverage/Desk; the finite local Astra reporter test has ended.
+Tooling0077 repairs its runtime/PDF/browser/search/chart interfaces without restarting
+reporting, audit or autopost. See [SYSTEM.md](SYSTEM.md) and
+[reporter runtime guide](infra/codex-reporter/README.md). The architecture below describes
+the retained legacy pipeline, not a currently active reporter.
+
 Autonomous Bitcoin news wire for X at `@nextblocknews_`. A single Python worker watches
 primary sources, press feeds, Perception, and selected X accounts. A bounded Luna assignment
 desk prepares each due batch; a fresh run-scoped Grok 4.3 desk researches and writes the useful

@@ -203,13 +203,15 @@ def download(url, *, deadline=None):
     raise ValueError("image redirect limit")
 
 
-def pdf_page(url,page,*,deadline):
+def pdf_page(url,page,*,deadline,reporter=False):
     """One original-layout page, with bounded download/render. No OCR, cropping or resizing later."""
     import subprocess
     from . import sources, pdf_source
-    if not isinstance(page,int) or isinstance(page,bool) or not 1<=page<=pdf_source.MAX_PAGES:
-        raise ValueError("PDF page must be within first 20 pages")
-    end=min(deadline,time.monotonic()+10); current=url; data=None
+    page_limit=500 if reporter else pdf_source.MAX_PAGES
+    byte_limit=32*1024*1024 if reporter else pdf_source.MAX_INPUT_BYTES
+    if not isinstance(page,int) or isinstance(page,bool) or not 1<=page<=page_limit:
+        raise ValueError(f"PDF page must be within first {page_limit} pages")
+    end=min(deadline,time.monotonic()+(35 if reporter else 10)); current=url; data=None
     with httpx.Client(follow_redirects=False,headers={"User-Agent":sources.UA}) as client:
         for _ in range(6):
             sources._assert_public_http_url(current)
@@ -221,7 +223,7 @@ def pdf_page(url,page,*,deadline):
                 resp.raise_for_status(); buf=bytearray()
                 for part in resp.iter_bytes(65536):
                     buf.extend(part)
-                    if len(buf)>pdf_source.MAX_INPUT_BYTES or time.monotonic()>end:
+                    if len(buf)>byte_limit or time.monotonic()>end:
                         raise ValueError("PDF image input/time limit")
                 data=bytes(buf); break
     if not data or not data.startswith(b"%PDF-"): raise ValueError("not a PDF")

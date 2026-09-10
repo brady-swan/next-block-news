@@ -1,6 +1,7 @@
 # Documentation map
 
-Updated 2026-09-09: Sprint0075 source handoff and replacement handling; Plan0067 and QMD remain parked.
+Updated 2026-09-10: Sprint0077 tooling for the stopped local Astra reporter pilot;
+legacy model pipeline and audit remain paused. Plan0067 and QMD remain parked.
 This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
@@ -10,6 +11,10 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | File | Role |
 | --- | --- |
 | README.md | Project entry point, module map, invariants and running/deploying |
+| PLAN-0077-REPORTER-TOOLING.md | Reviewed timeout, PDF, browser, chart and search repairs; finite test-ready goal |
+| SPRINT-0077-FINDINGS.md | Test/release proof and limitations; no automatic reporter restart |
+| infra/codex-reporter/README.md | Local Astra runtime, current tool contracts/limits and operator controls |
+| PLAN-0076-CODEX-REPORTER.md | Original finite ChatGPT-backed reporter pilot design |
 | PLAN-0075-SOURCE-HANDOFF-AND-REPLACEMENT.md | Reviewed attribution, native-evidence completion and replacement scope |
 | SPRINT-0075-FINDINGS.md | Tests, independent review, release/smoke and monitoring handoff |
 | PLAN-0074-PREPARATION-RELIABILITY.md | Bounded Luna timeout, optional-preview fitting and corrected replay accounting |

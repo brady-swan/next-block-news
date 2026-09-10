@@ -112,6 +112,30 @@ def stop_runtime(codex, active=None, *, owned_proc=None):
         except subprocess.TimeoutExpired: pass
 
 
+def consume_turn(active):
+    """A wedged SDK iterator cannot keep the supervisor alive at Python exit."""
+    future = concurrent.futures.Future()
+    def consume():
+        try: future.set_result(active.run())
+        except BaseException as exc: future.set_exception(exc)
+    threading.Thread(target=consume, daemon=True, name='reporter-turn-consumer').start()
+    return future
+
+
+def stop_reason(stopping, cutoff, started, now):
+    if now >= cutoff: return 'shift_cutoff'
+    if stopping: return 'operator_stop'
+    if now - started > 600: return 'turn_timeout'
+    return ''
+
+
+def final_shift_status(reason, state, expired=False):
+    if expired or reason=='shift_cutoff': return 'completed'
+    if reason=='operator_stop': return 'paused'
+    if reason=='turn_timeout': return 'failed'
+    return state
+
+
 @contextmanager
 def bounded_client():
     codex=probe.client()
@@ -131,17 +155,17 @@ def run():
     lock=(CONTROL/'supervisor.lock').open('a')
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     keepawake=subprocess.Popen(['/usr/bin/caffeinate','-i','-s','-w',str(os.getpid())])
-    stopping=False
+    stopping=False; shutdown_reason=''
     def stop_signal(*_):
-        nonlocal stopping
-        stopping=True
+        nonlocal stopping, shutdown_reason
+        stopping=True; shutdown_reason='operator_stop'
     signal.signal(signal.SIGTERM,stop_signal);signal.signal(signal.SIGINT,stop_signal)
     state='completed'; active=None; runtime_client=None
     watcher_done=threading.Event()
     def watchdog():
-        nonlocal stopping
+        nonlocal stopping, shutdown_reason
         while not watcher_done.wait(1):
-            if time.time()>=shift['cutoff_at']: stopping=True
+            if time.time()>=shift['cutoff_at']: stopping=True; shutdown_reason='shift_cutoff'
             if stopping and runtime_client is not None:
                 stop_runtime(runtime_client,active)
                 return
@@ -181,20 +205,17 @@ def run():
                 api('delivered',{'shift_id':shift['shift_id'],'turn_id':active.id,
                                  'record_ids':[m['record_id'] for m in messages if m['sender']=='main_assistant']})
                 # Consume in a thread so the operator loop renews leases and enforces cutoff.
-                pool=concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                future=pool.submit(active.run); started=time.time()
-                try:
-                    while not future.done():
-                        if stopping or time.time()>=shift['cutoff_at'] or time.time()-started>600:
-                            stopping=True
-                            stop_runtime(codex,active)
-                            raise RuntimeError('Reporting turn interrupted at pause/cutoff/10-minute ceiling')
-                        beat(shift)
-                        try: future.result(timeout=min(20,max(.1,shift['cutoff_at']-time.time())))
-                        except concurrent.futures.TimeoutError: pass
-                    result=future.result()
-                finally:
-                    pool.shutdown(wait=False,cancel_futures=True)
+                future=consume_turn(active); started=time.time()
+                while not future.done():
+                    reason = stop_reason(stopping, shift['cutoff_at'], started, time.time())
+                    if reason:
+                        stopping=True; shutdown_reason=reason
+                        stop_runtime(codex,active)
+                        raise RuntimeError('Reporting turn interrupted: '+reason)
+                    beat(shift)
+                    try: future.result(timeout=min(20,max(.1,shift['cutoff_at']-time.time())))
+                    except concurrent.futures.TimeoutError: pass
+                result=future.result()
                 record(shift,'turn_output',{'turn_id':active.id,'status':str(result.status),'text':(result.final_response or '')[:20000]},'output:'+active.id)
                 if result.usage:
                     record(shift,'usage',{'turn_id':active.id,'usage':result.usage.model_dump(mode='json'),
@@ -207,16 +228,18 @@ def run():
                 print(json.dumps({'completed_turn':result.id,
                                   'at':dt.datetime.now(dt.timezone.utc).isoformat()}),flush=True)
     except Exception as exc:
-        state='completed' if time.time()>=shift['cutoff_at'] else 'failed'
+        if time.time()>=shift['cutoff_at']: shutdown_reason='shift_cutoff'
+        state='completed' if shutdown_reason=='shift_cutoff' else 'paused' if shutdown_reason=='operator_stop' else 'failed'
         if active and runtime_client is not None: stop_runtime(runtime_client,active)
-        save(CONTROL/'failure.json',{'at':time.time(),'error':str(exc)[:500]})
+        save(CONTROL/'failure.json',{'at':time.time(),'error':str(exc)[:500],
+                                    'stop_reason':shutdown_reason or 'runtime_error','state':state})
         raise
     finally:
         watcher_done.set()
         try:
             observed=api('pulse').get('shift')
             if observed and observed['shift_id']==shift['shift_id'] and observed['status']=='active':
-                final_status='completed' if time.time()>=shift['cutoff_at'] else 'paused' if stopping else state
+                final_status=final_shift_status(shutdown_reason,state,time.time()>=shift['cutoff_at'])
                 api('stop',{'shift_id':shift['shift_id'],'status':final_status})
         finally: keepawake.terminate();lock.close()
 

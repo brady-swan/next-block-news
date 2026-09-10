@@ -8,6 +8,26 @@ from unittest.mock import Mock, patch
 
 
 class ReporterSupervisorTests(unittest.TestCase):
+    def test_turn_consumer_is_daemon_and_failure_is_observable(self):
+        module=self.module(); seen=[]
+        active=Mock()
+        def run():
+            seen.append(threading.current_thread().daemon)
+            raise ValueError('SDK failed')
+        active.run.side_effect=run
+        with self.assertRaisesRegex(ValueError,'SDK failed'): module.consume_turn(active).result(timeout=1)
+        self.assertEqual(seen,[True])
+
+    def test_stop_reasons_are_distinct_and_cutoff_has_priority(self):
+        m=self.module()
+        self.assertEqual(m.stop_reason(False,1000,0,601),'turn_timeout')
+        self.assertEqual(m.stop_reason(True,1000,0,601),'operator_stop')
+        self.assertEqual(m.stop_reason(True,1000,0,1000),'shift_cutoff')
+        self.assertEqual(m.stop_reason(False,1000,0,500),'')
+        self.assertEqual(m.final_shift_status('turn_timeout','completed'),'failed')
+        self.assertEqual(m.final_shift_status('operator_stop','failed'),'paused')
+        self.assertEqual(m.final_shift_status('shift_cutoff','failed'),'completed')
+
     def module(self):
         path=Path(__file__).parents[1]/'infra/codex-reporter/reporter_supervisor.py'
         spec=importlib.util.spec_from_file_location('pilot_supervisor_test',path)

@@ -8,6 +8,7 @@ import uuid
 import httpx
 
 from . import config, publisher_typefully as tf, reporter_store as rs, source_policy, sources, store
+from . import reporter_visual_contract as visual_contract
 
 STR = {"type": "string"}
 INT = {"type": "integer", "minimum": 0}
@@ -24,7 +25,13 @@ TOOLS = [
          "Use before_seen/before_id from next_cursor to page backwards. No editorial shortlist.",
          {"hours": INT, "limit": INT, "before_seen": {"type": "number"}, "before_id": STR, "query": STR}),
     tool("nbn_context", "Current shift, 48h publication history, current Typefully draft/feedback snapshot and source health.", {}),
-    tool("nbn_fetch", "Fetch an original article or PDF text, retain a dated evidence ID. X status URLs use nbn_x.", {"url": STR}, ["url"]),
+    tool("nbn_fetch", "Fetch an original article or PDF text and retain an evidence ID. X status URLs use nbn_x. "
+         "For PDFs beyond the default first20 pages/10MiB, pass pdf_query for literal search across up to500 pages, "
+         "or start_page and page_count (1–12) for full selected page text. Targeted mode permits32MiB. "
+         "Search returns page-numbered snippets, not full-document evidence; inspect relevant pages afterward. "
+         "If next_cursor is returned, call again with its fields and the same URL to continue clipped text.",
+         {"url": STR,"pdf_query":STR,"start_page":{"type":"integer","minimum":1,"maximum":500},
+          "page_count":{"type":"integer","minimum":1,"maximum":12},"pdf_text_offset":INT}, ["url"]),
     tool("nbn_search", "Targeted Google source search using NBN's existing search service. Results are pointers, not read articles.", {"query": STR}, ["query"]),
     tool("nbn_x", "Read an exact X post by ID, or search recent X with a precise query; includes quotes/replies/media and dates.", {"post_id": STR, "query": STR}),
     tool("nbn_perception", "Use Perception's industry corpus. coverage/regulatory take query,start_date,end_date; article takes url. "
@@ -39,10 +46,14 @@ TOOLS = [
           "capture_method": {"type": "string", "enum": ["browser", "native_web", "paraphrase"]}, "limitations": STR},
          ["record_id", "url", "text", "capture_method"]),
     tool("nbn_visual", "Inspect a saved asset's actual pixels; render an evidence-backed NBN chart; or inspect a fetched PDF page. "
-         "Rendering uses existing bar,line,comparison,quote,excerpt templates. Source images require explicit reuse permission to attach.",
+         "Rendering uses existing bar,line,comparison,quote,excerpt templates. Source images require explicit reuse permission to attach. "
+         + visual_contract.GUIDANCE,
          {"operation": {"type": "string", "enum": ["inspect", "render", "pdf_page", "source_image"]},
-          "asset_id": STR, "url": STR, "page": INT, "candidate_id": STR, "kind": STR, "preset": STR,
-          "spec": OBJ, "evidence_ids": {"type": "array", "items": STR}, "alt_text": STR, "purpose": STR}, ["operation"]),
+          "asset_id": STR, "url": STR, "page": {"type":"integer","minimum":1,"maximum":500}, "candidate_id": STR,
+          "kind": {"type":"string","enum":["bar","line","comparison","quote","excerpt"]},
+          "preset": {"type":"string","enum":["landscape","square"]},
+          "spec": visual_contract.SPEC, "evidence_ids": {"type": "array", "items": STR,"minItems":1,"maxItems":8},
+          "alt_text": STR, "purpose": STR}, ["operation"]),
     tool("nbn_submit", "Create ONE unscheduled Typefully draft with its source in the first reply, after your self-review. "
          "Use a stable submission_id; retry it unchanged to inspect progress, NEVER make a new ID after an uncertain result. "
          "payload: event_key,body,source_url,evidence_ids,self_review; optional candidate_id,asset_id,material_update. No replacements or publication.",
@@ -145,12 +156,17 @@ def dispatch(con, *, shift_id, generation, name, args):
         # Do not upgrade paraphrases/native excerpts into literal quote evidence.
         return evidence(con, shift_id, payload, record_id=args["record_id"], sender="reporter")
     if name == "nbn_fetch":
-        raw = sources.fetch_article(args["url"], limit=24000, deadline=time.monotonic() + 35)
+        if any(key in args for key in ('pdf_query','start_page','page_count','pdf_text_offset')):
+            from . import reporter_pdf
+            raw = reporter_pdf.fetch(args['url'],query=args.get('pdf_query',''),start_page=args.get('start_page',1),
+                                     page_count=args.get('page_count',5),text_offset=args.get('pdf_text_offset',0),deadline=time.monotonic()+35)
+        else:
+            raw = sources.fetch_article(args["url"], limit=24000, deadline=time.monotonic() + 35)
         return evidence(con, shift_id, {**raw, "url": args["url"], "retrieval_kind": "direct_fetch",
                         "source": source_policy.classify(args["url"]).display_name})
     if name == "nbn_search":
-        from . import search
-        return {"results": search.google(str(args["query"])[:300], max_results=8), "kind": "search_pointers"}
+        from . import reporter_search
+        return reporter_search.google(con,str(args['query'])[:300],shift_id)
     if name == "nbn_x":
         if not config.X_BEARER_TOKEN:
             return {"error": "X source access not configured"}
@@ -165,12 +181,28 @@ def dispatch(con, *, shift_id, generation, name, args):
             params.update(query=str(args["query"])[:512], max_results=25)
         else:
             raise ValueError("provide a post ID or recent-search query")
-        response = httpx.get(url, params=params, headers={"Authorization": "Bearer " + config.X_BEARER_TOKEN}, timeout=20)
-        response.raise_for_status()
-        raw = response.json()
+        try:
+            response = httpx.get(url, params=params, headers={"Authorization": "Bearer " + config.X_BEARER_TOKEN}, timeout=20)
+            if response.status_code != 200:
+                status=response.status_code
+                return {'ok':False,'error_kind':('rate_limited' if status==429 else 'access_denied' if status in (401,403)
+                        else 'invalid_query' if status==400 else 'provider_http_error'), 'http_status':status,
+                        'message':'X request failed, not an empty result. Try the exact original post ID, native web search, or its linked source.'}
+            raw = response.json()
+        except httpx.HTTPError as exc:
+            return {'ok':False,'error_kind':'transport','exception_type':type(exc).__name__,
+                    'message':'X transport failed. Use an exact source URL or native web search; do not infer no posts exist.'}
+        except ValueError:
+            return {'ok':False,'error_kind':'invalid_json'}
+        if not isinstance(raw,dict): return {'ok':False,'error_kind':'invalid_response'}
         rows = raw.get("data", [])
         if isinstance(rows, dict): rows = [rows]
-        return {"posts": [evidence(con, shift_id, {"url": f"https://x.com/i/status/{r['id']}",
+        if not isinstance(rows,list) or any(not isinstance(r,dict) or not r.get('id') for r in rows):
+            return {'ok':False,'error_kind':'invalid_response'}
+        if not rows and raw.get('errors'):
+            return {'ok':False,'error_kind':'provider_error','provider_errors':raw['errors'],
+                    'message':'X returned errors without posts, not a successful empty result. Try an exact post ID or native web search.'}
+        return {"ok":True,"partial":bool(raw.get('errors')),"provider_errors":raw.get('errors',[]),"posts": [evidence(con, shift_id, {"url": f"https://x.com/i/status/{r['id']}",
             "final_url": f"https://x.com/i/status/{r['id']}", "text": (r.get("note_tweet") or {}).get("text", r.get("text", "")),
             "published_at": r.get("created_at"), "retrieval_kind": "direct_fetch", "post": r,
             "includes": raw.get("includes", {})}) for r in rows]}
@@ -197,6 +229,7 @@ def dispatch(con, *, shift_id, generation, name, args):
                 "historical": writer_memory.catalog(con, query=args.get("query", ""), offset=args.get("offset", 0), limit=30)}
     if name == "nbn_visual":
         from . import visuals
+        visual_contract.check(args)
         operation = args["operation"]
         if operation == "inspect":
             asset = visuals.get(con, args["asset_id"])
@@ -207,7 +240,8 @@ def dispatch(con, *, shift_id, generation, name, args):
                 alt_text=args["alt_text"], purpose=args["purpose"])
         elif operation in {"pdf_page", "source_image"}:
             if operation == "pdf_page":
-                data, metadata = visuals.pdf_page(args["url"], int(args.get("page", 1)), deadline=time.monotonic() + 30)
+                data, metadata = visuals.pdf_page(args["url"], int(args.get("page", 1)), deadline=time.monotonic() + 35,
+                                                  reporter=True)
             else:
                 data, final_url = visuals.download(args["url"], deadline=time.monotonic() + 30)
                 metadata = {"final_url": final_url}

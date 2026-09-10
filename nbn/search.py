@@ -22,6 +22,16 @@ _CACHE_KEY_VERSION = "serpapi-google-v1"
 _MAX_RETRY_AFTER_SECONDS = 3600
 
 
+class _NoCredentialSearchURLs(logging.Filter):
+    def filter(self, record):
+        return 'serpapi.com' not in record.getMessage().lower()
+
+
+# Per-request global log-level changes race under concurrent HTTP requests. Keep a
+# permanent narrow filter; other providers retain their normal logging level.
+logging.getLogger('httpx').addFilter(_NoCredentialSearchURLs())
+
+
 class SearchError(Exception):
     """A typed retryable SerpAPI transport or response failure."""
 
@@ -86,22 +96,11 @@ def _safe_json(response: httpx.Response) -> dict[str, Any]:
 
 
 def _request(url: str, *, params: dict, timeout: float) -> httpx.Response:
-    # SerpAPI requires its credential in the query string. Suppress httpx access logs
-    # for this request so the key can never appear in the root logger.
-    httpx_log = logging.getLogger("httpx")
-    prior_level = httpx_log.level
-    httpx_log.setLevel(max(prior_level, logging.WARNING))
+    # The permanent filter above also covers parallel account/search requests.
     try:
-        try:
-            return httpx.get(
-                url, params=params, timeout=timeout, follow_redirects=False,
-            )
-        except httpx.HTTPError as exc:
-            raise SearchError(
-                f"serpapi transport error: {type(exc).__name__}", kind="transport"
-            ) from exc
-    finally:
-        httpx_log.setLevel(prior_level)
+        return httpx.get(url, params=params, timeout=timeout, follow_redirects=False)
+    except httpx.HTTPError as exc:
+        raise SearchError(f"serpapi transport error: {type(exc).__name__}", kind="transport") from exc
 
 
 def account_status() -> dict[str, Any]:
