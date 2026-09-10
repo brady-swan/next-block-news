@@ -137,7 +137,8 @@ def preview(raw, *, text_limit=1200) -> dict | None:
         return None
     post = material["post"]
     return {
-        "post_url": post.get("url"), "text": str(post.get("text") or "")[:text_limit],
+        "post_url": post.get("url"), "handle": post.get("handle"),
+        "text": str(post.get("text") or "")[:text_limit],
         "text_truncated": bool(post.get("text_truncated") or
                                len(post.get("text", "")) > text_limit),
         "published_at": post.get("published_at"), "captured_at": post.get("captured_at"),
@@ -162,15 +163,26 @@ def reference_urls(raw) -> list[str]:
     return list(dict.fromkeys(url for raw in urls if (url := _public_url(raw))))[:10]
 
 
+def original_post_urls(raw) -> list[tuple[str, str]]:
+    """Immediate quoted/reposted speakers, not links they happen to cite."""
+    material = parse(raw)
+    return [(str(ref["relation"]), url)
+            for ref in material.get("referenced_posts", [])
+            if ref.get("relation") in {"retweeted", "quoted"}
+            and (url := _public_url((ref.get("post") or {}).get("url") or ""))]
+
+
 def compact_preview(value: dict | None) -> dict | None:
     if not value:
         return None
     return {
         "post_url": str(value.get("post_url") or "")[:600],
+        "handle": value.get("handle"),
         "text": str(value.get("text") or "")[:240], "text_truncated": True,
         "media_types": value.get("media_types", []),
         "engagement": value.get("engagement"),
         "quoted_sources": [{"url": str(r.get("url") or "")[:600],
+                            "handle": r.get("handle"), "relation": r.get("relation"),
                             "available": r.get("available")}
                            for r in value.get("quoted_sources", [])[:2]],
         "status": "discovery_only_media_not_inspected",

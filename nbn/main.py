@@ -457,9 +457,11 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
     # Persist the bounded workbench before any item is deferred or delivered. Identity
     # mutation remains outside the validator so a malformed story cannot partially merge
     # canonical families.
-    for attempt in outcome.story_attempts:
+    pending_replacement_attempts = {}
+
+    def persist_attempt(attempt):
         if not attempt.get("identity_valid") or not attempt.get("canonical_key"):
-            continue
+            return
         canonical_key = attempt["canonical_key"]
         submitted = attempt.get("submitted_story_key") or ""
         if attempt.get("allow_alias", True) and submitted and submitted != canonical_key:
@@ -478,6 +480,13 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
                            [record.fetch_id for record in outcome.fetches.values()
                             if any(e.get("content_fingerprint") == record.content_fingerprint
                                    for e in attempt.get("evidence") or [])])
+
+    for attempt in outcome.story_attempts:
+        if (attempt.get("identity_valid")
+                and store.canonical_output_state(con, attempt.get("canonical_key") or "")["drafts"]):
+            pending_replacement_attempts[attempt["story_id"]] = attempt
+        else:
+            persist_attempt(attempt)
 
     committed_storyline_keys: set[str] = set()
     storyline_result = {
@@ -519,7 +528,8 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
     allowed_contexts = {"storyline:" + key for key in
                         (outcome.storyline_read_keys | committed_storyline_keys)}
     allowed_contexts.update("notebook:" + a["canonical_key"] for a in outcome.story_attempts
-                            if a.get("identity_valid") and a.get("canonical_key"))
+                            if a.get("identity_valid") and a.get("canonical_key")
+                            and a.get("story_id") not in pending_replacement_attempts)
     read_ids = getattr(session, "memory_read_ids", set())
     if isinstance(read_ids, set):
         allowed_contexts.update(read_ids)
@@ -549,17 +559,38 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         " AND i.decision_category='background'", (pipeline_run_id,),
     )}
     # Completed editorial drops are terminal; defers remain in the next clean desk.
+    pending_member_stories = {member: story_id for story_id, attempt in pending_replacement_attempts.items()
+                              for member in attempt.get("members", [])}
+
+    def candidate_key(story_id: str, member: dict, proposed: str):
+        if story_id in pending_replacement_attempts:
+            saved = con.execute("SELECT story_key FROM items WHERE url_hash=?", (member["url_hash"],)).fetchone()
+            return saved["story_key"] if saved else None
+        return proposed
+
     for verdict in outcome.verdicts:
         action = verdict.get("action")
+        pending_story = pending_member_stories.get(verdict["url_hash"])
+        key = candidate_key(pending_story, verdict, verdict.get("story_key"))
         if action == "skip":
             if verdict["url_hash"] in prep_background_ids:
                 continue
-            store.set_status(con, verdict["url_hash"], "skipped", verdict.get("story_key"),
+            store.set_status(con, verdict["url_hash"], "skipped", key,
                              verdict.get("reason"), stage="newsdesk", category="editorial_drop")
         elif action == "hold":
             store.defer_item(con, verdict["url_hash"], verdict.get("reason") or "defer",
-                             story_key=verdict.get("story_key"), stage="newsdesk",
+                             story_key=key, stage="newsdesk",
                              category="editorial_defer")
+            if pending_story:
+                from . import observations
+                attempt = pending_replacement_attempts[pending_story]
+                observations.record(con, pipeline_run_id, "candidate_identity_failure", {
+                    "story_id": pending_story, "candidate_ids": attempt.get("members", []),
+                    "failure": verdict.get("reason") or "defer",
+                    "objective": "Replacement identity has not been reviewed. Preserve the existing draft. "
+                                 + str(attempt.get("objective") or "Resolve the recorded reporting gap."),
+                    "proposed_canonical_key": attempt["canonical_key"],
+                }, ref=verdict["url_hash"], phase="deferred")
             result["held"] += 1
 
     by_story: dict[str, list[dict]] = {}
@@ -573,7 +604,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
 
     def suppress_existing(story_id: str, members: list[dict], key: str, reason: str) -> None:
         for member in members:
-            store.set_status(con, member["url_hash"], "skipped", key, reason[:300],
+            store.set_status(con, member["url_hash"], "skipped", candidate_key(story_id, member, key), reason[:300],
                              stage="delivery", category="existing_output")
             store.record_pipeline_event(
                 con, pipeline_run_id, member["url_hash"], "existing_output_suppressed",
@@ -603,9 +634,9 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             note = "defer:no_inspected_evidence_materialized"
             for member in members:
                 store.defer_item(con, member["url_hash"], note,
-                                 story_key=_v2_member_story_key(
+                                 story_key=candidate_key(story_id, member, _v2_member_story_key(
                                      member, draft, resolution.story_key
-                                 ), stage="research",
+                                 )), stage="research",
                                  category="technical_defer")
             result["held"] += len(members)
             store.set_newsroom_story_state(
@@ -617,7 +648,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         if store.exact_thread_output_exists(con, post, selected.final_url):
             for member in members:
                 store.set_status(con, member["url_hash"], "skipped",
-                                 _v2_member_story_key(member, draft, resolution.story_key),
+                                 candidate_key(story_id, member, _v2_member_story_key(member, draft, resolution.story_key)),
                                  "exact output or receipt already queued")
             store.set_newsroom_story_state(
                 con, pipeline_run_id, story_id, "held",
@@ -789,6 +820,48 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
         else:
             verdict, post = decision["verdict"], decision.get("post")
             reason = decision.get("reason") or ""
+        if candidate["operation"] == "replace_draft" and (
+                verdict == "drop" or not editorial["ok"] or payload_deferred or not decision or
+                (verdict != "drop" and decision.get("replacement_decision") != "approve")):
+            from . import observations
+            rejected = bool(decision and decision.get("replacement_decision") == "reject"
+                            and editorial["ok"] and not payload_deferred)
+            dropped = verdict == "drop" and editorial["ok"] and decision is not None
+            failure = "editor_dropped_replacement" if dropped else (
+                "defer:replacement_identity_rejected" if rejected else "defer:replacement_review_incomplete")
+            objective = (
+                "Editor rejected overwriting this target. Reconsider the exact event relation/key using supplied context; "
+                "do not repeat the proposed alias. No new research is required solely to correct identity. "
+                if rejected else "Replacement review was incomplete, not an editorial identity rejection. "
+                "Keep the current draft intact and obtain explicit review before any replacement. "
+            ) + reason[:400]
+            if dropped:
+                objective = "Editor dropped this proposed replacement; existing draft retained. " + reason[:400]
+            diagnostic = {"story_id": story_id, "candidate_ids": [m["url_hash"] for m in members],
+                "failure": failure, "objective": objective, "proposed_post": post,
+                "proposed_canonical_key": resolution.story_key,
+                "target_draft_id": str(candidate["target_draft"]["nuelink_id"]),
+                "replacement_decision": "drop" if dropped else "reject" if rejected else "review_incomplete"}
+            for member in members:
+                saved = con.execute("SELECT story_key FROM items WHERE url_hash=?", (member["url_hash"],)).fetchone()
+                if dropped:
+                    store.set_status(con, member["url_hash"], "skipped",
+                        saved["story_key"] if saved else None, "editor dropped: " + reason[:250],
+                        stage="editor", category="editorial_drop")
+                else:
+                    store.defer_item(con, member["url_hash"], failure,
+                        story_key=saved["story_key"] if saved else None,
+                        stage="editor", category="identity_defer" if rejected else "technical_defer")
+                    observations.record(con, pipeline_run_id, "candidate_identity_failure", diagnostic,
+                        ref=member["url_hash"], phase="deferred")
+            observations.record(con, pipeline_run_id, "editor_applied", {
+                **diagnostic, "verdict": "drop" if dropped else "held", "reason": reason,
+                "operation": "keep_existing", "origin": "replacement_review"}, ref=story_id, phase="applied")
+            store.set_newsroom_story_state(con, pipeline_run_id, story_id, "held", details=diagnostic)
+            result["skipped" if dropped else "held"] += len(members)
+            continue
+        if story_id in pending_replacement_attempts and verdict != "drop":
+            persist_attempt(pending_replacement_attempts.pop(story_id))
         visual_review = decision.get("visual_review") if decision else None
         if candidate["draft"].get("visual_evidence") and verdict!="drop" and (
                 payload_deferred or not editorial["ok"] or decision is None):
@@ -881,6 +954,7 @@ def _run_editorial_v2(con, *, lease_owner: str, pipeline_run_id: str,
             "additional_evidence": additions,
             "reader_receipt": editor.receipt_card(selected),
             "reader_receipt_ref": decision.get("reader_receipt_ref") if decision else None,
+            "replacement_decision": decision.get("replacement_decision") if decision else None,
         }, ref=story_id, phase="applied")
         store.save_newsroom_editor_feedback(
             con, resolution.story_key, verdict=verdict, reason=reason, post=post,

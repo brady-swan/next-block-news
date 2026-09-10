@@ -1,6 +1,30 @@
 # Next Block News — editorial core v2
 
-*Current code description: 2026-09-09, repair0074 preparation reliability following Sprint0073. Deployment proof/status: SPRINT-0074-FINDINGS.md.*
+*Current code description: 2026-09-09, Sprint0075 source handoff and replacement handling. Deployment proof/status: SPRINT-0075-FINDINGS.md.*
+
+### Source handoff and replacements — Sprint0075
+
+Prepared source lookup prefers a repost's immediate original speaker over that speaker's
+outbound links. Quoted originals also precede ordinary outbound pointers. Compact social
+cards retain author, relation and URL; their previews remain discovery, not inspected evidence.
+
+When native research and the final dossier arrive in the same response with unretained
+source pointers, the Writer may complete the evidence handoff once inside the existing shared
+correction allowance. This offers no new research tools or budget. Relevant source-specific
+extracts/receipt assignments can be added; copy, identity, members, visuals, decisions, follow-ups
+and letter stay unchanged. Unused search hits need not be retained. Failed/exhausted completion
+keeps the original usable dossier and normal Editor review; URLs are never automatically evidence.
+`native_evidence_handoff` observations distinguish requested/completed/incomplete/not-attempted.
+
+For an actual `replace_draft`, non-drop Editor decisions require `replacement_decision`:
+`approve` permits the existing guarded replacement path; `reject` keeps the old draft and
+returns the candidate for identity correction. Missing/unavailable/capacity-deferred review
+also keeps the draft, but is labeled review-incomplete, not a semantic rejection. Proposed
+aliases, notebook updates and artifact-family links wait for approval. Drops discard only
+the proposal without changing target-story memory. No automatic split/new key is invented.
+Candidate-local diagnostics reach the next eligible Writer. Ordinary creates, including
+updates to published posts without an open update draft, retain their existing fallback.
+Luna, model roster/efforts, cadence, all budgets and autopost OFF are unchanged. No migration.
 
 ### Writer continuity — Sprint0073
 
@@ -104,7 +128,8 @@ Text-only editor requests omit image-review fields. Visual/mixed requests requir
 image verdict and asset/hash fields; prose approval is insufficient. Received malformed JSON
 and invalid references use the existing one omitted-only recovery. Transport failures/refusals
 do not gain a new retry loop. Remaining fallback copy is labeled **Needs human review — editor
-response failed** in the Desk; current human-draft fallback and autopost protections remain.
+response failed** in the Desk; human-draft fallback applies to creates. Replacements instead
+retain the existing draft until explicitly approved. Autopost protections remain.
 
 The editor may select the final reader source by exact inspected evidence reference, including
 an explicitly selected relevant research-appendix receipt. Null keeps the writer's choice. The

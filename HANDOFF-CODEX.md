@@ -1,6 +1,17 @@
 # Next Block News - current handoff
 
-Updated 2026-09-09 for repair0074 preparation reliability. Start here, then read SYSTEM.md and DOCUMENTATION.md. Release status is in SPRINT-0074-FINDINGS.md.
+Updated 2026-09-09 for Sprint0075. Start here, then read SYSTEM.md and DOCUMENTATION.md.
+Current release status is in SPRINT-0075-FINDINGS.md; earlier release records are historical.
+
+## Latest changes — 0075
+
+Prompt editorial-core-v2.37-source-handoff-replacement: immediate original-speaker prefetch,
+compact actor/relationship visibility, and one native evidence-only completion within existing
+limits. The completion preserves copy/identity/letter; citations alone never become evidence.
+Replacement requires explicit Editor approval. Reject/missing review preserves the target draft,
+proposed aliases and family memory, with candidate-local next-run diagnostics. Creates retain
+existing behavior. Luna remains in production; all completed local merge experiments stay local.
+Preserves audit's b8924a0 confirmed-delivery handoff improvement. No model/config/schema change.
 
 ## Latest repair — 0074
 

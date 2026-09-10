@@ -21,6 +21,8 @@ BATCH_EDITOR_SCHEMA = {
             "story_id": {"type": "string"},
             "verdict": {"type": "string", "enum": ["publish", "revise", "draft", "drop"]},
             "post": {"type": ["string", "null"]}, "reason": {"type": "string"},
+            "replacement_decision": {"type": ["string", "null"], "enum": ["approve", "reject", None],
+                "description": "For replace_draft explicitly approve replacing the supplied target or reject to keep it. Null for a create. This is separate from the copy verdict."},
             "reader_receipt_ref": {"type": ["string", "null"], "description":
                 "Required explicit choice: exact evidence_ref from this story's inspected_evidence_refs, or from your "
                 "additional_evidence_refs. This is the reader-facing source, not a URL. Null keeps the writer's source."},
@@ -171,6 +173,11 @@ For each candidate, use practical editorial judgment:
   from evidence. For replace_draft, compare with output_continuity.current_accepted_thread:
   preserve still-current useful context and warnings. New source detail is not automatically a
   better post. Drop a proposed replacement with no net reader benefit; the existing draft remains.
+  For every non-drop replace_draft decision, explicitly set replacement_decision to approve
+  or reject. Approve only when this really improves the SAME target event. Reject if it is a
+  distinct related story or should not overwrite the supplied draft; keep a useful copy with
+  revise/draft and explain why. Code will retain it for next-run identity review, not publish
+  it separately or guess a new key. Prose alone cannot veto replacement. For creates use null.
 
 The payload stores receipt bodies once in evidence_catalog. Each candidate names its
 receipt IDs. A provider_reported_extract is a source-specific native-search paraphrase, not a
@@ -242,6 +249,9 @@ def _batch_contract(payload: dict) -> tuple[str, dict]:
     """Text-only requests do not ask the provider to fill irrelevant visual fields."""
     schema = copy.deepcopy(BATCH_EDITOR_SCHEMA)
     prompt = BATCH_EDITOR_PROMPT
+    if any((card.get("output_continuity") or {}).get("operation") == "replace_draft"
+           for card in payload["candidates"]):
+        schema["properties"]["decisions"]["items"]["required"].append("replacement_decision")
     # Constrain syntax to the appendix actually sent in this request, including recovery.
     # Counts and reader-source ownership remain validated below; relevance is editorial judgment.
     additions = schema["properties"]["decisions"]["items"]["properties"]["additional_evidence_refs"]
@@ -262,7 +272,7 @@ def _batch_contract(payload: dict) -> tuple[str, dict]:
         prompt = prompt.split("For a candidate with a visual,")[0] + '''Return ONLY JSON:
 {"decisions":[{"story_id":"...","verdict":"publish|revise|draft|drop",
 "post":"final copy or null","reason":"brief newsroom explanation",
-"additional_evidence_refs":[],"reader_receipt_ref":null}]}'''
+"additional_evidence_refs":[],"reader_receipt_ref":null,"replacement_decision":null}]}'''
     return prompt, schema
 
 
@@ -476,6 +486,12 @@ def _editor_decision(row: dict, payload: dict, card: dict, origin: str, errors: 
         return reject("verdict", "Expected publish, revise, draft or drop")
     if verdict != "drop" and (not isinstance(final, str) or not final.strip()):
         return reject("post", "Non-drop decisions require complete final copy")
+    replacement = row.get("replacement_decision")
+    if verdict != "drop" and (card.get("output_continuity") or {}).get("operation") == "replace_draft":
+        if not isinstance(replacement, str) or replacement not in {"approve", "reject"}:
+            return reject("replacement_decision", "Explicitly approve replacing this target, or reject to keep it; prose alone cannot decide the operation")
+    else:
+        replacement = None
     refs = row.get("additional_evidence_refs", [])
     available = {r["evidence_ref"]: r for r in
                  (payload.get("unassigned_run_research") or {}).get("receipts", [])}
@@ -517,6 +533,7 @@ def _editor_decision(row: dict, payload: dict, card: dict, origin: str, errors: 
             "credit": (visual.get("metadata") or {}).get("credit", ""), "text_fallback": fallback}
     return {"verdict": verdict, "post": final, "reason": str(row.get("reason") or "")[:500],
             "visual_review": visual_review,
+            "replacement_decision": replacement,
             "origin": origin, "additional_evidence_refs": refs,
             "reader_receipt_ref": reader_ref,
             "reader_receipt": dict(reader_catalog[reader_ref]) if reader_ref and verdict != "drop" else None,

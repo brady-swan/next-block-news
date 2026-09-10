@@ -36,7 +36,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.36-reader-receipt-contract"
+PROMPT_VERSION = "editorial-core-v2.37-source-handoff-replacement"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -1372,7 +1372,10 @@ class NewsroomSession:
 
     @staticmethod
     def _reference_urls(item: dict) -> list[tuple[int, str]]:
-        candidates: list[tuple[int, str]] = []
+        candidates: list[tuple[int, str]] = [
+            (-1 if relation == "retweeted" else 0, url)
+            for relation, url in lead_material.original_post_urls(item.get("source_material"))
+        ]
         try:
             context = json.loads(item.get("discovery_context") or "{}")
         except (TypeError, ValueError):
@@ -3171,6 +3174,7 @@ class NewsroomSession:
         finalize_after_completion = False
         receipt_repair_used = False  # Shared by receipt and identity correction, never additive.
         pending_dossier = None
+        evidence_completion = False
         frozen_story_ids = set()
         while True:
             hard_finalization = self.successful_newsdesk_calls >= max(
@@ -3187,6 +3191,9 @@ class NewsroomSession:
                 )
             except Exception:
                 if pending_dossier is not None:
+                    if evidence_completion:
+                        observations.record(self.con, self.run_id, "native_evidence_handoff",
+                            {"status": "request_failed_fallback"}, phase="incomplete")
                     # A reference repair cannot erase otherwise valid stories if its
                     # follow-up request fails. Existing per-story validation still holds
                     # unsupported entries; nothing is published here.
@@ -3201,30 +3208,45 @@ class NewsroomSession:
             native_submissions = {}
             for block in response.content:
                 if block.type == "tool_use" and block.name == "submit_editorial_dossier":
-                    writer_continuity.save_letter(self.con, self.run_id,
-                        block.input.get("shift_letter"), model=config.NEWSROOM_MODEL,
-                        prompt_version=PROMPT_VERSION)
+                    if not evidence_completion:
+                        writer_continuity.save_letter(self.con, self.run_id,
+                            block.input.get("shift_letter"), model=config.NEWSROOM_MODEL,
+                            prompt_version=PROMPT_VERSION)
                     native_submissions[block.id] = [str(row.get("url") or "")[:2000]
                         for row in (block.input.get("native_sources") or [])[:8] if isinstance(row, dict)]
-                    reporter.take_feedback(self.con, self.run_id, block.input,
-                        model=config.NEWSROOM_MODEL, effort=config.NEWSROOM_EFFORT, prompt_version=PROMPT_VERSION)
+                    if not evidence_completion:
+                        reporter.take_feedback(self.con, self.run_id, block.input,
+                            model=config.NEWSROOM_MODEL, effort=config.NEWSROOM_EFFORT, prompt_version=PROMPT_VERSION)
                     self._register_native_sources(block.input)
             reporter.strip_feedback_history(response)
             try:
                 blocks = self._append_assistant(response)
             except NewsroomError:
                 if pending_dossier is not None:
+                    if evidence_completion:
+                        observations.record(self.con, self.run_id, "native_evidence_handoff",
+                            {"status": "response_failed_fallback"}, phase="incomplete")
                     return self._merge_prep_backgrounds(self._validate_and_convert_v2(pending_dossier))
                 raise
             store.complete_reconsiderations(self.con, self.inventory, self.run_id)
             dossier_blocks = [b for b in blocks if b.name == "submit_editorial_dossier"]
             if dossier_blocks:
                 if len(blocks) != 1:
+                    if evidence_completion and pending_dossier is not None:
+                        observations.record(self.con, self.run_id, "native_evidence_handoff",
+                            {"status": "mixed_tool_fallback"}, phase="incomplete")
+                        return self._merge_prep_backgrounds(self._validate_and_convert_v2(pending_dossier))
                     raise NewsroomError("invalid_dossier_batch",
                                         "dossier must be the only tool in its round")
                 if pending_dossier is not None:
-                    dossier_blocks[0].input = self._preserve_dossier_siblings(
-                        pending_dossier, dossier_blocks[0].input, frozen_story_ids)
+                    if evidence_completion:
+                        dossier_blocks[0].input = self._complete_evidence_handoff(
+                            pending_dossier, dossier_blocks[0].input)
+                        observations.record(self.con, self.run_id, "native_evidence_handoff",
+                            {"status": "completed"}, phase="completed")
+                    else:
+                        dossier_blocks[0].input = self._preserve_dossier_siblings(
+                            pending_dossier, dossier_blocks[0].input, frozen_story_ids)
                 repair = self._receipt_protocol_repair(dossier_blocks[0].input,
                     native_submissions.get(dossier_blocks[0].id, []))
                 preview = self._validate_and_convert_v2(dossier_blocks[0].input, persist=False)
@@ -3245,11 +3267,16 @@ class NewsroomSession:
                         "message": str((repair or {}).get("message") or "") +
                         " Include the required useful shift_letter to your next Writer. "
                         "Keep usable stories and source IDs unchanged; no new research is needed."}
+                handoff = None if repair or receipt_repair_used else self._native_handoff_request(
+                    dossier_blocks[0].input, response)
+                if handoff:
+                    repair = handoff
                 if (repair and self.reporter_enabled and not receipt_repair_used and
                         not hard_finalization and self.successful_newsdesk_calls < config.RUN_NEWSROOM_MAX_ROUNDS - 1 and
                         self._research_seconds_left() > 20):
                     receipt_repair_used = True
                     pending_dossier = copy.deepcopy(dossier_blocks[0].input)
+                    evidence_completion = bool(handoff)
                     frozen_story_ids = set(preview.story_ids.values())
                     if finalize_after_completion:
                         repair["message"] = (
@@ -3258,20 +3285,28 @@ class NewsroomSession:
                             "evidence; defer unsupported stories. Include your required useful shift_letter. "
                             "This reference repair is offered once."
                         )
-                    if identity_errors or letter_only:
+                    if identity_errors or letter_only or evidence_completion:
                         finalize_after_completion = True  # Correction only, no new research loop.
                     observations.record(self.con, self.run_id,
+                        "native_evidence_handoff" if evidence_completion else
                         "identity_protocol_repair" if identity_errors else "receipt_protocol_repair",
                         repair, phase="requested")
                     self.messages.append({"role": "user", "content": [
                         self._tool_result(dossier_blocks[0].id, repair, error=True)]})
                     continue
+                if handoff:
+                    observations.record(self.con, self.run_id, "native_evidence_handoff",
+                        {"status": "budget_fallback"}, phase="not_attempted")
                 self.dossier_tool_id = dossier_blocks[0].id
                 observations.record(self.con, self.run_id, "writer_result", dossier_blocks[0].input,
                                     phase="returned")
                 return self._merge_prep_backgrounds(
                     self._validate_and_convert_v2(dossier_blocks[0].input)
                 )
+            if evidence_completion and pending_dossier is not None:
+                observations.record(self.con, self.run_id, "native_evidence_handoff",
+                    {"status": "non_dossier_fallback"}, phase="incomplete")
+                return self._merge_prep_backgrounds(self._validate_and_convert_v2(pending_dossier))
             results = []
             if not blocks:
                 if reporter.native_activity(response):
@@ -3852,6 +3887,53 @@ class NewsroomSession:
         self.dossier_tool_id = blocks[0].id
         outcome = self._validate_and_convert(dossier)
         return outcome
+
+    def _native_handoff_request(self, dossier: dict, response) -> dict | None:
+        """Native work and submission in one response can bypass the handoff reminder."""
+        from . import research
+        if not dossier.get("stories") or not reporter.native_activity(response):
+            return None
+        retained = {r.final_url for r in self.fetches.values() if r.outcome == "ok"}
+        pointers = sorted(url for url in research.cited_urls(getattr(response, "raw", {}) or {})
+                          if _cached_url_is_public(url) and not research.observed_url(url, retained))[:24]
+        if not pointers:
+            return None
+        return {"ok": False, "kind": "native_evidence_handoff", "unretained_pointers": pointers,
+            "available_receipts": [{"fetch_id": r.fetch_id, "url": r.final_url}
+                                   for r in self.fetches.values() if r.outcome == "ok"],
+            "message": "Native research and this dossier arrived together. Complete the evidence handoff once, "
+            "without more research. If an already inspected native source supports or qualifies a proposed story, "
+            "retain its source-specific findings in native_sources and add its exact URL to that story's "
+            "evidence_fetch_ids. Keep the selected receipt unless a better inspected original supports it. "
+            "These encountered URLs are POINTERS, not proof: omit irrelevant/unread results; do not manufacture "
+            "extracts or blend different authors. Repeating the dossier unchanged is valid if nothing useful "
+            "was omitted. Preserve every story's copy, identity, members, decisions, visuals, letter and follow-ups. "
+            "Only receipt selections and reporting_note may be completed. The Editor sees receipts, not your searches."}
+
+    def _complete_evidence_handoff(self, original: dict, revised: dict) -> dict:
+        """Evidence-only completion cannot silently change the approved job or lose siblings."""
+        result = copy.deepcopy(original)
+        rows = revised.get("stories")
+        proposals = {s["story_id"]: s for s in rows if isinstance(s, dict)
+                     and isinstance(s.get("story_id"), str)} if isinstance(rows, list) else {}
+        for story in result.get("stories", []):
+            proposed = proposals.get(story.get("story_id"), {})
+            ids = proposed.get("evidence_fetch_ids")
+            old_ids = list(story.get("evidence_fetch_ids") or [])
+            if not isinstance(ids, list):
+                continue
+            additions = [fid for fid in ids if isinstance(fid, str) and fid in self.fetches
+                         and self.fetches[fid].eligible and self.fetches[fid].outcome == "ok"]
+            combined = list(dict.fromkeys(old_ids + additions))
+            if len(combined) > 8:
+                continue  # Retain the complete original evidence set rather than silently clipping it.
+            story["evidence_fetch_ids"] = combined
+            selected = proposed.get("selected_fetch_id")
+            if isinstance(selected, str) and selected in combined:
+                story["selected_fetch_id"] = selected
+            if isinstance(proposed.get("reporting_note"), str):
+                story["reporting_note"] = proposed["reporting_note"][:800]
+        return result
 
     def _receipt_protocol_repair(self, dossier: dict, submitted_urls: list[str]) -> dict | None:
         """One bounded chance to fix source references, never to waive evidence checks."""

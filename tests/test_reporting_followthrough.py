@@ -313,7 +313,8 @@ class ReportingFollowthroughTests(unittest.TestCase):
                 stack.enter_context(patch.object(brain, "reserve_model_calls", return_value="token"))
                 stack.enter_context(patch.object(newsroom, "start_session", return_value=desk))
                 review = stack.enter_context(patch.object(editor, "review_newsroom_batch", return_value={
-                    "ok": True, "decisions": {"sec": {"verdict": "publish", "post": body, "reason": "New fact."}}}))
+                    "ok": True, "decisions": {"sec": {"verdict": "publish", "post": body, "reason": "New fact.",
+                        "replacement_decision": "approve"}}}))
                 publish = stack.enter_context(patch.object(main.publisher, "publish"))
                 replace = stack.enter_context(patch.object(main.publisher, "replace_draft", return_value=("DRAFT", "existing")))
                 stack.enter_context(patch.object(main.publisher, "backend_name", return_value="typefully"))

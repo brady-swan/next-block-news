@@ -43,6 +43,11 @@ one previously skipped as commentary. A consequential statement or concrete prop
 the news; distinguish what was said from a policy actually enacted. Prefer that original or
 the article behind a repost as the reader's receipt when it supports the story. This is a
 useful path, not a mandatory lookup for every lead or a primary-only publication requirement.
+Keep the curator, original speaker and linked/quoted speaker distinct. A repost by Gladstein
+of Sirion's funding proposal does not make Gladstein its author; a link from Sirion to Obi's
+general appeal does not make Obi the author of Sirion's concrete plans. Read the immediate
+original for those plans, and attach that person's receipt. Compact previews preserve who
+posted, who was quoted/reposted, and the source URLs; preview text alone is still discovery.
 Choose a route for the missing fact, not a fixed research sequence. For industry reporting or a
 blocked article, perception_coverage can locate coverage and perception_article can open retained
 text; available_perception_text on a candidate points to dated text already available locally.

@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 2026-09-09: repair0074 preparation reliability; Plan0067 and QMD remain parked.
+Updated 2026-09-09: Sprint0075 source handoff and replacement handling; Plan0067 and QMD remain parked.
 This index separates how NBN works now from how earlier
 versions worked. Runtime code plus effective production configuration take precedence over
 dated snapshots. Documents are reference material, not authority to expand a user's request.
@@ -10,6 +10,8 @@ dated snapshots. Documents are reference material, not authority to expand a use
 | File | Role |
 | --- | --- |
 | README.md | Project entry point, module map, invariants and running/deploying |
+| PLAN-0075-SOURCE-HANDOFF-AND-REPLACEMENT.md | Reviewed attribution, native-evidence completion and replacement scope |
+| SPRINT-0075-FINDINGS.md | Tests, independent review, release/smoke and monitoring handoff |
 | PLAN-0074-PREPARATION-RELIABILITY.md | Bounded Luna timeout, optional-preview fitting and corrected replay accounting |
 | SPRINT-0074-FINDINGS.md | Diagnostic measurement, regression tests, review and release/smoke status |
 | PLAN-0073-WRITER-CONTINUITY.md | Approved audience, expert interactions, required letters, follow-ups and hybrid recall |
