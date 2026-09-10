@@ -77,6 +77,7 @@ def synchronize(con, *, force=False):
                            "WHERE status IN ('draft','scheduled','planned','publishing') ORDER BY synced_at LIMIT 100"):
         candidates.setdefault(row[0], {"id": row[0]})
     detailed = comments_read = 0
+    comments_deferred = False
     for ident, summary in candidates.items():
         old = con.execute("SELECT payload_json FROM reporter_remote_coverage WHERE draft_id=?", (ident,)).fetchone()
         previous = json.loads(old[0]) if old else None
@@ -86,7 +87,10 @@ def synchronize(con, *, force=False):
         if not changed and not wants_comments:
             continue
         if detailed >= 40:
-            complete = False
+            # Missing/changed COPY blocks duplicate-safe reporting. A deferred
+            # refresh of comments on unchanged copy must not make it incomplete.
+            if changed: complete = False
+            if wants_comments: comments_deferred = True
             continue
         raw = tf.get_draft(ident)
         detailed += 1
@@ -94,12 +98,14 @@ def synchronize(con, *, force=False):
         if raw.get("status") == "draft" and wants_comments and comments_read < 20:
             comments = tf.list_comment_threads(ident, status="all")
             comments_read += 1
+        elif raw.get("status") == "draft" and wants_comments:
+            comments_deferred = True
         if tf._has_comment_marker(raw):
             # Display only, never fed back into a PATCH.
             raw = tf.get_draft_for_feedback(ident)
         capture(con, raw, comments=comments)
     result = {"complete": complete, "candidates": len(candidates), "detail_reads": detailed,
-              "comment_reads": comments_read, "checked_at": stamp}
+              "comment_reads": comments_read, "comments_deferred": comments_deferred, "checked_at": stamp}
     store.kv_set(con, "reporter:coverage_sync", json.dumps(result))
     store.kv_set(con, "reporter:coverage_synced_at", str(stamp))
     return result

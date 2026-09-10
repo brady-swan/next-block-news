@@ -8,6 +8,23 @@ from tests.test_reporter_delivery import ReporterDeliveryTests
 
 
 class ReporterRecoveryTests(unittest.TestCase):
+    def refresh_backlog(self, *, changed_last=False):
+        fixture=ReporterDeliveryTests()
+        rows=[{**fixture.raw(),"id":1000+i} for i in range(41)]
+        with temporary_store() as con,patch.multiple(config,TYPEFULLY_API_KEY='test',TYPEFULLY_SOCIAL_SET_ID='1'),patch.object(remote,'MORNING_BASELINE',()):
+            for row in rows: remote.capture(con,row)  # Copy current, comments never read.
+            if changed_last: rows[-1]['updated_at']='2026-09-10T18:00:00Z'
+            response=Mock();response.json.return_value={'results':rows,'next':None}
+            with patch.object(remote.httpx,'get',return_value=response),patch.object(remote.tf,'get_draft',side_effect=lambda ident:rows[int(ident)-1000]),patch.object(remote.tf,'list_comment_threads',return_value=[]):
+                return remote.synchronize(con,force=True)
+
+    def test_deferred_comments_do_not_invalidate_current_copy(self):
+        result=self.refresh_backlog()
+        self.assertTrue(result['complete']);self.assertTrue(result['comments_deferred'])
+
+    def test_unread_changed_copy_still_blocks_reporting(self):
+        self.assertFalse(self.refresh_backlog(changed_last=True)['complete'])
+
     def test_cross_key_unknown_post_still_blocks_exact_copy(self):
         fixture=ReporterDeliveryTests()
         with temporary_store() as con,fixture.stack():
