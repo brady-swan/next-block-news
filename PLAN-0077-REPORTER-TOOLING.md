@@ -75,3 +75,11 @@ needed for acceptance. Do not keep adding capabilities after these checks pass.
 Editorial policy/selection/corroboration changes, model/effort/cadence changes, new news
 providers, new memory architecture, Nano Banana, fresh reporter shifts, drafts/comments,
 Typefully replacement/publishing, and speculative redesigns.
+
+## Completion
+
+Implemented/reviewed and shipped as code2369267. Clean release767tests pass; broader
+worktree804tests pass; ten native sandbox checks and actual PDF/browser/chart/MCP smokes
+pass. Deployment7c94895c-f08a-4164-ad7d-ea686b6508c4. All reporting/audit/autopost remains
+off. Owner's later optional draft-testing permission was not needed. See
+SPRINT-0077-FINDINGS.md for exact limits, verification and rollback. Stopping goal met.
