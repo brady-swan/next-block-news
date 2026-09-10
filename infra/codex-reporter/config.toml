@@ -1,0 +1,28 @@
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
+service_tier = "default"
+forced_login_method = "chatgpt"
+cli_auth_credentials_store = "file"
+approval_policy = "never"
+web_search = "live"
+default_permissions = "reporter"
+
+[permissions.reporter]
+extends = ":workspace"
+
+[permissions.reporter.filesystem]
+":root" = "deny"
+":minimal" = "read"
+"/opt/nbn-reporter" = "read"
+"/usr/local" = "read"
+"/opt/codex" = "read"
+"/reporter-state/codex" = "deny"
+"/reporter-state/control" = "deny"
+"/reporter-state/workspace" = "write"
+"/reporter-state/workspace/.codex" = "read"
+"/reporter-state/workspace/.agents" = "read"
+"/reporter-state/workspace/AGENTS.md" = "read"
+"/tmp" = "write"
+
+[permissions.reporter.network]
+enabled = false
