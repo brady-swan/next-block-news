@@ -2,6 +2,7 @@
 import base64
 import ipaddress
 import json
+import os
 from pathlib import Path
 import socket
 import sys
@@ -36,6 +37,9 @@ def public_url(url):
 
 
 def browser(url):
+    # Codex's stdio child environment intentionally filters ambient variables.
+    # Resolve this dedicated installation without forwarding operator secrets.
+    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(ROOT / 'runtime' / 'browsers')
     from playwright.sync_api import sync_playwright
     public_url(url)
     with sync_playwright() as p:

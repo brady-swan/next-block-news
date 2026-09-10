@@ -75,8 +75,8 @@ Rollback stops the new reporter without automatically enabling the old pipeline.
 - Local Mac compatibility: passed, including dedicated ChatGPT authentication, Astra
   medium/Standard inference, exact-session resume, browser/PDF/image inspection and
   sandbox denials. The authenticated HTTPS bridge was explicitly approved September10.
-- Integration: deployed to NBN Railway in infrastructure-only mode at commit533d0f0.
-  773 regression tests plus3 cutoff regressions and Desk type-check/build pass;
+- Integration: deployed to NBN Railway in infrastructure-only mode at commit5951548.
+  Full suite778 tests and Desk type-check/build pass;
   independent implementation review approved. Auth-role/MCP/catalog/config, read-only
   Typefully baseline154records and rendered Desk smoke pass. Old pipeline/audit stay off.
 - Live pilot: September10,12:58–14:58 CT, same persisted Astra medium/Standard session.
