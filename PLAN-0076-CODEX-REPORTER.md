@@ -84,7 +84,10 @@ Rollback stops the new reporter without automatically enabling the old pipeline.
   Narrow correction independently approved: default prompt, exact13tool allowlist and
   per-tool approve. Unchanged shell/auth/control sandbox checks repassed. Same session,
   generation and cutoff resumed after verified idle runtime teardown. Actual reporter
-  nbn_context and nbn_intake calls now succeed. Draft delivery smoke is still pending.
+  context/intake/source/browser/image calls work. First new draft10713155 was independently
+  read back: exact copy/source reply and unscheduled state confirmed. Owner-approved
+  older-draft archive cleanup completed;23open drafts remain and desk payload is~50KB.
+  See CODEX-REPORTER-PILOT-2026-09-10.md for the still-in-progress experiment record.
 - Independent checkpoint review: approved as a stopped partial spike. Before future
   auth, bind the sandbox pass to runtime/configuration and test the active auth-side
   and workspace configuration boundaries; see the findings' follow-up requirements.

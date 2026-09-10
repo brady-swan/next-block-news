@@ -96,13 +96,53 @@ little diagnostic information to adapt its query; record this for follow-up.
 After three turns, the last context measured242,510 of258,400 tokens. Reinjecting the
 entire154-draft record set every wake is demonstrably bulky. A compact coverage index
 and on-demand exact copy are a strong next adjustment, not a reason to silently change
-the pilot mid-run. No useful new Typefully draft has yet been submitted by this pilot.
+the pilot mid-run. At that checkpoint, no new Typefully draft had yet been submitted.
+
+## First new draft — delivery smoke confirmed
+
+At18:37:26UTC the reporter created unscheduled Typefully draft10713155, about Mark
+Zandi's estimate of the Iran war's effect on household energy costs. Its first post
+has three short paragraphs: the attributed$115b estimate, the$860-per-household
+average, and clarification that this covers more than gasoline. The source is the
+Fox Business original interview article, placed in the first reply.
+
+The operator independently read the exact draft through Typefully: status=draft,
+scheduled_date=null, published_at=null, intended body and source reply present.
+Thus actual create-only delivery is now confirmed, not just tested with mocks.
+No attached image in this draft; actual media attachment remains untested by this
+live pilot, separate from successful source-image inspection and renderer tests.
+
+The repaired browser was also used by the reporter itself: Treasury's dynamic table
+and a timestamped CNBC30-year quote returned text and actual screenshots. Its feedback
+identifies a remaining browser-tool limitation: it returns body text but not the table's
+outbound document URLs. It still could not read the relevant Anthropic section; the
+original PDF exceeded the retained10MiB parser cap. These are specific tool-design
+observations to evaluate, not evidence that more instruction warnings are needed.
+
+## Owner-requested queue cleanup during the experiment
+
+At18:29–18:30UTC Brady explicitly authorized downloading older Typefully drafts and
+deleting them if no archive operation exists. The operator exported132plain unscheduled
+drafts created AND edited before midnightCentral September10, including55comment
+threads and one attached image, with checked content hashes. Today's work and all
+other statuses were excluded. The reporter was held after its18:38completed turn
+while deletion and exact-ID reconciliation ran. All132deletions were confirmed by404;
+final inventory preserves the original57items plus the pilot's new draft:23drafts,
+35published. Three explicit synchronization passes cleared the remaining stale open
+records. Current reporter desk JSON fell to49,549bytes from about384KB. Worker62140
+resumed the SAME shift/thread/generation around18:47UTC; original19:58:05UTC cutoff
+unchanged. Durable message98 records the cleanup and independent delivery confirmation.
+Local archive and verified ZIP are in the main task workspace's archives directory.
+
+This intervention changes the size of the next desk payload and must be accounted for
+when interpreting the experiment. The reporter was explicitly told that queue cleanup
+does not make old events new or authorize recreating those archived stories.
 
 ## Remaining observation
 
 - Automatic same-session wake is confirmed; continue observing agenda follow-through.
-- Verify the first genuinely useful draft's exact text, source reply, and unscheduled
-  Typefully state; verify media pixels/readback if a sensible visual opportunity arises.
+- First new draft text/source/unscheduled readback is confirmed; verify attached media
+  pixels/readback if a sensible visual opportunity arises.
 - Compare selection, writing, timing and source-following with the manual morning run.
 - Watch the deployed coverage-refresh repair and actual browser use after local repair.
 - Confirm fixed cutoff and final handoff. Do not automatically renew the shift or audit.
