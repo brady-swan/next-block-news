@@ -29,7 +29,10 @@ def prepare():
     base=probe.CONFIG.read_text().split('\n[mcp_servers.nbn]')[0]
     base+='\n[mcp_servers.nbn]\n'+f'command = {json.dumps(str(probe.PYTHON))}\n'
     base+=f'args = [{json.dumps(str(probe.RUNTIME/"reporter_mcp.py"))}]\n'
-    base+='required = true\nstartup_timeout_sec = 30\ntool_timeout_sec = 90\ndefault_tools_approval_mode = "auto"\n'
+    base+='required = true\nstartup_timeout_sec = 30\ntool_timeout_sec = 90\ndefault_tools_approval_mode = "prompt"\n'
+    base+='enabled_tools = '+json.dumps(list(probe.REPORTER_TOOLS))+'\n'
+    for name in probe.REPORTER_TOOLS:
+        base+=f'\n[mcp_servers.nbn.tools.{name}]\napproval_mode = "approve"\n'
     probe.CONFIG.write_text(base);probe.CONFIG.chmod(0o600)
     (probe.WORK/'AGENTS.md').write_text('''# Next Block News — local reporter pilot
 

@@ -13,6 +13,10 @@ the inner sandbox if an outer operator sandbox prevents running the probe.
 the exact production service, passing tokens through stdin and skipping deployment.
 Keep generated connection files in the protected `control` directory, never the repo.
 The reporter token and supervisor token are distinct and absent from model environment.
+The exact13 reviewed MCP tools are explicitly preapproved; unknown future tools are
+not enabled. `auto` is not preapproval under an unattended `never` approval policy.
+Shell/network/credential boundaries remain unchanged. Smoke an actual model tool call,
+not merely tools/list, before treating the reporter connection as operational.
 
 Deploy a clean, reviewed checkout of the backend, with infrastructure mode and autopost
 OFF. Verify health, unauthenticated rejection, exact roles, tools, read-only baseline and

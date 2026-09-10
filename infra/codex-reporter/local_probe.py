@@ -22,6 +22,9 @@ CODEX = RUNTIME / 'cli/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-ap
 PYTHON = RUNTIME / 'venv/bin/python'
 CONFIG = AUTH / 'config.toml'
 RECEIPT = CONTROL / 'sandbox-passed.json'
+REPORTER_TOOLS = ('nbn_intake','nbn_context','nbn_fetch','nbn_search','nbn_x',
+                  'nbn_perception','nbn_memory','nbn_save_evidence','nbn_visual',
+                  'nbn_submit','nbn_note','nbn_handoff','nbn_browser')
 
 
 def runtime_env():
@@ -152,6 +155,12 @@ def check_config(codex, *, reporter=False):
             raise RuntimeError('Unexpected reporter MCP command.')
         if server.get('required') is not True or server.get('env') or server.get('env_vars'):
             raise RuntimeError('MCP must be required with no forwarded credentials.')
+        tool_rules=server.get('tools') or {}
+        if (server.get('default_tools_approval_mode')!='prompt'
+                or set(server.get('enabled_tools') or [])!=set(REPORTER_TOOLS)
+                or set(tool_rules)!=set(REPORTER_TOOLS)
+                or any(rule.get('approval_mode')!='approve' for rule in tool_rules.values())):
+            raise RuntimeError('Only the reviewed reporter tools may be preapproved.')
     elif servers:
         raise RuntimeError('Compatibility check expected no MCP servers.')
     if any(conf.get('features', {}).get(k) is not False for k in

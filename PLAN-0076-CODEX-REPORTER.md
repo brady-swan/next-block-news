@@ -75,9 +75,16 @@ Rollback stops the new reporter without automatically enabling the old pipeline.
 - Local Mac compatibility: passed, including dedicated ChatGPT authentication, Astra
   medium/Standard inference, exact-session resume, browser/PDF/image inspection and
   sandbox denials. The authenticated HTTPS bridge was explicitly approved September10.
-- Integration: implemented locally.773 regression tests and Desk type-check/build pass;
-  independent implementation review fixes incorporated. Deployment smoke and the live
-  pilot are next. No new Typefully drafts have been created by this pilot yet.
+- Integration: deployed to NBN Railway in infrastructure-only mode at commit533d0f0.
+  773 regression tests plus3 cutoff regressions and Desk type-check/build pass;
+  independent implementation review approved. Auth-role/MCP/catalog/config, read-only
+  Typefully baseline154records and rendered Desk smoke pass. Old pipeline/audit stay off.
+- Live pilot: September10,12:58–14:58 CT, same persisted Astra medium/Standard session.
+  First turn exposed MCP `auto` versus explicit tool preapproval; no drafts were created.
+  Narrow correction independently approved: default prompt, exact13tool allowlist and
+  per-tool approve. Unchanged shell/auth/control sandbox checks repassed. Same session,
+  generation and cutoff resumed after verified idle runtime teardown. Actual reporter
+  nbn_context and nbn_intake calls now succeed. Draft delivery smoke is still pending.
 - Independent checkpoint review: approved as a stopped partial spike. Before future
   auth, bind the sandbox pass to runtime/configuration and test the active auth-side
   and workspace configuration boundaries; see the findings' follow-up requirements.
