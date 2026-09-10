@@ -48,6 +48,95 @@ def crowded_desk(con, *, candidates=25, receipts=6):
 
 
 class CompactDeskTests(unittest.TestCase):
+    def test_dense_real_preparation_requires_final_tier(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            desk = crowded_desk(con, candidates=25, receipts=6)
+            for index, item in enumerate(desk.inventory):
+                if index:
+                    item.pop("_owner_reconsider")
+                desk.preparations[item["url_hash"]] = {
+                    "outcome": "model", "protection_reason": "guide_account",
+                    "event_summary": "Substantive statement with dated findings. " * 6,
+                    "bitcoin_relevance": "Custody access and monetary consequences. " * 4,
+                    "research_objective": "Inspect original statement and compare existing coverage. " * 4,
+                    "source_leads": ["https://example.com/original"],
+                }
+            desk.recent_clusters = [{
+                "canonical_key": f"previous-event-{i}", "draft_open": True,
+                "draft_post_leads": ["Earlier accepted Bitcoin reporting with dates and attributed findings. " * 5],
+                "updated_at": 1788980000,
+            } for i in range(50)]
+            desk.incoming_handoff = {"body": "Fallible letter. " * 50,
+                "actual_outputs": [{"event_key": "prior", "publisher_status": "draft"}]}
+            fit = newsroom._fit_optional_previews
+            def without_final(packet, contexts, limit, **kwargs):
+                if not kwargs.get("final_tier"):
+                    fit(packet, contexts, limit)
+            with patch.object(newsroom, "_fit_optional_previews", side_effect=without_final):
+                with self.assertRaises(newsroom.NewsroomError) as raised:
+                    desk._initial_packet()
+                self.assertEqual(raised.exception.kind, "initial_context_overflow")
+            packet = desk._initial_packet()
+            self.assertLessEqual(newsroom._json_bytes(packet), 65536)
+            self.assertEqual(len(packet["intake_board"]), 25)
+            self.assertEqual(len(packet["prepared_evidence"]), 6)
+            self.assertEqual(len(packet["coverage_board"]["open_drafts"]), 50)
+            self.assertEqual(packet["incoming_shift_letter"], desk.incoming_handoff)
+            self.assertTrue(all(row.get("haiku_preparation") for row in packet["intake_board"]))
+
+    def test_final_preview_tier_preserves_nonpreview_fields_and_retrieval(self):
+        with temporary_store() as con, patch.object(newsroom.anthropic, "Anthropic"):
+            desk = crowded_desk(con, candidates=25, receipts=6)
+            packet = desk._initial_packet()
+            # Force the existing pressure floor to exercise the final tier on
+            # fully retained candidate, coverage, receipt and control records.
+            newsroom._fit_optional_previews(packet, desk.context_rows, 1)
+            newsroom._compact_packet_aliases(packet)
+            before = copy.deepcopy(packet)
+            originals = copy.deepcopy(desk.context_rows)
+            newsroom._fit_optional_previews(packet, desk.context_rows, 1, final_tier=True)
+            self.assertLess(newsroom._json_bytes(packet), newsroom._json_bytes(before))
+            for group in ("intake_board",):
+                for old, new in zip(before[group], packet[group]):
+                    for key in set(old) | set(new):
+                        if key not in {"headline_or_post", "what_arrived", "preview_truncated"}:
+                            self.assertEqual(old.get(key), new.get(key))
+            for kind, rows in before["coverage_board"].items():
+                for old, new in zip(rows, packet["coverage_board"][kind]):
+                    for key in set(old) | set(new):
+                        if key not in {"post_leads", "headlines", "preview_truncated"}:
+                            self.assertEqual(old.get(key), new.get(key))
+            for key in set(before) - {"intake_board", "coverage_board"}:
+                self.assertEqual(before[key], packet[key])
+            self.assertEqual(originals, desk.context_rows)
+            for row in (packet["intake_board"][0], packet["coverage_board"]["open_drafts"][0]):
+                cid = row.get("candidate_context_id") or row["context_id"]
+                opened = desk._read_desk_context([cid])
+                self.assertTrue(opened["ok"])
+                for field in ("headline_or_post", "what_arrived", "post_leads", "headlines"):
+                    if field in originals[cid]:
+                        self.assertEqual(opened["rows"][0][field], originals[cid][field])
+
+    def test_final_preview_tier_stops_at_fit_and_requires_context(self):
+        packet = {"coverage_board": {"open_drafts": [
+            {"context_id": "coverage", "event_key": "exact-event", "post_leads": ["界" * 80]}]},
+            "intake_board": [{"candidate_context_id": "candidate", "headline_or_post": "H" * 100,
+                              "what_arrived": "A" * 60, "haiku_preparation": {"outcome": "model"}}],
+            "incoming_shift_letter": {"body": "Keep the actual outcome.", "actual_outputs": []}}
+        original = copy.deepcopy(packet)
+        size = newsroom._json_bytes(packet)
+        contexts = {"coverage": {}, "candidate": {}}
+        newsroom._fit_optional_previews(packet, contexts, size, final_tier=True)
+        self.assertEqual(packet, original)
+        newsroom._fit_optional_previews(packet, contexts, size - 50, final_tier=True)
+        self.assertLessEqual(newsroom._json_bytes(packet), size - 50)
+        self.assertEqual(packet["intake_board"], original["intake_board"])
+        self.assertTrue(packet["coverage_board"]["open_drafts"][0]["preview_truncated"])
+        packet = copy.deepcopy(original)
+        newsroom._fit_optional_previews(packet, {}, 1, final_tier=True)
+        self.assertEqual(packet, original)
+        self.assertGreater(newsroom._json_bytes(packet), 1)
+
     def test_real_preparation_and_shift_context_fit_without_losing_judgment(self):
         for count in (17, 25):
             with self.subTest(candidates=count), temporary_store() as con, \

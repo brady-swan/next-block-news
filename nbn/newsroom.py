@@ -36,7 +36,7 @@ from . import (
 
 log = logging.getLogger("nbn.newsroom")
 
-PROMPT_VERSION = "editorial-core-v2.37-source-handoff-replacement"
+PROMPT_VERSION = "editorial-core-v2.38-optional-previews"
 V2_ASSIGNMENT = (
     "Turn this clean desk into useful Bitcoin coverage. Research selectively; "
     "good supported work should flow rather than wait for perfection. "
@@ -783,20 +783,24 @@ def _compact_candidate_density(row: dict, full: dict) -> dict:
             if value is not None and value != "" and value != [] and value != {}}
 
 
-def _fit_optional_previews(packet: dict, context_rows: dict, limit: int) -> None:
+def _fit_optional_previews(packet: dict, context_rows: dict, limit: int, *,
+                           final_tier: bool = False) -> None:
     """Fit optional display prose only; identities, controls and prep stay inline."""
     # Full records already exist behind these references. Never silently clip a
     # field without a retrievable original, or remove a coverage/candidate row.
     tiers = []
-    for length in (160, 100, 80):
+    for length in ((40,) if final_tier else (160, 100, 80)):
         tiers.extend((row, key, length, "preview_truncated")
                      for rows in packet["coverage_board"].values() for row in rows
-                     for key in ("post_leads", "headlines"))
-    tiers.extend((row, "body", 300, "body_truncated")
-                 for row in packet.get("matching_accepted_output", []))
+                     for key in ("post_leads", "headlines") if key in row)
+    if not final_tier:
+        tiers.extend((row, "body", 300, "body_truncated")
+                     for row in packet.get("matching_accepted_output", []))
     tiers.extend((row, key, length, "preview_truncated")
                  for row in packet["intake_board"]
-                 for key, length in (("headline_or_post", 100), ("what_arrived", 60)))
+                 for key, length in ((("headline_or_post", 60), ("what_arrived", 30))
+                                     if final_tier else
+                                     (("headline_or_post", 100), ("what_arrived", 60))))
     for row, key, length, marker in tiers:
         if _json_bytes(packet) <= limit:
             break
@@ -1993,6 +1997,9 @@ class NewsroomSession:
                 _fit_optional_previews(packet, self.context_rows, config.COMPACT_DESK_INITIAL_BYTES)
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 _compact_packet_aliases(packet)
+            if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
+                _fit_optional_previews(packet, self.context_rows,
+                                       config.COMPACT_DESK_INITIAL_BYTES, final_tier=True)
             if _json_bytes(packet) > config.COMPACT_DESK_INITIAL_BYTES:
                 from . import observations
                 observations.record(self.con, self.run_id, "writer_packet_overflow", {
