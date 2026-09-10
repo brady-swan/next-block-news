@@ -1,6 +1,6 @@
 # Sprint0075 — source handoff and replacement handling
 
-Status: independent implementation review approved; final release verification in progress.
+Status: **deployed and smoked**, September 9, 2026 (September10 UTC).
 
 ## Changes
 
@@ -48,4 +48,25 @@ evidence of wrong identity. Confirm ordinary creates and legitimate replacements
 Pre-deployment online backup: `/data/backups/nbn-pre-source-policy-20260910T014919Z.db`,
 integrity checked by the backup script. Audit paused for deployment. Effective production
 settings verified: Grok4.3 medium Writer, Grok4.5 medium Editor, Luna prep, six responses,
-360-second lifecycle, autopost OFF. Deployment/smoke evidence follows after release.
+360-second lifecycle, autopost OFF.
+
+Release commit **44fcea8**, pushed to origin/main. Clean archive deployed explicitly to
+next-block-news production (one replica, existing `/data` volume), Railway deployment
+`5c731233-7d2b-4a53-a700-665023d047f0`, SUCCESS, created2026-09-10T01:50:32.474Z.
+
+Smoke at epoch1789005141.193: health, Desk, Intake, Outputs, System and workspace JSON all200.
+Public health also200. Two natural worker cycles completed; last error null and no held lease.
+Exact hashes of all five changed runtime modules match local44fcea8. Prior writer_continuity
+hash9bf80a1b03e3d8c1331037774111c1ff337bc3c51484c3c8cc5a2f5272219596 unchanged.
+104confirmed/17definite-failure publisher mutations, zero pending/ambiguous. Models/budgets and
+autopost OFF unchanged. No manual Typefully mutation or forced paid newsroom replay.
+
+Smoke limitation: no new Writer session had yet run on0075. The last three newsroom attempts
+were **pre-deployment v2.36 initial_context_overflow** deferrals, distinct from healthy intake
+cycles. These are not a0075 regression or successful newsroom smoke; handed to the resumed
+audit for current packet diagnosis, without rerunning completed packet experiments. Field
+attribution/evidence/replacement quality remains an organic-run audit watch, not a test claim.
+
+The same15-minute audit automation was restored ACTIVE in the dedicated NBN Audit task with
+specific source-handoff/replacement outcome and cost watches; existing autonomy is preserved.
+Rollback is code-only to b8924a0 if needed; no schema or historical-data reversal is required.
