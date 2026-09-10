@@ -90,6 +90,27 @@ def signature(pulse):
     return {k:pulse.get(k) for k in ('intake_at','message_id','coverage_hash')}
 
 
+def stop_runtime(codex, active=None):
+    """Bound shutdown even when turn/start or interrupt has not returned.
+
+    Capture only this SDK-owned child before close clears its reference. Closing
+    stdin can itself block on another writer; the final kill must not share it.
+    """
+    proc = codex._client._proc
+    def attempt(call, seconds):
+        def guarded():
+            try: call()
+            except Exception: pass
+        worker=threading.Thread(target=guarded,daemon=True)
+        worker.start();worker.join(seconds)
+    if active is not None: attempt(active.interrupt,1)
+    attempt(codex.close,2)
+    if proc is not None and proc.poll() is None:
+        proc.kill()
+        try: proc.wait(timeout=1)
+        except subprocess.TimeoutExpired: pass
+
+
 def run():
     global CUTOFF
     shift=json.loads(SESSION.read_text())
@@ -103,19 +124,20 @@ def run():
         nonlocal stopping
         stopping=True
     signal.signal(signal.SIGTERM,stop_signal);signal.signal(signal.SIGINT,stop_signal)
-    state='completed'; active=None
+    state='completed'; active=None; runtime_client=None
     watcher_done=threading.Event()
     def watchdog():
         nonlocal stopping
         while not watcher_done.wait(1):
             if time.time()>=shift['cutoff_at']: stopping=True
-            if stopping and active:
-                try: active.interrupt()
-                except Exception: pass
+            if stopping and runtime_client is not None:
+                stop_runtime(runtime_client,active)
                 return
     threading.Thread(target=watchdog,daemon=True).start()
     try:
         with probe.client() as codex:
+            runtime_client=codex
+            if stopping: raise RuntimeError('Reporter stopped during runtime startup')
             thread=checked_thread(codex,shift)
             record(shift,'supervisor',{'state':'running','model':'gpt-6-astra','effort':'medium','service_tier':'default'})
             last=shift.get('last_pulse'); last_work=float(shift.get('last_work_at',0)); first=last is None
@@ -152,7 +174,9 @@ def run():
                 try:
                     while not future.done():
                         if stopping or time.time()>=shift['cutoff_at'] or time.time()-started>600:
-                            active.interrupt(); raise RuntimeError('Reporting turn interrupted at pause/cutoff/10-minute ceiling')
+                            stopping=True
+                            stop_runtime(codex,active)
+                            raise RuntimeError('Reporting turn interrupted at pause/cutoff/10-minute ceiling')
                         beat(shift)
                         try: future.result(timeout=min(20,max(.1,shift['cutoff_at']-time.time())))
                         except concurrent.futures.TimeoutError: pass
@@ -172,9 +196,7 @@ def run():
                                   'at':dt.datetime.now(dt.timezone.utc).isoformat()}),flush=True)
     except Exception as exc:
         state='completed' if time.time()>=shift['cutoff_at'] else 'failed'
-        if active:
-            try: active.interrupt()
-            except Exception: pass
+        if active and runtime_client is not None: stop_runtime(runtime_client,active)
         save(CONTROL/'failure.json',{'at':time.time(),'error':str(exc)[:500]})
         raise
     finally:
