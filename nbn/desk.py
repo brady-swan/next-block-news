@@ -523,7 +523,7 @@ def handle(handler, parsed, state):
         except sqlite3.Error:
             respond(handler, 503, "Desk data temporarily unavailable. Retrying preserves your selection.", "text/plain; charset=utf-8")
         return
-    if path in {"", "live", "runs", "intake", "outputs", "system"}:
+    if path in {"", "live", "runs", "intake", "outputs", "system", "reporter"}:
         # Route aliases/deep links remain supported; the client preserves the auth query.
         respond(handler, 200, workspace_page(), "text/html; charset=utf-8")
         return

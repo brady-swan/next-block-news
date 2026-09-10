@@ -80,7 +80,9 @@ TOOL = {
     },
 }
 
-client = anthropic.Anthropic(timeout=config.INTAKE_TRIAGE_TIMEOUT_SECONDS, max_retries=0)
+from .lazy_anthropic import LazyAnthropic
+
+client = LazyAnthropic(timeout=config.INTAKE_TRIAGE_TIMEOUT_SECONDS, max_retries=0)
 
 
 def _card(row: dict) -> dict:

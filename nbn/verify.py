@@ -16,8 +16,10 @@ log = logging.getLogger("nbn.verify")
 # A web-search verification that outlives two news cycles is no longer useful. Fail
 # closed and let the worker continue; the SDK's default 10-minute timeout plus retries
 # can otherwise hold the single worker lease for half an hour.
-client = anthropic.Anthropic(timeout=120.0, max_retries=0)
-web_client = anthropic.Anthropic(
+from .lazy_anthropic import LazyAnthropic
+
+client = LazyAnthropic(timeout=120.0, max_retries=0)
+web_client = LazyAnthropic(
     timeout=config.HOSTED_SEARCH_TIMEOUT_SECONDS,
     max_retries=0,
 )

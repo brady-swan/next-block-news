@@ -14,7 +14,9 @@ import anthropic
 from . import config, guide_context
 
 log = logging.getLogger("nbn.brain")
-client = anthropic.Anthropic()
+from .lazy_anthropic import LazyAnthropic
+
+client = LazyAnthropic()
 
 CHARTER = (Path(__file__).resolve().parent.parent / "prompts" / "wire_voice.md").read_text()
 

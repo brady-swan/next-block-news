@@ -1,5 +1,31 @@
 # Next Block News — editorial core v2
 
+## Sprint0076 — local Codex reporter pilot
+
+The pilot uses `NBN_OPERATING_MODE=infrastructure`: the Railway process collects raw
+RSS/EDGAR/X/Perception/Node leads, synchronizes actual Typefully coverage, stores evidence
+and serves the Desk. It does **not** run the legacy Haiku/Luna/Grok funnel, scheduled
+Blocks, receipt audit, old delivery jobs or old retry queue. The historical architecture
+below remains implemented but is inactive in this mode.
+
+A dedicated local Mac Codex session uses Astra, medium effort, Standard tier, through the
+owner's separate ChatGPT login. It owns selection, research, writing, visuals and self-review.
+Its supervisor resumes the same session, checks idle work without model calls, and enforces
+one fixed two-hour cutoff. ChatGPT allowance usage is recorded separately from API-dollar costs.
+The rolling audit stays paused. No automatic new pilot or restoration of the old engine.
+
+The explicitly enabled HTTPS bridge has distinct reporter/control tokens. The reporter sees
+source fetch/search, X, Perception, memory, an isolated browser, PDF/image inspection, existing
+NBN chart rendering and create-only unscheduled Typefully delivery. Credentials and supervisor
+controls are outside its shell sandbox. Existing drafts are read-only; source links go in the
+first reply. Delivery retains stable submission IDs, exact readback, media inspection, canonical
+coverage protection and ambiguity protection. Pause and the final create request share a fence.
+
+`reporter_shifts`, `reporter_records`, `reporter_submissions` and `reporter_remote_coverage`
+are additive SQLite tables. Letters, agenda, tool activity, decisions, messages, acknowledgments,
+completed-turn summaries and usage are observable on Desk → Codex pilot; no private reasoning.
+See `PLAN-0076-CODEX-REPORTER.md` and `infra/codex-reporter/README.md` for setup and controls.
+
 *Current code description: 2026-09-09, Sprint0075 source handoff and replacement handling. Deployment proof/status: SPRINT-0075-FINDINGS.md.*
 
 ### Source handoff and replacements — Sprint0075

@@ -29,6 +29,12 @@ def header(row):
 
 
 def roster(now):
+    if config.OPERATING_MODE == "infrastructure":
+        return {"observed_at":now,"seats":[{"role":"Codex reporter / research / self-review",
+          "model":"gpt-6-astra","provider":"OpenAI · ChatGPT allowance","effort":"medium","mode":"local pilot",
+          "note":"Fixed two-hour draft-only shift. No independent model editor; owner review required."},
+          {"role":"Legacy editorial seats","model":"Haiku / Luna / Grok","provider":"Disabled",
+           "effort":"—","mode":"paused","note":"Collectors, publication sync and the Desk run in code only."}]}
     def seat(role, model, effort, mode, note=""):
         provider = ("xAI" if model.startswith("grok-") else
                     "OpenAI" if model.startswith("gpt-") else "Anthropic")
@@ -63,6 +69,7 @@ def now_data(con, state, now):
             "publisher_sync": desk.number(kv.get("publisher:last_success")), "publisher_error": bool(kv.get("publisher:last_error")),
             "node_fetch": desk.number(kv.get("node:last_success")), "node_generated": kv.get("node:last_pulse_generated"),
             "node_error": bool(kv.get("node:last_error")), "autopost": config.AUTOPOST_ENABLED,
+            "operating_mode":config.OPERATING_MODE,
             "pending_delivery": con.execute("SELECT COUNT(*) FROM publisher_mutations WHERE state IN ('prepared','awaiting_media','in_flight','ambiguous','needs_owner_review')").fetchone()[0]}
 
 
@@ -374,10 +381,23 @@ def snapshot(con, query, state, now=None):
     now = now or time.time()
     opt = desk.options(query)
     view = query.get("view", ["newsroom"])[0]
-    if view not in {"newsroom","intake","outputs","system"}:
+    if view not in {"newsroom","intake","outputs","system","reporter"}:
         raise ValueError("Unknown workspace view")
     result = {"version":1,"view":view,"observed_at":now,"now":now_data(con,state,now)}
-    if view == "newsroom":
+    if view == "reporter":
+        from . import reporter_store as rs
+        shift=rs.shift(con)
+        records=rows(con,"SELECT record_id,kind,sender,at,payload_json,delivered_turn,acknowledged_at FROM reporter_records "
+                        "WHERE shift_id=? ORDER BY id DESC LIMIT 100",(shift["shift_id"] if shift else "",))
+        for row in records: row["payload"]=decode(row.pop("payload_json"))
+        result.update({"shift":shift,"records":records,
+            "submissions":rows(con,"SELECT submission_id,state,provider_ref,error,created_at,updated_at,payload_json "
+                               "FROM reporter_submissions WHERE shift_id=? ORDER BY created_at DESC LIMIT 30",
+                               (shift["shift_id"] if shift else "",))})
+        for row in result["submissions"]:
+            row["payload"]=decode(row.pop("payload_json"))
+            row["url"]=f'https://typefully.com/?a={config.TYPEFULLY_SOCIAL_SET_ID}&d={row["provider_ref"]}' if row["provider_ref"] else None
+    elif view == "newsroom":
         selected, nav = run_window(con,opt["run"],query.get("direction",[""])[0])
         result.update({"navigation":nav,"run":run_detail(con,selected) if selected else None,
                        "arriving":rows(con,"SELECT "+desk.ITEM_FIELDS+" FROM items ORDER BY first_seen DESC,url_hash DESC LIMIT 6")})

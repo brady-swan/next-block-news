@@ -65,12 +65,61 @@ Rollback stops the new reporter without automatically enabling the old pipeline.
 ## Current progress
 
 - Plan review: complete, approved with the bounded requirements above.
-- Phase 1: blocked on the tested Railway host's sandbox compatibility. The isolated
+- Phase 1: local Mac compatibility work is now authorized and independently approved.
+  The earlier ordinary Railway service remains blocked on sandbox compatibility. Its isolated
   health-only image deployed successfully and SDK/runtime metadata worked, but both
   normal sandbox setup and the unchanged-policy compatibility probe failed before
   authentication. No account login or inference took place. See
-  `CODEX-REPORTER-SPIKE-FINDINGS.md` for evidence and the next hosting decision.
-- Integration, live pilot and Typefully writes: not started.
+  `CODEX-REPORTER-SPIKE-FINDINGS.md` for historical evidence; the local amendment below
+  is the current direction.
+- Local Mac compatibility: passed, including dedicated ChatGPT authentication, Astra
+  medium/Standard inference, exact-session resume, browser/PDF/image inspection and
+  sandbox denials. The authenticated HTTPS bridge was explicitly approved September10.
+- Integration: implemented locally.773 regression tests and Desk type-check/build pass;
+  independent implementation review fixes incorporated. Deployment smoke and the live
+  pilot are next. No new Typefully drafts have been created by this pilot yet.
 - Independent checkpoint review: approved as a stopped partial spike. Before future
   auth, bind the sandbox pass to runtime/configuration and test the active auth-side
   and workspace configuration boundaries; see the findings' follow-up requirements.
+
+## Local pilot amendment — owner approved September 10, 11:29 AM CT
+
+Owner chooses the Mac pilot before paying for a VM and explicitly authorizes proceeding.
+The Mac will remain awake, plugged in and online. The two-hour reporting window starts
+only after setup, authentication and integration checks, not at build start.
+
+- Run native macOS Codex with Seatbelt; do not recreate the restricted Linux container.
+  Retain Astra medium/Standard, no API fallback, and all existing draft-only limits.
+- Use `/Users/brady/codex/nbn-reporter-pilot` for dedicated runtime, Codex home,
+  supervisor controls and reporting workspace. Do not reuse or modify the desktop
+  conversation's configuration/auth cache. Obtain a separate login if needed.
+- Test credential/control read denial, active configuration protection, unrelated
+  personal-directory denial, workspace writes and shell network denial before login.
+  Invalidate each old pass before probing and bind any pass to runtime/config hashes.
+- Native web search and bounded browser/source tools provide research network access;
+  the shell cannot read credentials or change publishing/shift controls. Verify real
+  page/screenshot/image/PDF handling, effective model/effort and exact-session resume.
+- The supervisor is a local background process with a bounded keep-awake assertion,
+  persistent state and one active reporter. It does not depend on this chat staying
+  active. Pause/cutoff and failure handling remain external to the model.
+- Keep NBN database/collectors/guarded delivery/Desk on Railway. Restore only the
+  reviewed infrastructure-only mode; communicate over authenticated HTTPS. Do not
+  clone a writable production database to the Mac or expose raw publisher credentials.
+- Keep two-way messages and the eight known manual drafts in the coverage baseline.
+  No legacy model seats, old retry jobs, scheduled Blocks or audits resume.
+- Independent review of this host amendment precedes implementation. Previous code
+  and actual Railway-container failure remain a recoverable historical checkpoint.
+
+Correction for eventual remote hosting: Railway's separate **Cloud Agents** product
+does provide persistent VMs with Codex support, currently through Priority Boarding.
+Our failed spike tested ordinary Railway services only. Evaluate Cloud Agents access
+and policy compatibility later before assuming an outside VM provider is necessary.
+No Cloud Agent, DigitalOcean VM or other billed host is authorized in this local phase.
+Reference: https://docs.railway.com/cloud-agents
+
+Local amendment review APPROVED by `codex_pilot_lead_review`. Use a dedicated browser
+profile and explicit tool allowlist, excluding personal sessions/desktop/connected apps.
+Bind the sandbox receipt to exact runtime/config/profile/cwd; verify effective permissions
+and instruction sources at start and resume. Persist the absolute cutoff outside the
+workspace and enforce it independently on the backend. Keep adapter credentials outside
+model-readable files/environment. Browser/source tools enforce their own URL/file bounds.

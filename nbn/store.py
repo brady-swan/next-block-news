@@ -1913,6 +1913,8 @@ def connect() -> sqlite3.Connection:
     _ensure_search_provider_columns(con)
     from . import visuals
     visuals.initialize(con)
+    from . import reporter_store
+    reporter_store.initialize(con)
     return con
 
 

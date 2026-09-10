@@ -4,6 +4,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Infrastructure mode collects and reconciles only. It never falls through to the
+# retained editorial pipeline, regardless of the old seat/retry/Block settings.
+OPERATING_MODE = os.environ.get("NBN_OPERATING_MODE", "pipeline").strip().lower()
+if OPERATING_MODE not in {"pipeline", "infrastructure"}:
+    raise RuntimeError("NBN_OPERATING_MODE must be pipeline or infrastructure")
+REPORTER_API_ENABLED = os.environ.get("NBN_REPORTER_API_ENABLED", "false").lower() == "true"
+REPORTER_TOKEN = os.environ.get("NBN_REPORTER_TOKEN", "")
+REPORTER_CONTROL_TOKEN = os.environ.get("NBN_REPORTER_CONTROL_TOKEN", "")
+
 # LLM
 ANTHROPIC_MODEL = os.environ.get("NBN_MODEL", "claude-sonnet-5")
 NEWSROOM_MODEL = os.environ.get("NBN_NEWSROOM_MODEL", ANTHROPIC_MODEL)

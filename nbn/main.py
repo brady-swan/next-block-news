@@ -233,6 +233,11 @@ def _lease_run(con, scheduled: bool) -> dict:
     try:
         # Repair human-published Typefully drafts before any coverage/dedup decisions.
         publisher.reconcile_publications(con)
+        if config.OPERATING_MODE == "infrastructure":
+            # Deliberately bypass _cycle_locked: it executes pending visual/output
+            # jobs and old triage even when newsroom mode is off.
+            from . import reporter_intake
+            return reporter_intake.collect(con, lease_owner=owner)
         result = _cycle_locked(con, owner)
         # The newsroom reservation belongs only to the one-off news cycle. Release any
         # remainder before independent scheduled discovery/audit work asks for capacity.
@@ -2137,6 +2142,10 @@ class Health(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/reporter/api/"):
+            from . import reporter_api
+            reporter_api.handle(self, parsed)
+            return
         workspace_action = parsed.path in {"/desk/api/item-action", "/desk/api/visual-action"}
         if parsed.path not in {"/item-action", "/mutation-action", "/desk/api/item-action", "/desk/api/visual-action"}:
             self.send_response(404)
@@ -2207,6 +2216,10 @@ class Health(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         from urllib.parse import parse_qs, urlparse
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/reporter/api/"):
+            from . import reporter_api
+            reporter_api.handle(self, parsed)
+            return
         if parsed.path == "/desk" or parsed.path.startswith("/desk/"):
             from . import desk
             desk.handle(self, parsed, STATE)

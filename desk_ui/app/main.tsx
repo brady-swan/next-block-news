@@ -64,6 +64,7 @@ type State = {
   status: string;
 };
 const nav = [
+  { id: "reporter", name: "Codex pilot", icon: Radio },
   { id: "newsroom", name: "Newsroom", icon: Layers3 },
   { id: "intake", name: "Intake & sources", icon: Inbox },
   { id: "outputs", name: "Outputs", icon: Send },
@@ -832,6 +833,42 @@ function Nav({
   );
 }
 
+function ReporterPilot({ data }: {data:Row}) {
+  const shift=data.shift;
+  const status=!shift?"Not started":shift.expired?"Cutoff reached":shift.status!=="active"?shift.status:shift.lease_alive?"Active":"Supervisor disconnected";
+  return <>
+    <section className="system-section">
+      <h2>{status}</h2>
+      <Note>Astra · medium effort · draft-only. One reporter owns research, writing, visuals and self-review. You make publication decisions in Typefully.</Note>
+      <div className="cost-kpi-grid">
+        <article className="cost-kpi"><span>Started</span><strong>{clock(shift?.started_at)}</strong></article>
+        <article className="cost-kpi"><span>Fixed cutoff</span><strong>{clock(shift?.cutoff_at)}</strong></article>
+        <article className="cost-kpi"><span>Draft deliveries</span><strong>{data.submissions.length}</strong></article>
+      </div>
+      <p className="meta-copy">Model usage consumes ChatGPT allowance, not the historical API-dollar ledger. The old pipeline and audit remain paused.</p>
+    </section>
+    <section className="system-section"><h2>Work delivered</h2>
+      {data.submissions.length===0?<p>No drafts submitted in this shift yet.</p>:data.submissions.map((s:Row)=><article className="dependency" key={s.submission_id}>
+        <strong>{s.state}</strong><span>{clock(s.created_at,true)}</span>
+        <p style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{s.payload.body}</p>
+        {s.url&&<External url={s.url}>Review in Typefully</External>}{s.error&&<p>{s.error}</p>}
+      </article>)}
+    </section>
+    <section className="system-section"><h2>Letter & next checks</h2>
+      <p style={{whiteSpace:"pre-wrap",lineHeight:1.65}}>{shift?.letter||"No handoff recorded yet."}</p>
+      <details><summary>Agenda</summary><pre style={{whiteSpace:"pre-wrap"}}>{JSON.stringify(shift?.agenda||{},null,2)}</pre></details>
+    </section>
+    <section className="system-section"><h2>Observable activity</h2>
+      <p className="meta-copy">Latest 100 records: tool use, decisions, feedback, completed-turn summaries and allowance usage. Not private reasoning.</p>
+      {data.records.map((r:Row)=><details className="dependency" key={r.record_id}>
+        <summary>{r.kind.replaceAll("_"," ")} · {r.payload.tool||r.payload.status||r.sender} · {clock(r.at)}</summary>
+        <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",fontSize:".9rem",lineHeight:1.6}}>{JSON.stringify(r.payload,null,2)}</pre>
+        {r.delivered_turn&&<small>{r.acknowledged_at?"Acknowledged":"Delivered to reporter"}</small>}
+      </details>)}
+    </section>
+  </>;
+}
+
 function App() {
   const [state, setState] = useState<State>(readState),
     [data, setData] = useState<Row | null>(null),
@@ -1090,6 +1127,10 @@ function App() {
               Loading selected view…
             </div>
           )}
+          {now.operating_mode === "infrastructure" && state.view !== "reporter" && (
+            <Note>The old editorial pipeline is paused. <a href={authUrl("/desk", {view:"reporter"})}>View the Codex pilot</a>. Historical runs and API costs remain available below.</Note>
+          )}
+          {data && data.view === "reporter" && state.view === "reporter" && <ReporterPilot data={data} />}
           {data && state.view === "newsroom" && data.view === "newsroom" && (
             <>
               <section className="run-bar" aria-label="Selected run">
@@ -1515,7 +1556,7 @@ function App() {
               </section>
             </>
           )}
-          {data && data.view === state.view && state.view !== "newsroom" && (
+          {data && data.view === state.view && state.view !== "newsroom" && state.view !== "reporter" && (
             <Support
               state={state}
               data={data}
