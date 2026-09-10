@@ -37,3 +37,19 @@ class ReporterSupervisorTests(unittest.TestCase):
             module.stop_runtime(codex,active)
             codex.close.assert_called_once()
         finally: release.set()
+
+    def test_exception_context_exit_uses_bounded_close(self):
+        module=self.module(); release=threading.Event()
+        proc=Mock();proc.poll.return_value=None
+        codex=Mock();codex._client._proc=proc
+        def hung_close():
+            codex._client._proc=None
+            release.wait(5)
+        codex.close.side_effect=hung_close
+        module.probe.client=Mock(return_value=codex)
+        try:
+            with self.assertRaisesRegex(RuntimeError,'heartbeat failed'):
+                with module.bounded_client():
+                    raise RuntimeError('heartbeat failed')
+            proc.kill.assert_called_once()
+        finally: release.set()

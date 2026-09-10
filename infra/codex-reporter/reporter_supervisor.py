@@ -5,6 +5,7 @@ Idle polling is code; only new intake/feedback/messages or due agenda wakes the 
 """
 import argparse
 import concurrent.futures
+from contextlib import contextmanager
 import datetime as dt
 import fcntl
 import json
@@ -90,13 +91,13 @@ def signature(pulse):
     return {k:pulse.get(k) for k in ('intake_at','message_id','coverage_hash')}
 
 
-def stop_runtime(codex, active=None):
+def stop_runtime(codex, active=None, *, owned_proc=None):
     """Bound shutdown even when turn/start or interrupt has not returned.
 
     Capture only this SDK-owned child before close clears its reference. Closing
     stdin can itself block on another writer; the final kill must not share it.
     """
-    proc = codex._client._proc
+    proc = owned_proc if owned_proc is not None else codex._client._proc
     def attempt(call, seconds):
         def guarded():
             try: call()
@@ -109,6 +110,17 @@ def stop_runtime(codex, active=None):
         proc.kill()
         try: proc.wait(timeout=1)
         except subprocess.TimeoutExpired: pass
+
+
+@contextmanager
+def bounded_client():
+    codex=probe.client()
+    proc=codex._client._proc
+    try:
+        yield codex
+    finally:
+        # Do not enter the SDK context manager: its implicit close is unbounded.
+        stop_runtime(codex,owned_proc=proc)
 
 
 def run():
@@ -135,7 +147,7 @@ def run():
                 return
     threading.Thread(target=watchdog,daemon=True).start()
     try:
-        with probe.client() as codex:
+        with bounded_client() as codex:
             runtime_client=codex
             if stopping: raise RuntimeError('Reporter stopped during runtime startup')
             thread=checked_thread(codex,shift)
