@@ -65,6 +65,30 @@ def save_letter(con, run_id, value, *, model, prompt_version):
     return bool(body or con.execute("SELECT 1 FROM writer_handoffs WHERE run_id=?", (run_id,)).fetchone())
 
 
+def _handoff_output_keys(con, run_id):
+    # Receipts may be reused/tagged to another sibling. Confirmed delivery intents
+    # retain the canonical event even after later replacements change posts.mutation_id.
+    keys = []
+    for row in con.execute(
+            "SELECT c.story_id,m.canonical_key,m.materialization_json "
+            "FROM newsroom_story_commits c JOIN publisher_mutations m "
+            "ON m.provider_ref=c.delivery_ref WHERE c.run_id=? "
+            "AND c.state='delivered' AND c.delivery_ref<>'' "
+            "AND m.state='confirmed' AND m.canonical_key<>'' "
+            "ORDER BY c.updated_at DESC,c.story_id,m.updated_at DESC,m.mutation_id",
+            (run_id,)):
+        data = store._safe_json_object(row["materialization_json"])
+        if data.get("run_id") == run_id and data.get("story_id") == row["story_id"]:
+            if row["canonical_key"] not in keys:
+                keys.append(row["canonical_key"])
+    for row in con.execute(
+            "SELECT canonical_key FROM writer_artifacts WHERE run_id=? AND canonical_key<>'' "
+            "ORDER BY created_at,artifact_id", (run_id,)):
+        if row[0] not in keys:
+            keys.append(row[0])
+    return keys[:8]
+
+
 def handoff(con, run_id=None, *, before=None):
     row = con.execute("SELECT * FROM writer_handoffs WHERE " +
         ("run_id=?" if run_id else "written_at<?") + " ORDER BY written_at DESC LIMIT 1",
@@ -87,10 +111,8 @@ def handoff(con, run_id=None, *, before=None):
             "editor_verdict": editor.get("verdict"), "editor_reason": str(editor.get("reason") or "")[:500],
             "validation": details.get("validation"), "reason": str(details.get("reason") or "")[:500]})
     from . import writer_memory
-    keys = con.execute("SELECT DISTINCT canonical_key FROM writer_artifacts WHERE run_id=? AND canonical_key<>''",
-                       (row["run_id"],)).fetchall()
-    result["actual_outputs"] = [{"event_key": r[0], "output": writer_memory.publication(con, r[0])}
-                                for r in keys[:8]]
+    result["actual_outputs"] = [{"event_key": key, "output": writer_memory.publication(con, key)}
+                                for key in _handoff_output_keys(con, row["run_id"])]
     # Copy is retrievable via notebooks; don't bloat every initial desk.
     for entry in result["actual_outputs"]:
         output = entry["output"]
