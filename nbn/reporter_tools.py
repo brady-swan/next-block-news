@@ -2,6 +2,7 @@
 import base64
 import datetime as dt
 import json
+import re
 import time
 import uuid
 
@@ -111,6 +112,26 @@ def read_evidence(con, ident):
     return json.loads(row[0])
 
 
+def _x_source_alias(post, includes):
+    """Add a readable source alias only from this post's expanded API author."""
+    if not isinstance(post, dict) or not isinstance(includes, dict):
+        return {}
+    ident, author = post.get("id"), post.get("author_id")
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9]+", value)
+           for value in (ident, author)):
+        return {}
+    users = includes.get("users")
+    if not isinstance(users, list):
+        return {}
+    matches = [user for user in users if isinstance(user, dict) and user.get("id") == author]
+    if len(matches) != 1:
+        return {}
+    username = matches[0].get("username")
+    if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9_]{1,15}", username):
+        return {}
+    return {"canonical_url": f"https://x.com/{username}/status/{ident}"}
+
+
 def context(con, shift_id):
     coverage = [json.loads(r[0]) for r in con.execute("SELECT payload_json FROM reporter_remote_coverage "
         "WHERE status IN ('draft','scheduled','planned','publishing') OR published_at>? ORDER BY COALESCE(published_at,created_at) DESC",
@@ -209,6 +230,7 @@ def dispatch(con, *, shift_id, generation, name, args):
                     'message':'X returned errors without posts, not a successful empty result. Try an exact post ID or native web search.'}
         return {"ok":True,"partial":bool(raw.get('errors')),"provider_errors":raw.get('errors',[]),"posts": [evidence(con, shift_id, {"url": f"https://x.com/i/status/{r['id']}",
             "final_url": f"https://x.com/i/status/{r['id']}", "text": (r.get("note_tweet") or {}).get("text", r.get("text", "")),
+            **_x_source_alias(r, raw.get("includes")),
             "published_at": r.get("created_at"), "retrieval_kind": "direct_fetch", "post": r,
             "includes": raw.get("includes", {})}) for r in rows]}
     if name == "nbn_perception":
