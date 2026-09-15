@@ -16,7 +16,7 @@ The reusable problem remains in `nbn/reporter_tools.py`: exact/read/search respo
 author_id and users.username, but omit the already-supported evidence `canonical_url`. This
 unnecessarily rejects a legitimate source link the model read in an article.
 
-## Proposed smallest change (independent plan review pending)
+## Reviewed smallest change
 
 1. Preserve existing `url` and `final_url` `/i/status/ID` strings and all source text.
 2. Add `canonical_url=https://x.com/USERNAME/status/ID` only when the API's returned post
@@ -54,5 +54,39 @@ real-dispatch-shaped exact/search receipts and mocked create-once delivery, incl
 of unbound handles, other post IDs and failed/empty evidence before dispatch.
 
 Baseline22 focused tests PASS before edit;27 focused tests PASS after edit (1.722seconds).
-Local diff check for implementation/tests clean. Release/deployment/smoke/resume still pending;
-no claim of a live change yet. Existing CoinEx10772268 remains fully resolved and untouched.
+Local diff check for implementation/tests clean. Existing CoinEx10772268 remains fully resolved
+and untouched. Deployment and same-shift resume are complete; receipts below supersede plan state.
+
+Commit d3500ce8b5e8358834930601965c3deccfa70ece pushed. Clean archive release
+/private/tmp/nbn-x-alias-release.F97Rzh passed all778tests in43.503seconds with network-enabled
+DNS validation. Initial sandbox-only run failed12tests/9errors in DNS-dependent paths; this
+was not repaired by changing unrelated tests or code. Same suite passes unchanged outside
+that network restriction. One-time rollout helper independently approved; initial pause attempt
+exited before intent or mutation because a reporting turn was active. A later completed turn
+allowed the maintenance recorded below; that initial check must not trigger another pause.
+
+## Deployed, smoked, resumed — COMPLETE
+
+Railway86bc122d-652a-4733-9fc4-f03fe50d83cd SUCCESS, created04:58:44.901UTC from clean archive.
+Live reporter_tools.py hash f1fee802d88a2febac84da72f9ef6b057bac0848fd4ac672ba19947117febc9a
+matches reviewed commit. Unchanged PDF hash also verified. Actual exact-X request returned
+post2099680499094737251/author260702356, canonical yhaiyang URL, original i/status URL,
+3091characters/hash7af157dfcfba88eeb1d4260829b6232ed151d86d0bebe66cc63964cfd91c267a.
+Real response retained only in ephemeral test DB; unboundhandle rejected beforePOST. Five
+deployed fixture tests prove accepted correctalias/create-once and negative cases with mocks.
+No production evidence/submission/asset row or Typefully draft created by smoke. First smoke
+attempt imported tests' network-blocking harness before liveGET; corrected helper import order,
+not production code, then passed. Those attempts failed before any outgoing X request.
+
+Bounded maintenance04:58:19.838–05:01:31.902UTC (192seconds). Exact oldPID46997 exited;
+same original shift/thread/start/cutoff resumed once, newPID52851. Live lease/autopostfalse/
+infrastructure/no pending verified05:02UTC. Tool message1651 tools:20260915:x-source-alias-v1
+delivered to turn01a0a372-11d6-7f53-b4a1-4d2ecf9a3d64 and acknowledged1654 at05:02:48.462UTC.
+Acknowledgment proves delivery, not a subsequent natural source-alias draft. No further resume,
+message or CoinEx recovery is pending. Original13:00UTC cutoff unchanged.
+
+Receipts: workspace output/reporter-overnight-20260915-0438/x-alias-{clean-tests.log,deploy.log,
+maintenance-pause.json,production-smoke.json,maintenance-resume.json,final-status.json,
+acknowledgment.json}. Helpers are one-time only. Rollback: focused revert of d3500ce/release
+or prior deployment e5983b58-17ee-4671-b47f-e698a4a0c8e8. No DB restore; no existing content
+changes. No additional recurring API/model cost, no runtime/credential/cadence/standards change.

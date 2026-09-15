@@ -15,7 +15,13 @@
 LAUNCHED: **pilot-20260915T025357Z**, started2026-09-15T02:53:58.064UTC (09:53:58PM CT).
 Fixed cutoff **1789477200 / 2026-09-15T13:00:00UTC**. Original supervisor PID43233.
 Reviewed PDF repair a726a00 deployed as e5983b58-17ee-4671-b47f-e698a4a0c8e8 (SUCCESS).
-Same-shift maintenance03:38:15–03:43:10UTC completed; current supervisor PID46997.
+Same-shift maintenance03:38:15–03:43:10UTC completed; then supervisor PID46997.
+Latest X-source repair d3500ce deployed86bc122d-652a-4733-9fc4-f03fe50d83cd SUCCESS.
+Second maintenance04:58:19.838–05:01:31.902UTC COMPLETE; current supervisor PID52851.
+Exact original shift/start/thread/13:00UTCcutoff unchanged; livelease/autopostOFF/no pending
+verified.778clean tests and real-X/ephemeralDB/mocked-delivery smoke pass, reviewed hashes match.
+Message1651 acknowledged1654 at05:02:48.462UTC. Workspace0438/x-alias maintenance receipts
+are single-use completed history, never an instruction to pause/resume/recreate CoinEx again.
 Thread/start/cutoff unchanged. Backend hashes, real-PDF render, strict matching and tool schema
 smoked; active lease/autopostOFF/no pending submissions verified. Tool message1447 acknowledged
 1450 at03:43:37UTC. Maintenance receipts are in workspace output/reporter-overnight-20260915-0310/;

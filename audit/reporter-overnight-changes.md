@@ -87,6 +87,30 @@ pretend installed/runtime instructions changed. Do not resend this same message.
 
 ## Continuing audit priorities
 
+### Change04 — API-bound X source aliases (COMPLETE)
+
+CoinEx10772268 staged04:33:59.770UTC; message1601 acknowledged1604. Its previous preflight
+problem is resolved and must not trigger another delivery. Fifth audit also independently
+viewed the rate-odds chart; previous image/ack gaps below are historical, not new tasks.
+
+New bounded repair adds canonical_url only from an exact post's uniquely expanded API author,
+preserving i/status, raw text and provenance. Source/delivery validators are unchanged. Missing
+or malformed authors keep the fallback. No extra X requests, models, runtime or recurring cost.
+Independent plan/code/rollout reviews approved. Commit d3500ce pushed;27focused tests pass.
+Clean release /private/tmp/nbn-x-alias-release.F97Rzh:778 tests PASS with DNS available. Initial
+sandbox-only run failed DNS-dependent tests; no unrelated changes were made to address them.
+Railway86bc122d-652a-4733-9fc4-f03fe50d83cd SUCCESS; reviewed backend hashes match. Real X GET
+into ephemeral DB and5mocked-delivery production tests pass, no Typefully/productiondata writes.
+Smoke helper initially imported unit-test networkblocking before liveGET; corrected helper
+ordering, no productioncode change. One-time helper overnight-x-alias-rollout.py is separate
+from the completed PDF helper. Initial pause attempt stopped BEFORE intent/mutation because
+reporter was active. Completed-turn maintenance04:58:19.838–05:01:31.902UTC (192seconds);
+same shift/start/thread/cutoff resumed once withPID52851. Livelease/autopostOFF/no pending
+verified. Message1651 acknowledged1654 at05:02:48.462UTC. No pending launch/repair/delivery.
+Rollback for this change is the current PDF deployment e5983b58-17ee-4671-b47f-e698a4a0c8e8
+or a focused revert of d3500ce, never database restoration or repeating an old launch.
+Full plan/receipts: research/reporter-x-source-alias-repair-2026-09-15.md.
+
 ### 04:23 audit — source excerpt and preflight usability (no production release)
 
 Draft10772041 naturally follows a tip to the DOJ complaint and a readable original footnote

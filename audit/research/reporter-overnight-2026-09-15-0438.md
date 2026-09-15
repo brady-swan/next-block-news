@@ -87,9 +87,19 @@ delivery check, preserves outputs/cutoff and records remaining questions. Good c
 ## Separate new technical improvement
 
 The resolved CoinEx incident exposed reusable X source-alias friction. A minimal additive
-canonical_url fix is locally implemented and independently approved;22 baseline and27 focused
-postchange tests pass. Delivery guards unchanged, no retrofit of old receipts/drafts. Clean
-release/maintenance/deploy/smoke/resume pending, separately tracked in
+canonical_url fix is implemented, independently approved and deployed as d3500ce;
+22 baseline,27 focused and778 clean-release tests pass. Delivery guards unchanged, no retrofit
+of old receipts/drafts. Deployment86bc122d-652a-4733-9fc4-f03fe50d83cd SUCCESS. Production real-X
+fetch into ephemeral DB and5mocked-delivery tests passed; no production evidence/Typefully writes.
+Reviewed file hashes match. Maintenance04:58:19.838–05:01:31.902UTC; same shift resumed with
+PID52851, original13:00UTCcutoff and active lease, autopostOFF/no pending submissions.
+Message1651 acknowledged1654 at05:02:48.462UTC. Completed receipts separately tracked in
 `reporter-x-source-alias-repair-2026-09-15.md`. This audit interval is complete before that work;
 do not conflate a deployment smoke with review of later reporter turns. No other fixes or new
 editorial policy from this pass. Next full review starts1613.
+
+Post-deployment health: collector05:01:44UTC344items/0new, normal infrastructure-only0editorial
+calls. Marketing Node's date-specific wire endpoint returned404; other intake remains operating.
+Not part of this X-source repair, and not evidence all source health is perfect. Next audit
+should retain the caveat. NewChina10772313 was observed during maintenance checks but has NOT
+received the full copy/source review; do not advance the editorial cursor past1612 for it.
