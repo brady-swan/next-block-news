@@ -65,7 +65,23 @@ existing maintenance helpers contain single-use receipts and must not be rerun.
 Cost: no new model calls or recurring service; opt-in Poppler extraction only. Remaining limits:
 known GPO margin layout only, selected pages, no OCR/fuzzy matching, bounded raw provenance.
 
-## Next prioritized work during audit
+## Change03 — owner-feedback-2026-09-15-v1 (queued, acknowledgment pending)
+
+New owner request03:46:34UTC, turn01a0a32c-71d7-7d00-aa43-5eb868654e7a: pull his further
+Typefully replies into tonight's work. This is owner-directed calibration, not an autonomous
+publication-policy revision. Six full draft/comment pairs read: Maple/Zodia NO, EFF/Flock YES
+with scale-first lede, Lummis YES with concise rewrite, niche FCA gold NO but excerpt format
+good, reserve bill YES with SECOND substance-first rewrite, Swiss Bitcoin Pay YES/well written.
+Canonical versioned supplement audit/reporter-owner-feedback-20260915.md distinguishes exact
+owner endorsements from our synthesis, stale factual examples and unapproved audit hypotheses.
+Human tuning/comment ledgers updated; existing baseline calibration/runtime files untouched.
+One operator message1464 owner-feedback:20260915:0346:v1 stored and read back; acknowledgment pending.
+No Typefully mutation, pause/restart, new worker, model or cadence change. Original13:00UTCcutoff.
+Delivery intent and receipt retained in workspace output/owner-feedback-20260915-delivery*.json.
+Rollback/correction: version a superseding supplement if needed; never erase owner comments or
+pretend installed/runtime instructions changed. Do not resend this same message.
+
+## Continuing audit priorities
 
 1. Observe actual visual opportunity→inspection→render→pixel review→delivery; diagnose specific
    failures and fix obvious execution/tool usability gaps rather than just repeating advice.
