@@ -29,9 +29,13 @@ TOOLS = [
          "For PDFs beyond the default first20 pages/10MiB, pass pdf_query for literal search across up to500 pages, "
          "or start_page and page_count (1–12) for full selected page text. Targeted mode permits32MiB. "
          "Search returns page-numbered snippets, not full-document evidence; inspect relevant pages afterward. "
-         "If next_cursor is returned, call again with its fields and the same URL to continue clipped text.",
+         "If next_cursor is returned, call again with its fields and the same URL to continue clipped text. "
+         "For a GPO legislative PDF whose margin line numbers interrupt an excerpt, retry selected pages "
+         "with pdf_text_mode=legislation (no pdf_query). This removes recognized margin labels only, "
+         "retains raw layout, and rejects unfamiliar layouts. Inspect original page pixels for context.",
          {"url": STR,"pdf_query":STR,"start_page":{"type":"integer","minimum":1,"maximum":500},
-          "page_count":{"type":"integer","minimum":1,"maximum":12},"pdf_text_offset":INT}, ["url"]),
+          "page_count":{"type":"integer","minimum":1,"maximum":12},"pdf_text_offset":INT,
+          "pdf_text_mode":{"type":"string","enum":["plain","legislation"]}}, ["url"]),
     tool("nbn_search", "Targeted Google source search using NBN's existing search service. Results are pointers, not read articles.", {"query": STR}, ["query"]),
     tool("nbn_x", "Read an exact X post by ID, or search recent X with a precise query; includes quotes/replies/media and dates.", {"post_id": STR, "query": STR}),
     tool("nbn_perception", "Use Perception's industry corpus. coverage/regulatory take query,start_date,end_date; article takes url. "
@@ -156,10 +160,11 @@ def dispatch(con, *, shift_id, generation, name, args):
         # Do not upgrade paraphrases/native excerpts into literal quote evidence.
         return evidence(con, shift_id, payload, record_id=args["record_id"], sender="reporter")
     if name == "nbn_fetch":
-        if any(key in args for key in ('pdf_query','start_page','page_count','pdf_text_offset')):
+        if any(key in args for key in ('pdf_query','start_page','page_count','pdf_text_offset','pdf_text_mode')):
             from . import reporter_pdf
             raw = reporter_pdf.fetch(args['url'],query=args.get('pdf_query',''),start_page=args.get('start_page',1),
-                                     page_count=args.get('page_count',5),text_offset=args.get('pdf_text_offset',0),deadline=time.monotonic()+35)
+                                     page_count=args.get('page_count',5),text_offset=args.get('pdf_text_offset',0),
+                                     text_mode=args.get('pdf_text_mode','plain'),deadline=time.monotonic()+35)
         else:
             raw = sources.fetch_article(args["url"], limit=24000, deadline=time.monotonic() + 35)
         return evidence(con, shift_id, {**raw, "url": args["url"], "retrieval_kind": "direct_fetch",

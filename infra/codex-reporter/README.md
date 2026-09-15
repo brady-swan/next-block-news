@@ -1,7 +1,9 @@
 # Local Codex reporter pilot —0076, tooling0077
 
-The September10 reporting test has ended. Tooling0077 prepares another test but does not
-start one; reporter, audit and autopost remain off unless separately authorized.
+The September10 reporting test has ended. Tooling installation never authorizes a new shift.
+The separately approved September14–15 overnight shift is documented in
+`audit/reporter-overnight-session.md`, with a fixed September15 13:00UTC cutoff. Autopost
+remains OFF; do not restart an expired shift from this documentation.
 
 The stdio bridge isolates each call in an owned process group with a45-second wall-clock
 limit. Three read slots, two notebook/handoff slots and one delivery slot have no hidden
@@ -17,6 +19,16 @@ returns bounded text with actual page numbers. Follow `next_cursor` with the sam
 clipped text, or `next_page` for another range. No OCR, verified table layout or inferred
 publication date. `nbn_visual pdf_page` supports those physical pages for separate pixel
 inspection; source-image attachment permissions are unchanged.
+
+For a GPO legislative PDF whose margin line numbers interrupt a literal excerpt, use
+`nbn_fetch` with `pdf_text_mode: "legislation"`, `start_page` and a small `page_count`.
+This opt-in mode accepts selected pages only, not `pdf_query`; search normally first.
+It recognizes the GPO header/footer and sequential margin labels, removes only those
+tokens, and retains the original PDF hash and unmodified layout in `layout_provenance`.
+Raw layout is capped at24KiB; select fewer pages if needed. Unrecognized/ambiguous layouts
+are rejected. No substantive numbers, punctuation, hyphenation or OCR are repaired.
+Inspect original page pixels for context. Excerpt rendering still requires exact contiguous
+source text; default PDF extraction, publishing and image permissions are unchanged.
 
 `nbn_browser` returns outbound links, a24k text window, next_offset and an actual viewport
 screenshot. `query` finds a literal section; it is not a web search. Links are not evidence.

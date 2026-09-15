@@ -14,11 +14,51 @@ from . import sources
 MAX_BYTES = 32 * 1024 * 1024
 MAX_PAGES = 500
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+MAX_LAYOUT_BYTES = 24 * 1024
+LEGISLATIVE_LAYOUT_VERSION = 'gpo-margin-only-v1'
 LIMITATIONS = ('PDF text layer only; scanned pages, charts and table layout are not verified. '
                'Extraction does not establish publication date. Page numbers are physical PDF pages.')
 
 
-def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, deadline=None):
+def legislative_page(raw, number):
+    """Remove only proven GPO margin labels; preserve every other character.
+
+    This deliberately does not repair hyphenation, OCR, tables, numbered lists or
+    arbitrary PDF layouts. The caller retains the unmodified layout alongside it.
+    """
+    rows = raw.splitlines(keepends=True)
+    nonempty = [i for i, row in enumerate(rows) if row.strip()]
+    error = 'Unrecognized legislative layout; use plain text or inspect the original PDF page'
+    if (len(nonempty) < 4 or
+            not re.fullmatch(r'G:\\M\\[^\r\n]+\.XML', rows[nonempty[0]].strip(), re.I) or
+            rows[nonempty[1]].strip() != str(number)):
+        raise ValueError(error)
+    footers = [i for i in nonempty[2:] if re.match(r'^\s*G:\\V\\[^\r\n]+\.xml\b', rows[i], re.I)]
+    if len(footers) != 1:
+        raise ValueError(error)
+    footer = footers[0]
+    tail = ''.join(rows[footer:])
+    if not all(re.search(r'\b'+key+r'\b', tail) for key in ('VerDate','Jkt','Frm','Fmt','Sfmt')):
+        raise ValueError(error)
+    labels = []
+    for i in range(nonempty[1]+1, footer):
+        if not rows[i].strip():
+            continue
+        match = re.match(r'^\s*([1-9][0-9]?)\s+\S', rows[i])
+        if not match or int(match[1]) != len(labels)+1:
+            raise ValueError(error)
+        labels.append((i, match.start(1), match.end(1)))
+    # Real GPO layouts can shift the right edge by one character at label10.
+    if (not 8 <= len(labels) <= 30 or min(a for _,a,_ in labels) < 4 or
+            max(b for _,_,b in labels)-min(b for _,_,b in labels) > 2):
+        raise ValueError(error)
+    for i, a, b in labels:
+        rows[i] = rows[i][:a] + ' '*(b-a) + rows[i][b:]
+    return ''.join(rows), {'page':number, 'removed_label_count':len(labels),
+                          'margin_end_columns':[min(b for _,_,b in labels),max(b for _,_,b in labels)]}
+
+
+def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, text_mode='plain', deadline=None):
     """Read selected pages or return literal search snippets with their actual page numbers."""
     if len(data) > MAX_BYTES: raise ValueError('PDF exceeds 32 MiB input limit')
     if not data.startswith(b'%PDF-'): raise ValueError('Response is not a PDF')
@@ -28,6 +68,9 @@ def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, deadli
         raise ValueError('page_count must be 1–12')
     query = str(query).strip()
     if len(query) > 200: raise ValueError('PDF literal query must be at most 200 characters')
+    if text_mode not in ('plain','legislation'): raise ValueError('PDF text mode must be plain or legislation')
+    if text_mode == 'legislation' and query:
+        raise ValueError('Legislation mode requires selected pages, not pdf_query; find pages in plain mode first')
     if isinstance(text_offset,bool) or not isinstance(text_offset,int) or not 0<=text_offset<=MAX_OUTPUT_BYTES:
         raise ValueError('pdf_text_offset must be 0–8388608')
     last = MAX_PAGES if query else min(MAX_PAGES, start_page + page_count - 1)
@@ -36,7 +79,8 @@ def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, deadli
         path, output = Path(directory)/'source.pdf', Path(directory)/'text.txt'
         path.write_bytes(data)
         if time.monotonic() >= end: raise ValueError('PDF extraction deadline')
-        proc = subprocess.Popen(['pdftotext','-f',str(start_page),'-l',str(last),'-enc','UTF-8',
+        proc = subprocess.Popen(['pdftotext',*(['-layout'] if text_mode=='legislation' else []),
+                                 '-f',str(start_page),'-l',str(last),'-enc','UTF-8',
                                  '-eol','unix',str(path),str(output)],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
@@ -53,6 +97,16 @@ def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, deadli
             proc.wait()
     pages = raw.split('\f')
     if pages and not pages[-1].strip(): pages.pop()
+    layout = None
+    if text_mode == 'legislation':
+        if len(raw.encode('utf-8')) > MAX_LAYOUT_BYTES:
+            raise ValueError('Legislative layout exceeds 24 KiB provenance limit; select fewer pages')
+        cleaned = [legislative_page(text, number) for number,text in enumerate(pages,start_page)]
+        layout = {'version':LEGISLATIVE_LAYOUT_VERSION,
+                  'transformation':'Only sequential GPO margin line-number tokens removed; no other text corrections.',
+                  'raw_pages':[{'page':number,'text':text} for number,text in enumerate(pages,start_page)],
+                  'pages':[metadata for _,metadata in cleaned]}
+        pages = [text for text,_ in cleaned]
     matches, selected, readable = [], [], False
     for number, text in enumerate(pages, start_page):
         text = re.sub(r'[^\S\n]+', ' ', text).strip()
@@ -76,8 +130,10 @@ def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, deadli
         next_cursor={'start_page':start_page,'page_count':page_count,'pdf_query':query,'pdf_text_offset':stop}
     elif query and len(matches)>12:
         next_cursor={'start_page':matches[12],'page_count':page_count,'pdf_query':query,'pdf_text_offset':0}
+    if next_cursor and text_mode != 'plain': next_cursor['pdf_text_mode'] = text_mode
     excerpt=continuation_label+combined[text_offset:stop]
-    return {'text':excerpt, 'outcome':'ok' if readable else 'evidence_failed',
+    return {'text':excerpt, **({'pdf_text_mode':text_mode,'layout_provenance':layout} if layout else {}),
+            'outcome':'ok' if readable else 'evidence_failed',
             'error_kind':'' if readable else 'pdf_no_text', 'query':query,
             'input_bytes':len(data),'document_sha256':hashlib.sha256(data).hexdigest(),
             'match_pages':matches, 'pages_scanned':[start_page, start_page+len(pages)-1] if pages else [],
@@ -85,12 +141,12 @@ def extract(data, *, query='', start_page=1, page_count=5, text_offset=0, deadli
             'text_offset':text_offset,'next_cursor':next_cursor,
             'next_page':(None if next_cursor else start_page+len(pages)
                          if len(pages)==last-start_page+1 and start_page+len(pages)<=MAX_PAGES else None),
-            'limitations':LIMITATIONS + (' Literal search snippets only; a match is not a reading of the full page. '
+            'limitations':LIMITATIONS + (' GPO margin line labels removed; raw layout is retained. No hyphenation or substantive text repaired.' if layout else '') + (' Literal search snippets only; a match is not a reading of the full page. '
                 'No match means not found in the searched text layer, not absent from images or later pages.' if query else
                 ' Only the selected page range was read.') + (' Excerpt clipped; unread remainder is not evidence.' if clipped else '')}
 
 
-def fetch(url, *, query='', start_page=1, page_count=5, text_offset=0, deadline=None):
+def fetch(url, *, query='', start_page=1, page_count=5, text_offset=0, text_mode='plain', deadline=None):
     end = min(deadline or float('inf'), time.monotonic()+35)
     current = url
     with httpx.Client(follow_redirects=False, headers={'User-Agent':sources.UA}) as client:
@@ -109,6 +165,6 @@ def fetch(url, *, query='', start_page=1, page_count=5, text_offset=0, deadline=
                     data.extend(part)
                     if len(data)>MAX_BYTES: raise ValueError('PDF exceeds 32 MiB download limit')
                     if time.monotonic()>=end: raise ValueError('PDF download deadline')
-                return {**extract(bytes(data),query=query,start_page=start_page,page_count=page_count,text_offset=text_offset,deadline=end),
+                return {**extract(bytes(data),query=query,start_page=start_page,page_count=page_count,text_offset=text_offset,text_mode=text_mode,deadline=end),
                         'final_url':current, 'published_at':'', 'content_type':'application/pdf'}
     raise ValueError('PDF redirect limit')
