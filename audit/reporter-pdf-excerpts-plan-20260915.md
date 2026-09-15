@@ -1,6 +1,7 @@
 # Bounded repair: legislative PDF excerpts
 
-Status: independent lead approved with refinements; implementation in progress. Evidence: overnight record1348,
+Status: COMPLETE; independently approved, shipped a726a00, production smoke and same-shift resume verified.
+Railway deployment e5983b58-17ee-4671-b47f-e698a4a0c8e8. Evidence: overnight record1348,
 draft10771366; baseline code HEAD5a2ccb4. Existing Plan0077 PDF fetch and visual renderer are
 complete and are not being rebuilt. This is a newly reproduced usability defect.
 

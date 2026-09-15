@@ -13,7 +13,13 @@
 ## State
 
 LAUNCHED: **pilot-20260915T025357Z**, started2026-09-15T02:53:58.064UTC (09:53:58PM CT).
-Fixed cutoff **1789477200 / 2026-09-15T13:00:00UTC**. Supervisor PID43233.
+Fixed cutoff **1789477200 / 2026-09-15T13:00:00UTC**. Original supervisor PID43233.
+Reviewed PDF repair a726a00 deployed as e5983b58-17ee-4671-b47f-e698a4a0c8e8 (SUCCESS).
+Same-shift maintenance03:38:15–03:43:10UTC completed; current supervisor PID46997.
+Thread/start/cutoff unchanged. Backend hashes, real-PDF render, strict matching and tool schema
+smoked; active lease/autopostOFF/no pending submissions verified. Tool message1447 acknowledged
+1450 at03:43:37UTC. Maintenance receipts are in workspace output/reporter-overnight-20260915-0310/;
+neither pause nor resume may be replayed. Subsequent natural image use remains to be evaluated.
 Previous pilot-20260914T205814Z remains completed/expired with lease0; not resumed.
 Preflight coverage sync complete39candidates, 3changed detail/comment reads.
 Launch receipt: /Users/brady/codex/nbn-reporter-pilot/control/launch-overnight-20260915.json.

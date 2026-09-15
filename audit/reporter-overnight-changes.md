@@ -35,6 +35,36 @@ recertify sandbox before any controlled same-shift process resume; keep13:00UTC 
 Do not reset the whole repo or restore the database. Published/remote side effects are not
 undone by git, so autopost and existing-draft protections remain in force.
 
+## Change02 — legislative PDF excerpts (COMPLETE)
+
+Plan
+audit/reporter-pdf-excerpts-plan-20260915.md. Production failure1348 reproduced against actual
+original p51 pixels/hash. Independent lead reviewed plan and final diff; approved with
+selected-page-only/bounded raw provenance and tight known-margin recognition refinements.
+Only reporter_pdf.py, reporter_tools.py and dedicatedtests plus this documentation change.
+Strict visual validator/default paths unchanged.48focusedtests pass; actual source sentence
+renders1600×900locally, inspectedpixels. Clean unchanged baseline767tests PASS; clean release
+773tests PASS. Earlier dirty-worktree810test result is not release validation; unrelated
+failures/dirty work preserved, not repaired here. Commit a726a00 pushed on existing branch.
+Railway e5983b58-17ee-4671-b47f-e698a4a0c8e8 SUCCESS; exact backend hashes verified.
+Production original-PDF fetch/render passed in0.21s, altered-text rejection and HTTPS tool
+schema verified. Actual smoke pixels reviewed; source footer explicitly labels proposed bill.
+No Typefully image attachment, new draft or evidence/asset DB record created by smoke.
+
+Operational pause/resume helper separately independently reviewed and approved. Exact original
+worker exited; paused03:38:15UTC, resumed03:43:10UTC (about4m55), new PID46997. Same shift,
+thread and13:00UTC cutoff; no pending submissions, active lease, autopostOFF/infrastructure
+verified. Tool message1447 acknowledged1450 at03:43:37UTC. This proves deployment/delivery,
+not improved natural visual adoption. The already-created tax draft remains unchanged.
+Read-only receipts and rendered PNG: workspace output/reporter-overnight-20260915-0310/.
+
+Rollback: remove focused commit a726a00 via a reviewed revert/release or redeploy prior production
+7c94895c-f08a-4164-ad7d-ea686b6508c4. No database restore or repo reset; preserve the runtime's
+preexisting cutoff fix. Pause/resume only with exact current generation and original cutoff;
+existing maintenance helpers contain single-use receipts and must not be rerun.
+Cost: no new model calls or recurring service; opt-in Poppler extraction only. Remaining limits:
+known GPO margin layout only, selected pages, no OCR/fuzzy matching, bounded raw provenance.
+
 ## Next prioritized work during audit
 
 1. Observe actual visual opportunity→inspection→render→pixel review→delivery; diagnose specific
