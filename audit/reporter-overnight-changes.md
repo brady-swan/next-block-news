@@ -65,7 +65,7 @@ existing maintenance helpers contain single-use receipts and must not be rerun.
 Cost: no new model calls or recurring service; opt-in Poppler extraction only. Remaining limits:
 known GPO margin layout only, selected pages, no OCR/fuzzy matching, bounded raw provenance.
 
-## Change03 — owner-feedback-2026-09-15-v1 (queued, acknowledgment pending)
+## Change03 — owner-feedback-2026-09-15-v1 (acknowledged)
 
 New owner request03:46:34UTC, turn01a0a32c-71d7-7d00-aa43-5eb868654e7a: pull his further
 Typefully replies into tonight's work. This is owner-directed calibration, not an autonomous
@@ -75,13 +75,28 @@ good, reserve bill YES with SECOND substance-first rewrite, Swiss Bitcoin Pay YE
 Canonical versioned supplement audit/reporter-owner-feedback-20260915.md distinguishes exact
 owner endorsements from our synthesis, stale factual examples and unapproved audit hypotheses.
 Human tuning/comment ledgers updated; existing baseline calibration/runtime files untouched.
-One operator message1464 owner-feedback:20260915:0346:v1 stored and read back; acknowledgment pending.
+One operator message1464 owner-feedback:20260915:0346:v1 stored and read back; acknowledged
+04:00:19.487UTC in turn01a0a338-e6e7-73e1-8eac-0c35e0104d1b. Current continuity letter retains
+the distinctions. Reporter independently read individual comments1388/1405/1430 before this
+supplement; do not attribute earlier decisions to it. Actual subsequent quality still requires
+review, not merely acknowledgment. No resend.
 No Typefully mutation, pause/restart, new worker, model or cadence change. Original13:00UTCcutoff.
 Delivery intent and receipt retained in workspace output/owner-feedback-20260915-delivery*.json.
 Rollback/correction: version a superseding supplement if needed; never erase owner comments or
 pretend installed/runtime instructions changed. Do not resend this same message.
 
 ## Continuing audit priorities
+
+### 04:08 audit — observed improvement and one diagnostic question (not a prompt release)
+
+Natural draft10771901 now includes an original cost chart; source/fullcopy/pixels/remoteattachment
+verified, advisorycommentconfirmed. This is evidence for usefulimage adoption under executionv1,
+not proof legislativePDFrepair caused it (ordinarychart path). No new build/restart/policychange.
+Question1561 audit-question:20260915:0408:rate-odds stored04:14:55/readbackverified, ackpending:
+exactXAPIreturnsBarchartphoto while reporter had passedpreview asprediction. Asked existingtools
+to establish chartscope and explain judgment; no94%validation/forceddraft/categoricalrule.
+Auditpixelsunseen; media pointer/provenance is not a captured source chart. Track subsequent
+answer as audit-assisted, do not resend. Source/report: research/reporter-overnight-2026-09-15-0408.md.
 
 1. Observe actual visual opportunity→inspection→render→pixel review→delivery; diagnose specific
    failures and fix obvious execution/tool usability gaps rather than just repeating advice.
