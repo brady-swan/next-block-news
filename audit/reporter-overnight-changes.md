@@ -87,6 +87,20 @@ pretend installed/runtime instructions changed. Do not resend this same message.
 
 ## Continuing audit priorities
 
+### 04:23 audit — source excerpt and preflight usability (no production release)
+
+Draft10772041 naturally follows a tip to the DOJ complaint and a readable original footnote
+graphic. Fullcopy/source/pixels/attachment checked; one optional mechanism-first copy comment
+confirmed, no existing changes. Diagnostic question1561 now acknowledged1585 with actual
+rate-odds photo inspection; audit has not independently inspected that image yet. No resend.
+Later CoinEx409 proven to occur before any delivery: at04:32:18UTC no matching submission,
+intent, post or remote coverage; live delivery code/hash/complete CEO receipt inspected.
+Message1601 audit:20260915:coinex-preflight-url stored/read back once: use exact retained X
+URL with same unaccepted ID only after current coverage check. No accepted payload/uncertain
+remote mutation changed. Ack/result pending. No code/prompt install/deploy/restart; a bounded
+execution workaround. Client uncertain-label/URL-identity usability remains a possible technical
+follow-up, not a claimed shipped repair. Evidence/report research/reporter-overnight-2026-09-15-0423.md.
+
 ### 04:08 audit — observed improvement and one diagnostic question (not a prompt release)
 
 Natural draft10771901 now includes an original cost chart; source/fullcopy/pixels/remoteattachment
